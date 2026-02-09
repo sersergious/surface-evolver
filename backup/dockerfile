@@ -1,0 +1,13 @@
+FROM gcc:latest
+WORKDIR /app
+COPY . .
+RUN apt-get update && apt-get install -y libx11-dev
+RUN cd src && sed -i 's/^CFLAGS= -DGENERIC/CFLAGS= -DLINUX -DOOGL/' Makefile 
+            && sed -i 's/^GRAPH= xgraph.o/GRAPH= xgraph.o/' Makefile 
+            && sed -i 's/^GRAPHLIB= -lX11/GRAPHLIB= -lX11/' Makefile 
+            && sed -i 's/^GRAPH_INCLUDE= xgraph.h/GRAPH_INCLUDE= xgraph.h/' Makefile 
+            && sed -i 's/^GRAPH_LIBRARY= xgraph.o/GRAPH_LIBRARY= xgraph.o/' Makefile 
+            && sed -i 's/^GRAPH_LIBRARY_PATH= \/usr\/local\/lib/GRAPH_LIBRARY_PATH= \/usr\/local\/lib/' Makefile 
+            && sed -i 's/^GRAPH_LIBRARY_PATH= \/usr\/local\/lib/GRAPH_LIBRARY_PATH= \/usr\/local\/lib/' Makefile 
+RUN cp src/evolver .
+CMD ["./evolver", "./fe/cube.fe"]

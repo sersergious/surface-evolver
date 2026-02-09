@@ -1,0 +1,23 @@
+version: '3.8'
+
+services:
+  surface-evolver:
+    build:
+      context: .
+      dockerfile: dockerfile
+    container_name: surface-evolver
+    environment:
+      - DISPLAY=${DISPLAY}
+      - XAUTHORITY=${XAUTHORITY}
+    volumes:
+      # X11 socket for native X11 forwarding
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+      # X11 authority for authentication
+      - ${XAUTHORITY:-$HOME/.Xauthority}:/home/evolver/.Xauthority:rw
+      # Optional: mount fe directory for live editing
+      - ./fe:/app/fe:ro
+    user: "${UID:-1000}:${GID:-1000}"
+    # Allow X11 socket connection
+    ipc: host
+    network_mode: host
+    command: ["./evolver", "./fe/cube.fe"]
