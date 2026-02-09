@@ -1,0 +1,47 @@
+FROM gcc:latest AS builder
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    libx11-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+COPY . .
+RUN apt-get update && apt-get install -y libx11-dev && apt-get clean && rm -rf /var/lib/apt/lists/*
+RUN cd src && sed -i 's/^CFLAGS= -DGENERIC/CFLAGS= -DLINUX -DOOGL/' Makefile \
+            && sed -i 's/^GRAPH= xgraph.o/GRAPH= xgraph.o/' Makefile \
+            && sed -i 's/^GRAPHLIB= -lX11/GRAPHLIB= -lX11/' Makefile \
+            && sed -i 's/^GRAPH_INCLUDE= xgraph.h/GRAPH_INCLUDE= xgraph.h/' Makefile \
+            && sed -i 's/^GRAPH_LIBRARY= xgraph.o/GRAPH_LIBRARY= xgraph.o/' Makefile \
+            && sed -i 's/^GRAPH_LIBRARY_PATH= \/usr\/local\/lib/GRAPH_LIBRARY_PATH= \/usr\/local\/lib/' Makefile \
+            && make clean && make -f Makefile
+
+# Runtime stage with VNC/noVNC stack
+FROM debian:trixie-slim
+
+WORKDIR /app
+
+# Install runtime dependencies + VNC stack
+RUN apt-get update && apt-get install -y \
+    libx11-6 \
+    x11vnc \
+    xvfb \
+    fluxbox \
+    novnc \
+    websockify \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# Set display environment
+ENV DISPLAY=:99
+
+# Copy built application and data
+COPY --from=builder /app/src/evolver .
+COPY fe/ fe/
+
+# Create startup script
+RUN printf '#!/bin/bash\necho "Starting Xvfb..."\nXvfb :99 -screen 0 1280x720x24 &\nsleep 2\n\necho "Starting fluxbox..."\nfluxbox &\nsleep 1\n\necho "Starting x11vnc..."\nx11vnc -display :99 -forever -shared -nopw -localhost -xkb &\nsleep 2\n\necho "Starting noVNC..."\nwebsockify -D --web=/usr/share/novnc/ 6080 localhost:5900\nsleep 2\n\necho "Starting evolver..."\n./evolver ./fe/cube.fe\n\necho "Application finished, keeping container alive..."\ntail -f /dev/null\n' > /app/start.sh && chmod +x /app/start.sh
+
+EXPOSE 6080
+
+CMD ["/app/start.sh"]
