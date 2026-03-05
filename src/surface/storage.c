@@ -49,10 +49,6 @@ struct element *elptr(id)
 element_id id;
 {
   int type = id_type(id);
-#ifdef MPI_EVOLVER
-  if ( id_task(id) != this_task ) 
-    return mpi_remote_elptr(id);
-#endif
   return (struct element *)(web.skel[type].ibase[id & OFFSETMASK]);
 }
 #endif
@@ -115,29 +111,16 @@ void expand(
      for ( i = 0, oldptr = (char*)(b->blockptr), newptr = newblock; 
              i < b->count ; i++, oldptr += oldsize, newptr += newsize )
      { memcpy(newptr,oldptr,copysize);
-       #ifdef MPI_EVOLVER
-       { element_id id =  ((struct element*)oldptr)->self_id;
-         if ( id_task(id) != this_task )
-         { /* update pointer in remote_elements */
-           remote_elements[type].ibase[id_task(id)][ordinal(id)] = 
-               (struct element *)newptr;   
-          }
-       }
-       #endif
      }
      oldblock = (char*)b->blockptr;
      b->blockptr = (struct element*)newblock;
      /* update indirect pointers */
      /* keeping in mind structures not necessarily in id order 
         due to reorder command */
-     for ( i=0,spot=newblock, iptr=web.skel[type].ibase+b->start_ord ; 
+     for ( i=0,spot=newblock, iptr=web.skel[type].ibase+b->start_ord ;
                 i<b->count ; i++,spot+=newsize,iptr++ )
-     {  
-#ifdef MPI_EVOLVER
-         element_id id = ((struct element *)spot)->local_id;
-#else
-         element_id id = ((struct element *)spot)->self_id;
-#endif
+     {
+        element_id id = ((struct element *)spot)->self_id;
 
 #ifdef HASH_ID
       { struct element *el_ptr;
@@ -282,9 +265,6 @@ void extend(
     neword = web.skel[type].maxcount;
 
   id = ((element_id)type << TYPESHIFT) | VALIDMASK | neword; 
-#ifdef MPI_EVOLVER
-  id |= (element_id)this_task << TASK_ID_SHIFT;  
-#endif
 
   if ( valid_id(web.skel[type].freelast) )
   { backid = web.skel[type].freelast;
@@ -299,9 +279,6 @@ void extend(
   { newptr = (struct element *)(newblock + k*web.sizes[type]); 
     web.skel[type].ibase[neword] = newptr;
     newptr->self_id = id;
-    #ifdef MPI_EVOLVER
-      newptr->local_id = id;
-    #endif
 
     if ( k < number-1 )
     {
@@ -330,9 +307,6 @@ void extend(
       else 
         neword++;
       id = ((element_id)type << TYPESHIFT) | VALIDMASK | neword; 
-#ifdef MPI_EVOLVER
-      id |= (element_id)this_task << TASK_ID_SHIFT;  
-#endif
 
       newptr->forechain = id;
     }
@@ -484,16 +458,8 @@ element_id new_element(
   newptr->attr = ALLOCATED | NEWELEMENT;
 
   newptr->self_id = newid;
-  #ifdef MPI_EVOLVER
-  newptr->local_id = newid;
-  #endif
   web.skel[type].count++;  
   
-  #ifdef MPI_EVOLVER
-  /* kludge to guarantee max_ord gives enough spaces */
-  if ( web.skel[type].count > web.skel[type].max_ord+1 )
-    web.skel[type].max_ord = web.skel[type].count-1;
-  #endif
 
   /* inherited attributes and named methods from parent */
   if ( valid_id(parent) )
@@ -608,26 +574,6 @@ void free_element(element_id id)
   }
   ptr->attr &= ~ALLOCATED;
 
-  #ifdef MPI_EVOLVER
-  if ( id_task(id) != this_task )
-  { struct element *e;
-    mpi_remove_remote(id);
-    if ( valid_id(ptr->forechain) )
-    { e = elptr(ptr->forechain);
-      e->backchain = ptr->local_id;
-    }
-    else
-      web.skel[type].last = ptr->local_id;
-    if ( valid_id(ptr->backchain) )
-    { e = elptr(ptr->backchain);
-      e->forechain = ptr->local_id;
-    }
-    else
-      web.skel[type].used = ptr->local_id;
-  }
-  else
-    mpi_remove_export(id); /* remove from export list */
-  #endif
 
 
 #ifdef OLDDISCARD
@@ -685,10 +631,6 @@ void unfree_element(element_id id)
   }
   ptr->attr |= ALLOCATED;
 
-  #ifdef MPI_EVOLVER
-  if ( id_task(id) != this_task )
-    mpi_unfree_element(id,ptr);
-  #endif
 
   web.skel[type].discard_count--;
 
@@ -714,9 +656,6 @@ int ord;  /* ordinal of element, signed */
   id = ((element_id)type << TYPESHIFT) | VALIDMASK | abs(ord);
   if ( ord < 0 ) invert(id);
 
-#ifdef MPI_EVOLVER
-  id |= (element_id)this_task << TASK_ID_SHIFT;
-#endif
   ep = elptr(id);
   if ( ep == NULL ) return NULLID;
   if ( ep->attr & ALLOCATED ) return id;
@@ -736,23 +675,13 @@ element_id partid;  /* ordinal of element, 0-based, with sign bit and mpi task n
                     /* partid should also have VALIDMASK if not known bad */
 { element_id id;
   struct element *ep;
-#ifdef MPI_EVOLVER
-  int task = id_task(partid);
-#endif
   int ord = (int)(partid & OFFSETMASK);
 
   if ( partid == NULLID ) 
     return NULLID;
 
   if ( (type < 0) || (type > NUMELEMENTS) ) return NULLID;
-#ifdef MPI_EVOLVER
-  if ( task == this_task )
-#endif
     if ( ord > web.skel[type].max_ord ) return NULLID;
-  #ifdef MPI_EVOLVER
-  if ( task >= mpi_nprocs )
-	return NULLID;
-  #endif
   id = partid | ((element_id)type << TYPESHIFT);
 
   ep = elptr(id|VALIDMASK);
@@ -785,9 +714,6 @@ int generate_all(
     if ( !valid_id(*idptr) ) return 0;
     ptr = elptr(*idptr);
     if ( (ptr->attr & ALLOCATED)
-    #ifdef MPI_EVOLVER
-     && (id_task(ptr->self_id) == this_task)
-    #endif
      )
       return 1;
   }
@@ -800,9 +726,6 @@ int generate_all(
       ptr = elptr(*idptr);
     }
     while ( !(ptr->attr & ALLOCATED)
-    #ifdef MPI_EVOLVER
-     || (id_task(ptr->self_id) != this_task)
-    #endif
      );
 
   return 1;
@@ -819,13 +742,6 @@ void memory_report()
     size_t mem;
     int k;
 
-    #ifdef MPI_EVOLVER
-    if ( this_task == 0 )
-    { mpi_count_report();
-      return;
-    }
-    else
-    #endif
     {
       mem = 0;
       for ( k = 0 ; k < NUMELEMENTS ; k++ )
@@ -1106,25 +1022,6 @@ void reset_skeleton()
   F_PHASE_ATTR = V_BOUNDARY_ATTR = E_BOUNDARY_ATTR = 
     F_BOUNDARY_ATTR = B_PHASE_ATTR = 0;
 
-#ifdef MPI_EVOLVER
-  { int m = MPI_EXPORT_MAX;
-    web.mpi_export_attr[VERTEX] = 
-        add_attribute(VERTEX,"__mpi_export_v",USHORT_TYPE,1,&m,0,NULL,MPI_NO_PROPAGATE);
-    web.mpi_export_attr[EDGE] = 
-        add_attribute(EDGE,"__mpi_export_e",USHORT_TYPE,1,&m,0,NULL,MPI_NO_PROPAGATE);
-    web.mpi_export_attr[FACET] = 
-        add_attribute(FACET,"__mpi_export_f",USHORT_TYPE,1,&m,0,NULL,MPI_NO_PROPAGATE);
-    web.mpi_export_attr[BODY] = 
-        add_attribute(BODY,"__mpi_export_b",USHORT_TYPE,1,&m,0,NULL,MPI_NO_PROPAGATE);
-    web.mpi_export_attr[FACETEDGE] = 
-        add_attribute(FACETEDGE,"__mpi_export_fe",USHORT_TYPE,1,&m,0,NULL,MPI_NO_PROPAGATE);
-    mpi_export_voffset = EXTRAS(VERTEX)[web.mpi_export_attr[VERTEX]].offset;
-    mpi_export_eoffset = EXTRAS(EDGE)[web.mpi_export_attr[EDGE]].offset;
-    mpi_export_foffset = EXTRAS(FACET)[web.mpi_export_attr[FACET]].offset;
-    mpi_export_boffset = EXTRAS(BODY)[web.mpi_export_attr[BODY]].offset;
-    mpi_export_feoffset = EXTRAS(FACETEDGE)[web.mpi_export_attr[FACETEDGE]].offset;
-  }
-#endif
   
 } // end reset_skeleton()
 
@@ -1149,11 +1046,7 @@ void free_discards(int mode /* DISCARDS_ALL or DISCARDS_SOME */)
       next_id = ptr->forechain;
       if ( !(ptr->attr & ALLOCATED) )
       { /* move to free list */
-#ifdef MPI_EVOLVER
-        element_id loc_id = ptr->local_id;
-#else
         element_id loc_id = id;
-#endif
         if ( valid_id(ptr->forechain) )
           elptr(ptr->forechain)->backchain = ptr->backchain;
         else web.skel[type].last = ptr->backchain;
@@ -1230,9 +1123,6 @@ void move_to_free_front(
       eptr = web.skel[type].ibase[ord] = web.skel[type].ibase[free_ord];
       web.skel[type].ibase[free_ord] = NULL;
       eptr->self_id = ((element_id)type << TYPESHIFT) | VALIDMASK | ord; 
-#ifdef MPI_EVOLVER
-      eptr->self_id |= (element_id)this_task << TASK_ID_SHIFT;  
-#endif
       web.skel[type].free = eptr->self_id;
       if ( !valid_id(eptr->forechain) )
         web.skel[type].freelast = eptr->self_id;
@@ -1247,9 +1137,6 @@ void move_to_free_front(
   }
 
   eid = ((element_id)type << TYPESHIFT) | VALIDMASK | abs(ord);
-  #ifdef MPI_EVOLVER
-  eid |= (element_id)this_task << TASK_ID_SHIFT;  
-  #endif
 
   eptr = elptr(eid);
   if ( valid_element(eid) )
@@ -2116,23 +2003,6 @@ void elhash_delete(element_id id)
 
 /* end element id hashing ********************************************/
 
-#ifdef MPI_EVOLVER
-/*************************************************************************
-*
-* Function: mpi_remote_present()
-*
-* purpose: test if a particular remote element id exists locally.
-*/
-
-int mpi_remote_present(element_id id)
-{ struct element *eptr = mpi_remote_elptr(id);
-  if ( eptr == NULL ) 
-    return 0;
-  if ( eptr->attr & ALLOCATED ) 
-    return 1;
-  return 0; 
-} // end mpi_remote_present()
-#endif
 
 /************************************************************************
 *
@@ -2147,9 +2017,6 @@ int valid_element(element_id id)
   int type = id_type(id);
   if ( type > FACETEDGE ) return 0;
   if ( !valid_id(id) ) return 0;
-#ifdef MPI_EVOLVER
-  if ( id_task(id) == this_task )
-#endif
   if ( ordinal(id) > web.skel[type].max_ord ) return 0;
   ep = elptr(id);
   if ( ep == NULL ) return 0;

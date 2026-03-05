@@ -1007,12 +1007,6 @@ void autopop_detect(REAL scale  /* scale factor for motion */)
   if ( autopop_quartic_flag )
     minlength = 2*sqrt(sqrt(scale));
 
-#ifdef MPI_EVOLVER
-  if ( this_task == MASTER_TASK )
-  { mpi_autopop_detect(scale);
-    return;
-  }
-#endif
 
   autopop_init();
 
@@ -1111,19 +1105,9 @@ void autopop_pop()
   int k;
   int popped = 0;
 
-#ifdef MPI_EVOLVER
-  if ( this_task == MASTER_TASK )
-  { mpi_autopop_pop();
-    return;
-  }
-#endif
 
   if ( autopop_list == NULL ) return;
 
-#ifdef MPI_EVOLVER
-  if ( this_task != MASTER_TASK )
-    mpi_delete_init();
-#endif
  
   for ( k = 0 ; k < autopop_count ; k++ )
   { if ( id_type(autopop_list[k]) == EDGE ) 
@@ -1151,10 +1135,6 @@ void autopop_pop()
   autopop_list = NULL;
   autopop_count = 0;
 
-#ifdef MPI_EVOLVER
-  if ( this_task != MASTER_TASK )
-    mpi_task_delete_wrapup();
-#endif
 
   free_discards(DISCARDS_SOME); /* prevents auto pileup */
 
@@ -1173,12 +1153,6 @@ void autochop_chop()
 {
   int k;
 
-#ifdef MPI_EVOLVER
-  if ( this_task == MASTER_TASK )
-  { mpi_autopop_chop();
-    return;
-  }
-#endif
 
   if ( autochop_list == NULL ) return;
 

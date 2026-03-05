@@ -793,9 +793,6 @@ execution sequence: stringexpr PIPE_ command PIPE_END_
          list[listtop].op1.id = (element_id)abs(left) - 1;
          if ( left < 0 ) 
            invert(list[listtop].op1.id);
-#ifdef MPI_EVOLVER
-         list[listtop].op1.id |= ((element_id)right << TASK_ID_SHIFT);
-#endif
          list[listtop].stack_delta = 1;
          break;
          

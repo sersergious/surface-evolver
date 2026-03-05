@@ -434,10 +434,8 @@ int new_text_help(
   while ( fgets(line,sizeof(line)-1,fd)  )
   { char *keyspot,*c,*cc;
     if ( strncmp(line,"<---",4) != 0 ) continue;
-#ifndef MPI_EVOLVER
     if ( strstr(line,"MPI Evolver") )
       continue;
-#endif
 
 
     for ( c = line, cc = line_lowercase ; *c ; c++,cc++ ) 

@@ -1536,13 +1536,6 @@ REAL calc_quants(int mode  /* energy, constraint, and/or info flag bits */)
           }
       }
       for ( i = 0 ; i < nprocs ; i++ ) proc_total_area[i] = 0.0;
-#ifdef SGI_MULTI
-      if ( mpflag == M_INACTIVE ) m_rele_procs();  /* resume parked procs */
-      mpflag = M_ACTIVE;
-      m_fork(multi_calc_quants,type,mode);
-      m_park_procs();
-      mpflag = M_INACTIVE; 
-#endif
 #ifdef THREADS
       m_type = type;
       thread_launch(TH_MULTI_CALC_QUANT,type);
@@ -1651,11 +1644,6 @@ REAL calc_quants(int mode  /* energy, constraint, and/or info flag bits */)
     if ( q->flags & Q_DELETED ) continue;
     if ( q->flags & mode ) 
     { 
-      #ifdef MPI_EVOLVER
-      q->value = 0.0;
-      #else
-      q->value = q->volconst;
-      #endif
       q->abstotal = 0.0;
       q->timestamp = global_timestamp;
     }
@@ -2181,14 +2169,6 @@ void calc_quant_grads(
          }
          for ( j = 0 ; j < nprocs ; j++ ) phead[i][j] = -1;
       }
-#ifdef SGI_MULTI
-      if ( mpflag == M_INACTIVE ) m_rele_procs();  /* resume parked procs */
-      mpflag = M_ACTIVE;
-      m_fork(m_calc_quant_grads,type,mode);
-      m_fork(m_fix_grads,0,0);
-      m_park_procs();
-      mpflag = M_INACTIVE; 
-#endif
 #ifdef THREADS
       m_type = type;
       thread_launch(TH_MULTI_QUANT_GRADS,type);
@@ -2585,14 +2565,6 @@ void calc_quant_hess(
       }
       m_hess_mode = hess_mode;
       m_rhs_mode  = rhs_mode;
-#ifdef SGI_MULTI
-      if ( mpflag == M_INACTIVE ) m_rele_procs();  /* resume parked procs */
-      mpflag = M_ACTIVE;
-      m_quanrowstart = S->quanrowstart;
-      m_fork(m_calc_quant_hess,type,mode,rhs);
-      m_park_procs();
-      mpflag = M_INACTIVE; 
-#endif
 #ifdef THREADS
       m_type = type;
       m_mode = mode;

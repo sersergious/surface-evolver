@@ -23,11 +23,6 @@
 
 void refine()
 {
-  #ifdef MPI_EVOLVER
-  mpi_refine();
-  #else
-  local_refine();
-  #endif
 } // end void refine()
 
 /****************************************************************
@@ -111,9 +106,6 @@ void local_refine()
     edge_divide(e_id);
   }
 
-  #ifdef MPI_EVOLVER
-  mpi_refine_edge_synch();
-  #endif
 
   if ( web.representation == STRING ) goto windup; 
   /* don't want to subdivide facets */
@@ -1402,9 +1394,6 @@ int delete_edge(edge_id short_edge)
   }
   remove_vertex_edge(keep_v,short_edge);
 
-#ifdef MPI_EVOLVER
-  mpi_note_edge_delete(short_edge,elim_v,keep_v);
-#endif
 
   /* Go through facets around edge, adjusting facet loops
       of the merged edges, deleting facetedges, and facets */
@@ -1661,9 +1650,6 @@ int delete_edge(edge_id short_edge)
       
 wasloop:
 
-#ifdef MPI_EVOLVER
-      mpi_note_facet_delete(facet,keep_edge,throw_edge);
-#endif
 
       /* free structures  */
       if ( !equal_element(a_edge,b_edge) ) 
@@ -2428,21 +2414,6 @@ int do_edgeswap(edge_id e_id)
   if ( web.modeltype == QUADRATIC )
     new_vertex_average(get_edge_midv(e_id),VOLKEEP);
 
-#ifdef MPI_EVOLVER
-  /* Record changed facet-edges for synchronization */
-  if ( id_task(fe_a) != this_task )
-    mpi_add_to_synch_list(fe_a);
-  if ( id_task(fe_ai) != this_task )
-    mpi_add_to_synch_list(fe_ai);
-  if ( id_task(fe_b) != this_task )
-    mpi_add_to_synch_list(fe_b);
-  if ( id_task(fe_c) != this_task )
-    mpi_add_to_synch_list(fe_c);
-  if ( id_task(fe_d) != this_task )
-    mpi_add_to_synch_list(fe_d);
-  if ( id_task(fe_e) != this_task )
-    mpi_add_to_synch_list(fe_e);
-#endif
     
 
   top_timestamp = ++global_timestamp;

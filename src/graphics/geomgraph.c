@@ -21,11 +21,6 @@ static FILE *pfd = NULL;
 
 #ifdef OOGL
 
-#ifdef WIN32
-#define popen _popen
-#define pipe(fds) _pipe(fds,256,O_BINARY)
-#endif
-
 static char gv_version[100];  /* geomview version string */
 static  char pipename[100]; /* for named pipe to geomview */
 static  char geom_name[100]; /* for geomview name of object */
@@ -90,9 +85,6 @@ void Begin_geomview(
   /* spawn geomview */
   if ( geompipe_flag == GEOM_TO_GEOMVIEW)
   { 
-#ifdef WIN32
-     kb_error(2414,"There is no Windows version of geomview.\n",RECOVERABLE);
-#else
      int gv_pid;
      int to_gv_pipe[2];
      pipe(gv_pipe); /* from geomview stdout */
@@ -128,7 +120,6 @@ void Begin_geomview(
      if ((strcmp(gv_version,"\"1.6") > 0)&&(strcmp(gv_version,"\"1.6.1p7") < 0))
      { geomview_bug_flag = 1;
      }
-#endif
     }
   else if ( geompipe_flag == GEOM_PIPE_COMMAND )
     {
@@ -140,12 +131,6 @@ void Begin_geomview(
     }
   else /* just a pipe, without geomview */
     {
-#ifdef WIN32
-      outstring("Warning: Windows named pipes do not appear as regular files,\n");
-      outstring("so an ordinary file will be created instead and not deleted when pipe closed.\n");
-      prompt("Enter file name: ",pipename,sizeof(pipename));
-
-#else
       sprintf(msg,"test -p %s || (test -x /etc/mknod && /etc/mknod %s p) || (test -s /usr/sbin/mknod && /usr/sbin/mknod %s p) || (test -s /usr/bin/mkfifo && /usr/bin/mkfifo %s) || /bin/mknod %s p",
           pipename,pipename,pipename,pipename,pipename);
       if ( system(msg) != 0 )
@@ -155,7 +140,6 @@ void Begin_geomview(
       sleep(1);  
       sprintf(msg,"Pipe name: %s\n",pipename);
       outstring(msg);
-#endif
       pfd = fopen(pipename,"w");
       if ( pfd == NULL )
       { perror(pipename);
@@ -196,12 +180,10 @@ void End_geomview()
 {
   fprintf(pfd,"(exit)\n"); 
   fclose(pfd);
-#ifndef WIN32
   if ( geompipe_flag == GEOM_NAMED_PIPE)
   { sprintf(msg,"rm %s",pipename);
     system(msg);
   }
-#endif
   geomview_flag = 0;
   geompipe_flag = GEOM_TO_GEOMVIEW;
   geom_name[0] = 0;

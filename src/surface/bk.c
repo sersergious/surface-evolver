@@ -1580,19 +1580,6 @@ void sp_hessian_solve(
   
   if ( hess_debug == 101010101 )  // disable all this printing
   { 
-    #ifdef MPI_EVOLVER
-    for ( ii = 0 ; ii < S->N ; ii++ )
-      printf("    %20.15f  X[%d] \n",(DOUBLE)X[ii],ii);
-    #else
-    vertex_id v_id;
-    MFOR_ALL_VERTICES(v_id)
-    { struct hess_verlist *vh = get_vertex_vhead(v_id);
-      for ( j = 0 ; j < vh->freedom ; j++ )
-      { ii = vh->rownum+j;
-        printf("    %20.15f  X[%d] v%d.%d\n",(DOUBLE)X[ii],ii,ordinal(v_id)+1,j+1);
-      } 
-    }
-    #endif
     for ( i = 0 ; i < optparamcount ; i++ )
     { ii = optparam[i].pnum;
       jj = optparam[i].rownum;

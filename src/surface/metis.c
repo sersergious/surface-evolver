@@ -904,15 +904,7 @@ void tree_factor(struct linsys *S)
 
 
   /* this set up to be done in parallel */
-#ifdef SGI_MULTI
-  if ( mpflag == M_INACTIVE ) m_rele_procs();
-  mpflag = M_ACTIVE;
-  m_fork(do_tree_factor,S);
-  m_park_procs();
-  mpflag = M_INACTIVE;
-#else
   do_tree_factor(S);
-#endif
 
   if ( !hessian_quiet_flag )
   { /* A few statistics */

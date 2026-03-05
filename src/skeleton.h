@@ -82,21 +82,13 @@ typedef long int WRAPTYPE; /* symmetry group element */
 
 typedef int NTYPE; /* for node indexes, types, etc. */
 
-     /* common fields; added to each element struct type */
-#ifdef MPI_EVOLVER
-#define BASIC_STUFF \
-     element_id    forechain;       /* for element and free list forechain */\
-     element_id    backchain;       /* for element and free list backchain */\
-     element_id    local_id;        /* for freelisting; uses ibase index */\
-     ATTR          attr;            /* attribute bits */\
-     element_id    self_id;         /* for identifying self */ 
-#else
 #define BASIC_STUFF \
      element_id    forechain;       /* for element and free list forechain */\
      element_id    backchain;       /* for element and free list backchain */\
      ATTR          attr;            /* attribute bits */\
      element_id    self_id;         /* for identifying self */
-#endif
+
+     /* common fields; added to each element struct type */
 
 #define COMMON_STUFF \
      BASIC_STUFF \
@@ -327,69 +319,6 @@ extern long    vgradlastused;     /* number actually used last time round */
 
 /* loop macros, for use when lists are not modified in loop */
 
-#ifdef MPI_EVOLVER
-/* MFOR includes imported elements; FOR doesn't */
-/* except FOR_ALL_BODIES includes all, for now */
-#define FOR_ALL_ELEMENTS(type,id) \
-for (id = web.skel[type].used ; valid_id(id) ; id = elptr(id)->forechain) \
-  if ( !valid_element(id) || (id_task(id)!=this_task) ) continue; else
-
-#define FOR_ALL_VERTICES(v_id) \
-for (v_id = web.skel[VERTEX].used ; valid_id(v_id) ; \
-v_id = vptr(v_id)->forechain) \
-  if ( !valid_element(v_id) || (id_task(v_id)!=this_task) ) continue; else
-
-#define FOR_ALL_EDGES(e_id) \
-for (e_id = web.skel[EDGE].used ; valid_id(e_id) ;\
- e_id = eptr(e_id)->forechain ) \
-  if ( !valid_element(e_id) || (id_task(e_id)!=this_task) )\
-    continue;  else
-
-#define FOR_ALL_FACETS(f_id) \
-for (f_id = web.skel[FACET].used ; valid_id(f_id) ; \
-f_id = fptr(f_id)->forechain) \
-  if ( !valid_element(f_id) || (id_task(f_id)!=this_task) ) continue; else
-
-#define FOR_ALL_BODIES(b_id) \
-for (b_id = web.skel[BODY].used ; valid_id(b_id) ; \
-b_id = bptr(b_id)->forechain) \
-  if ( !valid_element(b_id) /* || (id_task(b_id)!=this_task)*/ ) continue; else
-
-#define FOR_ALL_FACETEDGES(fe_id) \
-for (fe_id = web.skel[FACETEDGE].used ; valid_id(fe_id) ; \
-fe_id = feptr(fe_id)->forechain) \
-  if ( !valid_element(fe_id) || (id_task(fe_id)!=this_task) ) continue; else
-
-#define MFOR_ALL_ELEMENTS(type,id) \
-for (id = web.skel[type].used ; valid_id(id) ; id = elptr(id)->forechain) \
-  if ( !valid_element(id) ) continue; else
-
-#define MFOR_ALL_VERTICES(v_id) \
-for (v_id = web.skel[VERTEX].used ; valid_id(v_id) ; \
-v_id = vptr(v_id)->forechain) \
-  if ( !valid_element(v_id) ) continue; else
-
-#define MFOR_ALL_EDGES(e_id) \
-for (e_id = web.skel[EDGE].used ; valid_id(e_id) ; \
-e_id = eptr(e_id)->forechain) \
-  if ( !valid_element(e_id) ) continue; else
-
-#define MFOR_ALL_FACETS(f_id) \
-for (f_id = web.skel[FACET].used ; valid_id(f_id) ; \
-f_id = fptr(f_id)->forechain) \
-  if ( !valid_element(f_id) ) continue; else
-
-#define MFOR_ALL_BODIES(b_id) \
-for (b_id = web.skel[BODY].used ; valid_id(b_id) ; \
-b_id = bptr(b_id)->forechain) \
-  if ( !valid_element(b_id) ) continue; else
-
-#define MFOR_ALL_FACETEDGES(fe_id) \
-for (fe_id = web.skel[FACETEDGE].used ; valid_id(fe_id) ; \
-fe_id = feptr(fe_id)->forechain) \
-  if ( !valid_element(fe_id) ) continue; else
-#else
-/* non-MPI */
 #define FOR_ALL_ELEMENTS(type,id) \
 for (id = web.skel[type].used ; valid_id(id) ; id = elptr(id)->forechain) \
   if ( !(elptr(id)->attr & ALLOCATED) ) continue; else
@@ -419,17 +348,11 @@ for (fe_id = web.skel[FACETEDGE].used ; valid_id(fe_id) ; \
 fe_id = feptr(fe_id)->forechain) \
   if ( !(feptr(fe_id)->attr & ALLOCATED) ) continue; else
 
-#define MFOR_ALL_VERTICES(v_id) FOR_ALL_VERTICES(v_id) 
-
-#define MFOR_ALL_EDGES(e_id) FOR_ALL_EDGES(e_id) 
-
-#define MFOR_ALL_FACETS(f_id) FOR_ALL_FACETS(f_id) 
-
-#define MFOR_ALL_BODIES(b_id)  FOR_ALL_BODIES(b_id) 
-
-#define MFOR_ALL_FACETEDGES(fe_id) FOR_ALL_FACETEDGES(fe_id) 
-
-#endif
+#define MFOR_ALL_VERTICES(v_id) FOR_ALL_VERTICES(v_id)
+#define MFOR_ALL_EDGES(e_id) FOR_ALL_EDGES(e_id)
+#define MFOR_ALL_FACETS(f_id) FOR_ALL_FACETS(f_id)
+#define MFOR_ALL_BODIES(b_id) FOR_ALL_BODIES(b_id)
+#define MFOR_ALL_FACETEDGES(fe_id) FOR_ALL_FACETEDGES(fe_id)
 
 #ifdef THREADS
 /* Thread version of these loops depend on initialization of

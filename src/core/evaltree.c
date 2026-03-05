@@ -458,21 +458,6 @@ REAL eval (
              }
              id |= VALIDMASK;
            }
-#ifdef MPI_EVOLVER
-         { int task;
-           if ( node->right )
-              task = (int)(*stacktop--);
-           else task = this_task;
-           if ( task < 0 || task >= mpi_nprocs )
-           { sprintf(errmsg,
-                "Illegal task number %d.  Must be between 1 and %d.\n",task,mpi_nprocs);
-             sprintf(errmsg+strlen(errmsg),"(source file %s, line %d)\n",
-                 file_names[node->file_no],node->line_no);
-             kb_error(1915,errmsg,RECOVERABLE);
-           }
-           id |= (element_id)task << TASK_ID_SHIFT;
-         }
-#endif
           
            *(element_id *)stacktop = id;
            break;
@@ -2871,12 +2856,6 @@ REAL eval (
         web.where_count = 0;
         /* break and continue jumps */
         *(size_t*)(newstack + localstack + node->stackpos) = stacktop - (newstack + localstack) + 3;
-#ifdef MPI_EVOLVER
-        if ( this_task == MASTER_TASK ) 
-        { mpi_subtask_command_flag = 1;
-          mpi_aggregate(node,&ex_current);
-        }
-#endif
         break;
 
       case AGGREGATE_INIT_NODE:
@@ -2923,9 +2902,6 @@ REAL eval (
                 break;
 
               case LIST_NODE: /* print column headers */
-#ifdef MPI_EVOLVER
-               if ( (this_task == MASTER_TASK) || !mpi_subtask_command_flag )
-#endif
                 switch ( node->op2.eltype )
                 { case VERTEX:
                   if ( SDIM == 2 )
@@ -2951,24 +2927,12 @@ REAL eval (
               break;
 
               case REFINE_NODE: 
-#ifdef MPI_EVOLVER
-               if ( (this_task != MASTER_TASK) && mpi_subtask_command_flag 
-                 &&  node->op2.eltype == EDGE )
-                     mpi_edge_refine_init();
-#endif
                 break;
               
               case DISSOLVE_NODE:
                 break;
 
               case DELETE_NODE:
-#ifdef MPI_EVOLVER
-               if ( this_task == MASTER_TASK )
-                 mpi_set_corona(THIN_CORONA);
-
-               if ( (this_task != MASTER_TASK) && mpi_subtask_command_flag )
-                     mpi_delete_init();
-#endif
                 break;
               
               case FIX_NODE:
@@ -2997,12 +2961,6 @@ REAL eval (
                  kb_error(1290,errmsg, RECOVERABLE);
                  break;
             }
-#ifdef MPI_EVOLVER
-                if ( this_task == MASTER_TASK ) 
-                { mpi_subtask_command_flag = 1;
-                  mpi_aggregate(node,&ex_current);
-                }
-#endif
 
          break;
          /* end case AGGREGATE_INIT */
@@ -3034,10 +2992,6 @@ REAL eval (
          else *vp = vptr(*vp)->forechain;
 
          if ( !valid_element(q_id) ) node--;    /* skip body of loop */
-#ifdef MPI_EVOLVER
-         if ( mpi_subtask_command_flag && (id_task(q_id) != this_task) )
-            node--;  /* don't count foreign vertices in global aggregate */
-#endif
         }
         break; 
 
@@ -3057,10 +3011,6 @@ REAL eval (
          (*numptr)++;
 
           if ( !valid_element(q_id) ) node--;    /* skip body of loop */
-#ifdef MPI_EVOLVER
-         if ( mpi_subtask_command_flag && (id_task(q_id) != this_task) )
-            node--;  /* don't count foreign elements in global aggregate */
-#endif 
          break;
        }
 
@@ -3124,10 +3074,6 @@ REAL eval (
          }
          *(element_id*)get_localp(node->op2.localnum) = q_id;
          if ( !valid_element(q_id) ) node--;    /* skip body of loop */
-#ifdef MPI_EVOLVER
-         if ( mpi_subtask_command_flag && (id_task(q_id) != this_task) )
-            node--;  /* don't count foreign elements in global aggregate */
-#endif 
          break;
         }
 
@@ -3150,10 +3096,6 @@ REAL eval (
          else  *ep = eptr(*ep)->forechain; 
 
          if ( !valid_element(q_id) ) node--;    /* skip body of loop */
-#ifdef MPI_EVOLVER
-         if ( mpi_subtask_command_flag && (id_task(q_id) != this_task) )
-            node--;  /* don't count foreign elements in global aggregate */
-#endif 
        }
        break;
 
@@ -3177,10 +3119,6 @@ REAL eval (
          }
 
          if ( !valid_element(q_id) ) node--;    /* skip body of loop */
-#ifdef MPI_EVOLVER
-         if ( mpi_subtask_command_flag && (id_task(q_id) != this_task) )
-            node--;  /* don't count foreign elements in global aggregate */
-#endif 
          break;
        }
 
@@ -3206,10 +3144,6 @@ REAL eval (
            *fe_ptr = NULLID; /* last one */
          }
          if ( !valid_element(q_id) ) node--;    /* skip body of loop */
-#ifdef MPI_EVOLVER
-         if ( mpi_subtask_command_flag && (id_task(q_id) != this_task) )
-            node--;  /* don't count foreign elements in global aggregate */
-#endif 
          break;
        }
 
@@ -3230,10 +3164,6 @@ REAL eval (
          if ( equal_id(*fp,*(facet_id*)(stacktop-1)) ) *fp = NULLID;
          else *fp = fptr(*fp)->forechain;
          if ( !valid_element(q_id) ) node--;    /* skip body of loop */
-#ifdef MPI_EVOLVER
-         if ( mpi_subtask_command_flag && (id_task(q_id) != this_task) )
-            node--;  /* don't count foreign elements in global aggregate */
-#endif 
        }
        break;
 
@@ -3253,10 +3183,6 @@ REAL eval (
                   *fe_ptr = NULLID; /* last one */
 
          if ( !valid_element(q_id) ) node--;    /* skip body of loop */
-#ifdef MPI_EVOLVER
-         if ( mpi_subtask_command_flag && (id_task(q_id) != this_task) )
-            node--;  /* don't count foreign elements in global aggregate */
-#endif 
          break;
        }
 
@@ -3276,10 +3202,6 @@ REAL eval (
                   *fe_ptr = NULLID; /* last one */
 
          if ( !valid_element(q_id) ) node--;    /* skip body of loop */
-#ifdef MPI_EVOLVER
-         if ( mpi_subtask_command_flag && (id_task(q_id) != this_task) )
-            node--;  /* don't count foreign elements in global aggregate */
-#endif 
          break;
        }
 
@@ -3304,10 +3226,6 @@ REAL eval (
          if ( equal_id(*f_ptr,first_f) )
            *f_ptr = NULLID;
          if ( !valid_element(q_id) ) node--;    /* skip body of loop */
-#ifdef MPI_EVOLVER
-         if ( mpi_subtask_command_flag && (id_task(q_id) != this_task) )
-            node--;  /* don't count foreign elements in global aggregate */
-#endif 
         }
         break;
 
@@ -3329,10 +3247,6 @@ REAL eval (
          else set_attr(*f_ptr,
                 (inverted(*f_ptr) ? DID_BODYBACKFACET : DID_BODYFRONTFACET) );
          if ( !valid_element(q_id) ) node--;    /* skip body of loop */
- #ifdef MPI_EVOLVER
-         if ( mpi_subtask_command_flag && (id_task(q_id) != this_task) )
-            node--;  /* don't count foreign elements in global aggregate */
-#endif 
       }
 
        break;
@@ -3352,10 +3266,6 @@ REAL eval (
          else *bp = bptr(*bp)->forechain;
 
          if ( !valid_element(q_id) ) node--;    /* skip body of loop */
-#ifdef MPI_EVOLVER
-         if ( mpi_subtask_command_flag && (id_task(q_id) != this_task) )
-            node--;  /* don't count foreign elements in global aggregate */
-#endif 
        }
          break;
 
@@ -3407,10 +3317,6 @@ REAL eval (
          else *fep = feptr(*fep)->forechain;
 
           if ( !valid_element(q_id) ) node--;    /* skip body of loop */
-#ifdef MPI_EVOLVER
-         if ( mpi_subtask_command_flag && (id_task(q_id) != this_task) )
-            node--;  /* don't count foreign elements in global aggregate */
-#endif 
         }
         break; 
 
@@ -3427,10 +3333,6 @@ REAL eval (
          *(element_id*)get_localp(node->op2.localnum) = q_id;
          *e_ptr = NULLID; /* last one */
          if ( !valid_element(q_id) ) node--;    /* skip body of loop */
- #ifdef MPI_EVOLVER
-         if ( mpi_subtask_command_flag && (id_task(q_id) != this_task) )
-            node--;  /* don't count foreign elements in global aggregate */
-#endif 
       }
        break;
 
@@ -3447,10 +3349,6 @@ REAL eval (
          *(element_id*)get_localp(node->op2.localnum) = q_id;
          *f_ptr = NULLID; /* last one */
          if ( !valid_element(q_id) ) node--;    /* skip body of loop */
-#ifdef MPI_EVOLVER
-         if ( mpi_subtask_command_flag && (id_task(q_id) != this_task) )
-            node--;  /* don't count foreign elements in global aggregate */
-#endif 
        }
        break;
 
@@ -3494,69 +3392,22 @@ REAL eval (
 
             case MAX_NODE:  
               stacktop -= 3;  /* erase locals */
-#ifdef MPI_EVOLVER
-              if ( mpi_subtask_command_flag && (aggregate_depth==0))
-              { REAL total;
-                MPI_Reduce(stacktop,&total,1,MPI_REAL,MPI_MAX,
-                    MASTER_TASK,MPI_COMM_WORLD);
-                if ( this_task == MASTER_TASK )
-                  stacktop[0] = total;
-              }
-#endif
               break;
 
             case MIN_NODE: 
               stacktop -= 3;  /* erase locals */
-#ifdef MPI_EVOLVER
-              if ( mpi_subtask_command_flag && (aggregate_depth==0))
-              { REAL total;
-                MPI_Reduce(stacktop,&total,1,MPI_REAL,MPI_MIN,
-                    MASTER_TASK,MPI_COMM_WORLD);
-                if ( this_task == MASTER_TASK )
-                  stacktop[0] = total;
-              }
-#endif
               break;
 
             case SUM_NODE: 
               stacktop -= 3;  /* erase locals */
-#ifdef MPI_EVOLVER
-              if ( mpi_subtask_command_flag && (aggregate_depth==0))
-              { REAL total;
-                MPI_Reduce(stacktop,&total,1,MPI_REAL,MPI_SUM,
-                    MASTER_TASK,MPI_COMM_WORLD);
-                if ( this_task == MASTER_TASK )
-                  stacktop[0] = total;
-              }
-#endif
               break;
 
             case COUNT_NODE:
               stacktop -= 3;  /* erase locals */
-#ifdef MPI_EVOLVER
-              if ( mpi_subtask_command_flag && (aggregate_depth==0))
-              { REAL total;
-                MPI_Reduce(stacktop,&total,1,MPI_REAL,MPI_SUM,
-                    MASTER_TASK,MPI_COMM_WORLD);
-                if ( this_task == MASTER_TASK )
-                  stacktop[0] = total;            
-              }
-#endif
               break;
 
             case AVG_NODE:
               stacktop -= 4;  /* erase locals */
-#ifdef MPI_EVOLVER
-              if ( mpi_subtask_command_flag && (aggregate_depth==0) )
-              { REAL total[2];
-                MPI_Reduce(stacktop,total,2,MPI_REAL,MPI_SUM,
-                    MASTER_TASK,MPI_COMM_WORLD);
-                if ( this_task == MASTER_TASK )
-                { stacktop[0] = total[0];
-                  stacktop[1] = total[1];
-                }
-              }
-#endif
               if ( stacktop[0] > 0.0 )
                  stacktop[0] = stacktop[1]/stacktop[0];
               /* else leave avg as 0 */
@@ -3578,19 +3429,6 @@ REAL eval (
                       lo = histo_data[i];
                   if ( histo_data[i] > hi ) hi = histo_data[i];
                 }
-#ifdef MPI_EVOLVER
-               if ( mpi_subtask_command_flag && (aggregate_depth==0))
-                { /* synchronize max-min values */
-                  DOUBLE localhi = hi,locallo = lo;
-                  DOUBLE globalhi,globallo;
-                  MPI_Allreduce(&localhi,&globalhi,1,MPI_REAL,MPI_MAX,
-                      MPI_COMM_WORLD);
-                  hi = globalhi;
-                  MPI_Allreduce(&locallo,&globallo,1,MPI_REAL,MPI_MIN,
-                      MPI_COMM_WORLD);
-                  lo = globallo;
-                }
-#endif
              if (node->op1.aggrtype == HISTOGRAM_NODE )
              { if ( hi == lo )
                { binsize = 1.0; /* will put everything in first bin */
@@ -3631,23 +3469,7 @@ REAL eval (
                  }
                 bins[k] += 1.0;
              }
-#ifdef MPI_EVOLVER
-             if ( mpi_subtask_command_flag && (aggregate_depth==0))
-             { /* accumulate histogram data on master */
-               REAL recvbuf[HISTBINS+1];
-               MPI_Reduce(bins,recvbuf,HISTBINS+1,MPI_REAL,MPI_SUM,
-                 MASTER_TASK, MPI_COMM_WORLD);
-               if ( this_task == MASTER_TASK )
-                 for ( k = 0, histo_count = 0 ; k <= HISTBINS ; k++ )
-                 { bins[k] = recvbuf[k];
-                   histo_count += (int)bins[k];
-                 }
-             }
-#endif
              /* print histogram */
-#ifdef MPI_EVOLVER
-             if ( (this_task == MASTER_TASK) || !mpi_subtask_command_flag )
-#endif
              {
              if ( histo_count == 0 )
              { 
@@ -3743,10 +3565,6 @@ REAL eval (
 
               case REFINE_NODE:
                 stacktop -= 3;  /* erase locals */
-#ifdef MPI_EVOLVER
-               if ( (this_task != MASTER_TASK) && mpi_subtask_command_flag )
-                  mpi_task_edge_refine_wrapup();
-#endif
                 break;
 
               case DISSOLVE_NODE:
@@ -3755,10 +3573,6 @@ REAL eval (
 
               case DELETE_NODE:
                 stacktop -= 3;  /* erase locals */
-#ifdef MPI_EVOLVER
-               if ( (this_task != MASTER_TASK) && mpi_subtask_command_flag )
-                  mpi_task_delete_wrapup();
-#endif
                 break;
 
               case FIX_NODE:

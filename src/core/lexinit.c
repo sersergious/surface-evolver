@@ -112,15 +112,7 @@ void reset_web()
 
   reset_skeleton();  /* cleans out web and resets to 0 */
 
-#ifdef MPI_EVOLVER
-  mpi_reset();
-#endif
 
-#ifdef MPI_EVOLVER
- random_seed = default_random_seed+this_task;  
-#else
- random_seed = default_random_seed;  
-#endif
   srand(random_seed); srand48(random_seed);
 
   file_no = 0;
@@ -199,13 +191,6 @@ void reset_web()
   bad_errors_count = 0; 
   hessian_slant_cutoff = 0.0;
   hessian_epsilon = hessian_epsilon_default;
-  #ifdef MPI_EVOLVER
-  sparse_constraints_flag = 0;
-  augmented_hessian_flag = 1;
-  #else
-  sparse_constraints_flag = 1;
-  augmented_hessian_flag = -1;
-  #endif
   blas_flag = 0;
   last_error = 0;
   check_increase_flag = 0;
@@ -1717,9 +1702,6 @@ define_exit:
 
   mark_recalc_params();
 
-#ifdef MPI_EVOLVER
-  mpi_task_set_thin_corona();  /* get neighbor elements, with basic corona */
-#endif
 
   /* create initial triangulation of each face */
 
@@ -2166,37 +2148,6 @@ void read_vertices()
   tok = yylex();
   while ( (tok == LEAD_INTEGER_TOK) || (tok == LEAD_INTEGER_AT_TOK) )
   { 
-    #ifdef MPI_EVOLVER
-    /* test task number, for MPI */
-    int task;
-    if ( tok == LEAD_INTEGER_TOK )
-       task = 1;  /* default to task 1 */
-    else task = yylval.qnum;
-    if ( task >= mpi_nprocs || task < 1 )
-    { sprintf(errmsg,"Task number %d must be between 1 and %d, %d\n",
-         task,mpi_nprocs-1);
-      kb_error(5006,errmsg,RECOVERABLE);
-    }
-    if ( task != this_task )
-    { /* skip this vertex */
-      int flag = 0;
-      while ( !flag ) 
-      { tok = yylex();
-        switch (tok)
-        { case LEAD_INTEGER_TOK: 
-          case LEAD_INTEGER_AT_TOK:
-          case EDGES_TOK:
-          case FACES_TOK:
-          case BODIES_TOK:
-          case READ_TOK:
-          case 0:
-            flag = 1;
-            break;
-        }
-      }
-      continue;  /* next vertex */
-    }
-    #endif
    
     k = yylval.i;
     if ( k < 1 ) 
@@ -2467,9 +2418,6 @@ void read_edges()
   int numv; /* vertices to read in association with a facet */
   int edim = (web.representation==STRING) ? 1 : web.dimension - 1;
   int one = 1;
-#ifdef MPI_EVOLVER
-  struct element *vdummy = (struct element *)mycalloc(web.sizes[VERTEX],1);
-#endif
 
   if ( web.representation == SIMPLEX ) 
      compcount = binom_coeff(SDIM,edim);
@@ -2503,36 +2451,6 @@ void read_edges()
   { int have_mid = 0;
     WRAPTYPE wrap = 0;
 
-    #ifdef MPI_EVOLVER
-    /* test task number, for MPI */
-    int task;
-    if ( tok == LEAD_INTEGER_TOK )
-       task = 1;  /* default to task 1 */
-    else task = yylval.qnum;
-    if ( task >= mpi_nprocs || task < 1 )
-    { sprintf(errmsg,"Task number %d must be between 1 and %d\n",
-         task,mpi_nprocs-1);
-      kb_error(5007,errmsg,RECOVERABLE);
-    }
-    if ( task != this_task )
-    { /* skip this edge */
-      int flag = 0;
-      while ( !flag ) 
-      { tok = yylex();
-        switch (tok)
-        { case LEAD_INTEGER_TOK: 
-          case LEAD_INTEGER_AT_TOK:
-          case FACES_TOK:
-          case BODIES_TOK:
-          case READ_TOK:
-          case 0:
-            flag = 1;
-            break;
-        }
-      }
-      continue;  /* next edge */
-    }
-    #endif
     
     /* check edge number */
     k = yylval.i;
@@ -2577,27 +2495,6 @@ void read_edges()
 			kb_error(1131,"Too few vertices for edge.\n",DATAFILE_ERROR); 
             return; 
           }
-#ifdef MPI_EVOLVER
-          if ( yylval.qnum == 0 )
-             yylval.qnum = 1;
-          if ( yylval.qnum >= mpi_nprocs )
-          { sprintf(errmsg,"Task number %d exceeds number of tasks running, %d\n",
-               yylval.qnum,mpi_nprocs-1);
-            kb_error(5008,errmsg,RECOVERABLE);
-          }
-          if ( yylval.qnum != this_task )
-          { 
-            *v = ((element_id)VERTEX << TYPESHIFT) | VALIDMASK | 
-                (yylval.i-1) | ((element_id)yylval.qnum << TASK_ID_SHIFT);  
-            /* add spaceholder to remote element list */
-            memset(vdummy,0,web.sizes[VERTEX]);
-            vdummy->self_id = *v;
-            vdummy->attr = ALLOCATED|NEWELEMENT;
-            mpi_add_remote_element(vdummy);
-            v++;
-          }
-          else
-#endif
           if ( (yylval.i >= vmaxlist) || !valid_id(vlist[yylval.i]) )
           { sprintf(errmsg,"Edge %d: vertex %d is not defined.\n",k,yylval.i);
             kb_error(1132,errmsg, RECOVERABLE /*DATAFILE_ERROR*/ );
@@ -2945,9 +2842,6 @@ void read_edges()
         kb_error(1148,"Cannot have constraint and boundary.",DATAFILE_ERROR);
    }
 
-#ifdef MPI_EVOLVER
-  myfree((char*)vdummy);
-#endif
 
 } /* end read_edges() */
 
@@ -2972,12 +2866,6 @@ void read_faces()
   struct constraint *constr;
   REAL value;  /* for constant expression values */
   int numv; /* vertices to read with facet */
-#ifdef MPI_EVOLVER
-  struct element *vdummy = (struct element *)mycalloc(web.sizes[VERTEX],1);
-  struct element *edummy = (struct element *)mycalloc(web.sizes[EDGE],1);
-  int facet_task,edge_task;
-  int split_loop_flag = 0; /* string, set if task number of any edge is foreign */
-#endif
 
   /* optional attributes */
   EXTRAS(EDGE)[F_NORMAL_ATTR].array_spec.sizes[0] = SDIM;
@@ -3004,34 +2892,6 @@ void read_faces()
     int edge_count = 0;
 
 
-    #ifdef MPI_EVOLVER
-    /* test task number, for MPI */
-    if ( tok == LEAD_INTEGER_TOK )
-       facet_task = 1;  /* default to task 1 */
-    else facet_task = yylval.qnum;
-    if ( facet_task >= mpi_nprocs || facet_task < 1 )
-    { sprintf(errmsg,"Task number %d must be between 1 and %d\n",
-         facet_task,mpi_nprocs-1);
-      kb_error(5009,errmsg,RECOVERABLE);
-    }
-    if ( facet_task != this_task )
-    { /* skip this facet */
-      int flag = 0;
-      while ( !flag ) 
-      { tok = yylex();
-        switch (tok)
-        { case LEAD_INTEGER_TOK: 
-          case LEAD_INTEGER_AT_TOK:
-          case BODIES_TOK:
-          case READ_TOK:
-          case 0:
-            flag = 1;
-            break;
-        }
-      }
-      continue;  /* next facet */
-    }
-    #endif
     
     k = yylval.i;
     if ( k < 1 ) 
@@ -3066,25 +2926,6 @@ void read_faces()
       while ( (tok = gettok(INTEGER_TOK)) == INTEGER_TOK )
       { if ( vercount++ > numv )
           kb_error(1153,"Too many vertices for facet.\n",DATAFILE_ERROR);
-#ifdef MPI_EVOLVER
-        if ( yylval.qnum == 0 )
-             yylval.qnum = 1;
-        if ( yylval.qnum >= mpi_nprocs )
-        { sprintf(errmsg,"Task number %d exceeds number of tasks running, %d\n",
-             yylval.qnum,mpi_nprocs-1);
-          kb_error(5010,errmsg,RECOVERABLE);
-        }
-        if ( yylval.qnum != this_task )
-        { *v = ((element_id)VERTEX << TYPESHIFT) | VALIDMASK | 
-             (yylval.i-1) | ((element_id)yylval.qnum << TASK_ID_SHIFT);  
-          memset(vdummy,0,web.sizes[VERTEX]);
-          vdummy->self_id = *v;
-          vdummy->attr = ALLOCATED|NEWELEMENT;
-          mpi_add_remote_element(vdummy);
-          v++;
-        }
-        else
-#endif
         if ( (yylval.i >= vmaxlist) || !valid_id(vlist[yylval.i]) )
         { sprintf(errmsg,"Facet %d: vertex %d is not defined.\n",k,yylval.i);
           kb_error(1154,errmsg,RECOVERABLE /*DATAFILE_ERROR*/);
@@ -3106,34 +2947,6 @@ void read_faces()
         edge_count++;
         e = yylval.i;
 
-#ifdef MPI_EVOLVER
-        edge_task = yylval.qnum;
-        if ( edge_task == 0 )  /* for non-partitioned datafiles */
-             edge_task = 1;
-        if ( edge_task >= mpi_nprocs )
-        { sprintf(errmsg,"Edge task number %d exceeds number of tasks running, %d\n",
-             edge_task,mpi_nprocs-1);
-          kb_error(5011,errmsg,RECOVERABLE);
-        }
-        if ( edge_task != this_task )
-        { if (web.representation==SOAPFILM ) 
-          {
-          e_id = ((element_id)EDGE << TYPESHIFT) | VALIDMASK | (abs(e)-1) |
-             ((element_id)edge_task << TASK_ID_SHIFT);  
-          memset(edummy,0,web.sizes[EDGE]);
-          edummy->self_id = e_id;
-          edummy->attr = ALLOCATED | NEWELEMENT;
-          mpi_add_remote_element(edummy);
-          if ( e < 0 ) invert(e_id);
-          }
-          else /* string */
-          { 
-            split_loop_flag = 1; /* so don't try to close loop at end */
-            continue; /* only doing local edges */
-          }
-        }
-        else
-#endif
         { if ( abs(e) >= emaxlist )
           { sprintf(errmsg,"Facet %d: edge %d is not defined.\n",k,abs(e));
             e = 0;
@@ -3152,7 +2965,6 @@ void read_faces()
         fe = new_facetedge(this_facet_id,e_id);
         if ( valid_id(old_fe) )
         { 
-          #ifndef MPI_EVOLVER
 		  vertex_id hh,tt;
           hh = get_fe_headv(old_fe);
           tt = get_fe_tailv(fe);
@@ -3161,7 +2973,6 @@ void read_faces()
                          k,e);
             kb_error(2112,msg,DATAFILE_ERROR);
           }
-          #endif
           set_next_edge(old_fe,fe);
         }
 		else 
@@ -3169,9 +2980,6 @@ void read_faces()
         set_prev_edge(fe,old_fe);
         old_fe = fe;
 
-#ifdef MPI_EVOLVER
-       if ( (web.representation == SOAPFILM) || (facet_task == this_task) )
-#endif
          if ( !valid_id(get_facet_fe(this_facet_id)) )
            set_facet_fe(this_facet_id,fe);
 
@@ -3196,28 +3004,6 @@ void read_faces()
       { sprintf(errmsg,"Face %d has too few edges.\n",k);
         kb_error(1158,errmsg,DATAFILE_ERROR);
       }
-      #ifdef MPI_EVOLVER
-      if ( !split_loop_flag )
-      { set_next_edge(fe,first_fe);  /* close up ring */
-        set_prev_edge(first_fe,fe);
-      }
-      #else
-	  { vertex_id hh,tt;
-      tt = get_fe_tailv(first_fe);
-      hh = get_fe_headv(fe);
-      if ( equal_id(tt,hh) ) 
-      { set_next_edge(fe,first_fe);  /* close up ring */
-        set_prev_edge(first_fe,fe);
-      }
-      else 
-      { if ( web.representation != STRING )
-        { sprintf(errmsg,
-             "Inconsistency in face %d first and last edges.\n",k);
-          kb_error(1159,errmsg,DATAFILE_ERROR);
-        }
-      }
-	  }
-      #endif
        
       if ( (web.modeltype == LAGRANGE) && (web.representation == SOAPFILM) )
       { /* read vertex list */
@@ -3250,16 +3036,6 @@ void read_faces()
          unset_attr(v[web.skel[FACET].extreme[i]],Q_MIDFACET);
      }
 
-#ifdef MPI_EVOLVER
-	  if ( (web.representation == STRING) && (facet_task != this_task)) 
-	  { /* skip rest of line */
-        while ( (tok != LEAD_INTEGER_TOK) && (tok != LEAD_INTEGER_AT_TOK) &&
-               (tok != READ_TOK) && (tok != BODIES_TOK) && (tok != 0) )
-		{ tok = yylex();
-        }
-		continue;
-	  }
-#endif
 
       set_facet_density(this_facet_id,1.0);
       /* have attributes, maybe */
@@ -3544,10 +3320,6 @@ void read_faces()
       if ( k > facecount ) facecount = k;
     }
 
-#ifdef MPI_EVOLVER
-  myfree((char*)vdummy);
-  myfree((char*)edummy);
-#endif
 
 } /* end read_faces() */
 
@@ -3580,22 +3352,6 @@ void read_bodies()
     int face_count = 0;
  
 
-    #ifdef MPI_EVOLVER
-    int facet_task,body_task;
-
-    body_task = yylval.qnum;
-  
-    /* test task number, for MPI */
-    if ( tok == LEAD_INTEGER_TOK )
-       body_task = 1;  /* default to task 1 */
-    else body_task = yylval.qnum;
-    if ( body_task >= mpi_nprocs || body_task < 1 )
-    { sprintf(errmsg,"Task number %d must be between 1 and %d\n",
-         body_task,mpi_nprocs-1);
-      kb_error(5029,errmsg,RECOVERABLE);
-    }
-
-    #endif 
   
     k = yylval.i;
     if ( k < 1 ) 
@@ -3607,9 +3363,6 @@ void read_bodies()
       blist = (body_id *)kb_realloc((char *)blist,bmaxlist*sizeof(body_id));
       for ( ; spot < bmaxlist ; spot ++ ) blist[spot] = NULLID;
     }
-#ifdef MPI_EVOLVER
-    if ( !mpi_local_bodies_flag || (body_task == this_task) )
-#endif
     {
       if ( valid_id(blist[k]) )
       { sprintf(errmsg,"Duplicate body number %d\n",k);
@@ -3620,30 +3373,12 @@ void read_bodies()
       set_original(blist[k],(k-1)|((element_id)BODY<<TYPESHIFT)|VALIDMASK);
       b_id = blist[k];
     }
-#ifdef MPI_EVOLVER
-    else
-      b_id =  (k-1)|((element_id)BODY<<TYPESHIFT)|VALIDMASK |
-                   (((element_id)body_task) << TASK_ID_SHIFT);
-#endif
 
     f_id = NULLID;  /* in case no facets */
     while ( (tok = gettok(INTEGER_TOK)) == INTEGER_TOK )
     { 
      
       f = yylval.i;
-#ifdef MPI_EVOLVER
-      facet_task = yylval.qnum;
-      if ( facet_task == 0 )
-             facet_task = 1;
-      if ( facet_task >= mpi_nprocs )
-      { sprintf(errmsg,"Task number %d exceeds number of tasks running, %d\n",
-           facet_task,mpi_nprocs-1);
-        kb_error(5012,errmsg,RECOVERABLE);
-      }
-      if ( facet_task != this_task )
-        continue;
-      else
-#endif
       { 
         face_count++;
         if ( abs(f) >= fmaxlist )
@@ -3658,23 +3393,11 @@ void read_bodies()
         set_facet_body(f_id, b_id);
       }
     } 
-    #ifndef MPI_EVOLVER 
     if ( (web.representation != STRING) && (face_count < 1) )
     { sprintf(errmsg,"Body %d has no faces.\n",k);
       kb_error(1190,errmsg,WARNING);
     }
-    #endif
 
-#ifdef MPI_EVOLVER
-    if ( mpi_local_bodies_flag && (body_task != this_task ) )
-    {  /* skip until next body */
-        while ( (tok != LEAD_INTEGER_TOK) && (tok != LEAD_INTEGER_AT_TOK) &&
-               (tok != READ_TOK) && (tok != 0) )
-		{ tok = yylex();
-        }
-       continue;
-    }
-#endif
 
     more_attr = 1;
     while ( more_attr )

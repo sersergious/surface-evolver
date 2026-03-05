@@ -21,13 +21,7 @@ extern "C" {
  extern double drand48(void); /* may not be in header file */
 #endif
 
-#ifdef MSC
- extern void srand48 (int);
-#endif
 
-#ifdef MPI_EVOLVER
-#include "mpi_proto.h"
-#endif
  
 void set_graphics_title(int, char*);
 void affinity_mongering(void); // Windows only
