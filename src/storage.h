@@ -137,61 +137,24 @@ typedef unsigned int
 
 #else
 /* lookup in ibase pointer list for each element */
-#ifdef MPI_EVOLVER
-#define elptr(id)   ((struct element *)((id_task(id)==this_task?web.skel[id_type(id)].ibase[(id)&OFFSETMASK]:mpi_remote_elptr(id))))
-#define vptr(v_id)   ((struct vertex *)((id_task(v_id)==this_task?web.skel[VERTEX].ibase[(v_id)&OFFSETMASK]:mpi_remote_elptr(v_id))))
-#define eptr(e_id)   ((struct edge   *)((id_task(e_id)==this_task?web.skel[EDGE].ibase[(e_id)&OFFSETMASK]:mpi_remote_elptr(e_id))))
-#define fptr(f_id)   ((struct facet  *)((id_task(f_id)==this_task?web.skel[FACET].ibase[(f_id)&OFFSETMASK]:mpi_remote_elptr(f_id))))
-#define xxbptr(b_id)   ((struct body   *)((id_task(b_id)==this_task?web.skel[BODY].ibase[(b_id)&OFFSETMASK]:mpi_remote_elptr(b_id))))
-#define bptr(b_id)   ((struct body   *)(web.skel[BODY].ibase[(b_id)&OFFSETMASK]))
-#define feptr(fe_id) ((struct facetedge *)((id_task(fe_id)==this_task?web.skel[FACETEDGE].ibase[(fe_id)&OFFSETMASK]:mpi_remote_elptr(fe_id))))
-#else
 #define elptr(id)   ((struct element *)(web.skel[id_type(id)].ibase[(id)&OFFSETMASK]))
 #define vptr(v_id)   ((struct vertex *)(web.skel[VERTEX].ibase[(v_id)&OFFSETMASK]))
 #define eptr(e_id)   ((struct edge   *)(web.skel[EDGE].ibase[(e_id)&OFFSETMASK]))
 #define fptr(f_id)   ((struct facet  *)(web.skel[FACET].ibase[(f_id)&OFFSETMASK]))
 #define bptr(b_id)   ((struct body   *)(web.skel[BODY].ibase[(b_id)&OFFSETMASK]))
 #define feptr(fe_id) ((struct facetedge *)(web.skel[FACETEDGE].ibase[(fe_id)&OFFSETMASK]))
-#endif
 
 /* end HASH_ID */
 #endif
 
 #define ordinal(id)  (valid_id(id) ? (int)((id) & OFFSETMASK) : -1 )
-
-#ifdef MPI_EVOLVER
-#define loc_ordinal(id)  (valid_id(id) ? (int)(elptr(id)->local_id & OFFSETMASK) : -1 )
-#else
 #define loc_ordinal(id)  (valid_id(id) ? (int)((id) & OFFSETMASK) : -1 )
-#endif
 
 /* Macros for producing element name strings for printing. */
 /* Note these use global permanent strings to store return string */
 /* so printf's with multiple names should use different ELNAMEs. */
 /* ELNAME is unsigned, SELNAME is signed */
 extern char elnames[10][30];
-#ifdef MPI_EVOLVER
-#define ELNAME(id) (valid_id(id) ? (sprintf(elnames[0],"%d@%d",(int)((id)&OFFSETMASK)+1,id_task(id)),elnames[0]) : "")
-#define ELNAME1(id) (valid_id(id) ? (sprintf(elnames[1],"%d@%d",(int)((id)&OFFSETMASK)+1,id_task(id)),elnames[1]) : "")
-#define ELNAME2(id) (valid_id(id) ? (sprintf(elnames[2],"%d@%d",(int)((id)&OFFSETMASK)+1,id_task(id)),elnames[2]) : "")
-#define ELNAME3(id) (valid_id(id) ? (sprintf(elnames[3],"%d@%d",(int)((id)&OFFSETMASK)+1,id_task(id)),elnames[3]) : "")
-#define ELNAME4(id) (valid_id(id) ? (sprintf(elnames[4],"%d@%d",(int)((id)&OFFSETMASK)+1,id_task(id)),elnames[4]) : "")
-#define ELNAME5(id) (valid_id(id) ? (sprintf(elnames[5],"%d@%d",(int)((id)&OFFSETMASK)+1,id_task(id)),elnames[5]) : "")
-#define ELNAME6(id) (valid_id(id) ? (sprintf(elnames[6],"%d@%d",(int)((id)&OFFSETMASK)+1,id_task(id)),elnames[6]) : "")
-#define ELNAME7(id) (valid_id(id) ? (sprintf(elnames[7],"%d@%d",(int)((id)&OFFSETMASK)+1,id_task(id)),elnames[7]) : "")
-#define ELNAME8(id) (valid_id(id) ? (sprintf(elnames[8],"%d@%d",(int)((id)&OFFSETMASK)+1,id_task(id)),elnames[8]) : "")
-#define ELNAME9(id) (valid_id(id) ? (sprintf(elnames[9],"%d@%d",(int)((id)&OFFSETMASK)+1,id_task(id)),elnames[9]) : "")
-#define SELNAME(id) (valid_id(id) ? (sprintf(elnames[0],"%s%d@%d",(inverted(id)?"-":""),(int)((id)&OFFSETMASK)+1,id_task(id)),elnames[0]) : "")
-#define SELNAME1(id) (valid_id(id) ? (sprintf(elnames[1],"%s%d@%d",(inverted(id)?"-":""),(int)((id)&OFFSETMASK)+1,id_task(id)),elnames[1]) : "")
-#define SELNAME2(id) (valid_id(id) ? (sprintf(elnames[2],"%s%d@%d",(inverted(id)?"-":""),(int)((id)&OFFSETMASK)+1,id_task(id)),elnames[2]) : "")
-#define SELNAME3(id) (valid_id(id) ? (sprintf(elnames[3],"%s%d@%d",(inverted(id)?"-":""),(int)((id)&OFFSETMASK)+1,id_task(id)),elnames[3]) : "")
-#define SELNAME4(id) (valid_id(id) ? (sprintf(elnames[4],"%s%d@%d",(inverted(id)?"-":""),(int)((id)&OFFSETMASK)+1,id_task(id)),elnames[4]) : "")
-#define SELNAME5(id) (valid_id(id) ? (sprintf(elnames[5],"%s%d@%d",(inverted(id)?"-":""),(int)((id)&OFFSETMASK)+1,id_task(id)),elnames[5]) : "")
-#define SELNAME6(id) (valid_id(id) ? (sprintf(elnames[6],"%s%d@%d",(inverted(id)?"-":""),(int)((id)&OFFSETMASK)+1,id_task(id)),elnames[6]) : "")
-#define SELNAME7(id) (valid_id(id) ? (sprintf(elnames[7],"%s%d@%d",(inverted(id)?"-":""),(int)((id)&OFFSETMASK)+1,id_task(id)),elnames[7]) : "")
-#define SELNAME8(id) (valid_id(id) ? (sprintf(elnames[8],"%s%d@%d",(inverted(id)?"-":""),(int)((id)&OFFSETMASK)+1,id_task(id)),elnames[8]) : "")
-#define SELNAME9(id) (valid_id(id) ? (sprintf(elnames[9],"%s%d@%d",(inverted(id)?"-":""),(int)((id)&OFFSETMASK)+1,id_task(id)),elnames[9]) : "")
-#else
 #define ELNAME(id) (valid_id(id) ? (sprintf(elnames[0],"%d",(int)((id)&OFFSETMASK)+1),elnames[0]) : "")
 #define ELNAME1(id) (valid_id(id) ? (sprintf(elnames[1],"%d",(int)((id)&OFFSETMASK)+1),elnames[1]) : "")
 #define ELNAME2(id) (valid_id(id) ? (sprintf(elnames[2],"%d",(int)((id)&OFFSETMASK)+1),elnames[2]) : "")
@@ -212,7 +175,6 @@ extern char elnames[10][30];
 #define SELNAME7(id) (valid_id(id) ? (sprintf(elnames[7],"%s%d",(inverted(id)?"-":""),(int)((id)&OFFSETMASK)+1),elnames[7]) : "")
 #define SELNAME8(id) (valid_id(id) ? (sprintf(elnames[8],"%s%d",(inverted(id)?"-":""),(int)((id)&OFFSETMASK)+1),elnames[8]) : "")
 #define SELNAME9(id) (valid_id(id) ? (sprintf(elnames[9],"%s%d",(inverted(id)?"-":""),(int)((id)&OFFSETMASK)+1),elnames[9]) : "")
-#endif
 
 /* Macros for manipulating and testing element ids */
 #define edge_inverse(id)   inverse_id(id)

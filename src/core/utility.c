@@ -21,10 +21,6 @@
 *        user wants to break out.
 */
 
-#ifdef WIN32
-#define write(a,b,c) erroutstring(b)
-#endif
-
 void catcher(int sig)
 {
 #ifdef SIGALRM
@@ -35,20 +31,6 @@ void catcher(int sig)
   if ( sig == SIGINT ) 
      { signal(SIGINT,catcher);
 
-#ifdef SGI_MULTI 
-    if ( mpflag == M_ACTIVE )
-      { if ( m_breakflag[GET_THREAD_ID] )
-        longjmp(m_jumpbuf[GET_THREAD_ID],1);
-         else m_breakflag[GET_THREAD_ID] = BREAKFULL;
-         if ( GET_THREAD_ID == 0 ) 
-        write(2,"\nWill break after iteration.\n",29);
-         breakflag = BREAKFULL;
-         iterate_flag = 0;
-      }
-    else
-      if ( GET_THREAD_ID > 0 ) {}
-    else
-#endif
     if ( iterate_flag == 1 )
     { write(2,"\nWill break after iteration.\n",29);
       breakflag = BREAKFULL;
@@ -69,16 +51,7 @@ void catcher(int sig)
            ABORT_GRAPH_MUTEX
         else
            erroutstring("In GRAPH_MUTEX.  May be deadlocked with graphics thread.\n");
-#ifdef WIN32
-/* separate thread for signal handler, so can't longjmp out of error */
-  erroutstring("Can't nicely abort command in WIN32.  Hang in there, or\n");
-  erroutstring("use Task Manager to kill Evolver if you think it's hung.\n");
-#elif defined(MAC_OS_X)
-  if ( iterate_flag > 2 )
-    erroutstring("Haven't figured out how to handle this yet.\n");
-#else
   kb_error(1357,"",RECOVERABLE_QUIET);
-#endif
     }
     while ( commandfd && (commandfd  != stdin) )
          pop_commandfd();
@@ -164,15 +137,6 @@ void mem_sanity_check()
   int blocktype;
 
   THREADBLOCK(blocktype);
-
-#if defined(_WIN32) && defined(_HEAPOK)
-#ifndef _HEAPINFO
-#define _HEAPINFO _heapinfo
-#endif
-
-  if ( _heapchk() != _HEAPOK )
-    kb_error(2580,"Internal error: Corrupt heap! Memory is trashed.\n",RECOVERABLE);
-#endif
 
   for ( head = eternal_block_head; head ; head = head->next )
   { if ( head->type != ETERNAL_BLOCK )
@@ -942,10 +906,6 @@ void temp_free_all()
   THREADBLOCK(blocktype);
   list_free_all(blocktype);
 
-  #ifdef MPI_EVOLVER
-  if ( this_task == 0 && blocktype != GRAPH_BLOCK )
-    mpi_temp_free_all();
-  #endif
   
   #ifdef _DEBUGXX
   memdebug = oldmemdebug;
@@ -3124,94 +3084,8 @@ FILE *path_open(
   FILE *fd = NULL;
   char *env;
 
-#ifdef MPI_EVOLVER
-  /* use filename as format string to generate various file names */
-  char taskpath[PATHSIZE];
-  sprintf(taskpath,name,this_task);
-  name = taskpath;
-#endif
-
   env = getenv("EVOLVERPATH");
 
-#if defined(WIN32) && !defined(__BORLANDC__)
-  /* Using wildcards! */
-
-  /* try given name */
-  strncpy(path,name,sizeof(path));
-  for(;;)
-  { /* try paths in EVOLVERPATH */
-    intptr_t ret;
-    struct _finddata_t finddata;
-
-    ret = _findfirst(path,&finddata);
-    if ( ret != -1 )
-    { /* finddata.name only has filename, not path stuff */
-      char *slash = strrchr(path,'/');
-	  char *slashb = strrchr(path,'\\');
-      if ( slashb > slash )
-		slash = slashb;
-      if ( !slash && path[1] == ':' ) 
-         slash = path+1;
-      if ( slash ) slash++;
-      else slash = path;
-      strncpy(slash,finddata.name,sizeof(path)-(slash-path));
-      fd = fopen(path,"r");
-      _findclose(ret);
-      break;
-    }
-
-    if ( env == NULL ) break;
-    len = strcspn(env,ENVPATHCHAR);
-    if ( len == 0 ) break;
-    strncpy(path,env,len);
-    path[len] = PATHCHAR;
-    strncpy(path+len+1,name,sizeof(path)-len-2);
-    if ( env[len] == 0 ) env = NULL; /* end of EVOLVERPATH */
-    else env += len+1;
-  } 
-  
-  /* try .fe extension */
-  if ( fd == NULL)
-  {
-    env = getenv("EVOLVERPATH");
-    strncpy(path,name,sizeof(path));
-    strcat(path,".fe");
-    for ( ;; )
-    {
-      intptr_t ret;
-      struct _finddata_t finddata;
-
-      ret = _findfirst(path,&finddata);
-      if ( ret != -1 )
-      { char *slash = strrchr(path,'/');
-	    char *slashb = strrchr(path,'\\');
-		if ( slashb > slash )
-			slash = slashb;
-        if ( !slash && path[1] == ':' ) 
-         slash = path+1;
-        if ( slash ) slash++;
-        else slash = path;
-        strncpy(slash,finddata.name,sizeof(path)-(slash-path));
-        fd = fopen(path,"r");
-        _findclose(ret);
-        /* scrape the ".fe" off the end of the path since user didn't give it */
-        path[strlen(path)-3] = 0;
-        break;
-      }
-
-      /* try paths in EVOLVERPATH */
-      if ( env == NULL ) break;
-      len = strcspn(env,ENVPATHCHAR);
-      if ( len == 0 ) break;
-      strncpy(path,env,len);
-      path[len] = PATHCHAR;
-      strncpy(path+len+1,name,sizeof(path)-len-2);
-      strcat(path,".fe");
-      if ( env[len] == 0 ) env = NULL; /* end of EVOLVERPATH */
-      else env += len+1;
-    } 
-  }
-#elif defined(_GLOB_H)
   /* Using wildcards! */
 
   /* try given name */
@@ -3274,41 +3148,6 @@ FILE *path_open(
       else env += len+1;
     } 
   }
-#else
-  /* try given name */
-  strncpy(path,name,sizeof(path));
-  while ( (fd = fopen(path,"r")) == NULL)
-  { /* try paths in EVOLVERPATH */
-    if ( env == NULL ) break;
-    len = strcspn(env,ENVPATHCHAR);
-    if ( len == 0 ) break;
-    strncpy(path,env,len);
-    path[len] = PATHCHAR;
-    strncpy(path+len+1,name,sizeof(path)-len-2);
-    if ( env[len] == 0 ) env = NULL; /* end of EVOLVERPATH */
-    else env += len+1;
-  } 
-  
-  /* try .fe extension */
-  if ( fd == NULL)
-  {
-    env = getenv("EVOLVERPATH");
-    strncpy(path,name,sizeof(path));
-    strcat(path,".fe");
-    while ( (fd = fopen(path,"r")) == NULL)
-     { /* try paths in EVOLVERPATH */
-        if ( env == NULL ) break;
-        len = strcspn(env,ENVPATHCHAR);
-        if ( len == 0 ) break;
-        strncpy(path,env,len);
-        path[len] = PATHCHAR;
-        strncpy(path+len+1,name,sizeof(path)-len-2);
-        strcat(path,".fe");
-        if ( env[len] == 0 ) env = NULL; /* end of EVOLVERPATH */
-        else env += len+1;
-     } 
-  }
-#endif
  
   if ( fd && (mode==SETDATAFILENAME) )
   { /* has to be set so repeat open works */
@@ -3762,9 +3601,6 @@ void make_bfacet_lists()
   { /* make sure legal pointer */
     f_id = get_body_facet(b_id);
     if ( !valid_id(f_id) || 
-    #ifdef MPI_EVOLVER
-         !mpi_remote_present(f_id) ||
-    #endif  
         !equal_id(b_id,get_facet_body(f_id))  )
     { set_body_facet(b_id,NULLID);
       FOR_ALL_FACETS(f_id)
@@ -3828,11 +3664,6 @@ void insert_vertex_edge(
 { edge_id ee_id,eee_id; 
   int n;
   
-  #ifdef MPI_EVOLVER
-  if ( !elptr(v_id) || !elptr(e_id) ) 
-    return;
-  #endif
-
   if ( !equal_id(v_id,get_edge_tailv(e_id)) )
   { kb_error(1372,"Internal error: Trying to insert edge to wrong vertex.\n",
        WARNING);
@@ -3880,11 +3711,6 @@ void remove_vertex_edge(
   vertex_id vv_id = get_edge_tailv(e_id);
   int n = 0;
 
-#ifdef MPI_EVOLVER
-  if ( !mpi_remote_present(v_id) )
-     return;
-#endif
-
   if ( !equal_id(v_id,vv_id) )
   { sprintf(errmsg,
     "Internal error: Trying to detach edge %s from vertex %s instead of %s.\n",
@@ -3898,10 +3724,6 @@ void remove_vertex_edge(
   eee_id = ee_id;
   do
   { 
-  #ifdef MPI_EVOLVER
-    if ( !mpi_remote_present(eee_id) )
-       return;  /* fail, but don't crash */
-  #endif
     if ( equal_id(eee_id,e_id) ) break;
     eee_id = get_next_tail_edge(eee_id);
     if ( ++n > 2*web.skel[EDGE].count ) /* sanity check */ 
@@ -3918,25 +3740,12 @@ void remove_vertex_edge(
     { set_vertex_edge(v_id,NULLID);
       return;
     }
-  #ifdef MPI_EVOLVER
-      if ( !mpi_remote_present(ee_id) )
-         return;
-  #endif
   eee_id = ee_id;
   eeee_id = get_next_tail_edge(ee_id);
-  #ifdef MPI_EVOLVER
-      if ( !mpi_remote_present(eeee_id) )
-         return;
-   #endif
-
   n = 0;
   while ( !equal_id(e_id,eeee_id) )
     { eee_id = eeee_id;
       eeee_id = get_next_tail_edge(eee_id);
-      #ifdef MPI_EVOLVER
-      if ( !mpi_remote_present(eeee_id) )
-         return;
-      #endif
       if ( ++n > 2*web.skel[EDGE].count ) /* sanity check */
       { sprintf(errmsg, "Internal error: Vertex %s edge loop not closed.\n",
            ELNAME(v_id));
@@ -4367,13 +4176,6 @@ REAL kb_drand()
   return drands[kr++];
 } // end kb_drand()
 
-#ifdef MSC
-/* for METIS and other third parties */
-double drand48() 
-{ return (double)kb_drand(); }
-void srand48(int seed) 
-{ kb_initr(seed); }
-#endif
 
 /***********************************************************************
 *

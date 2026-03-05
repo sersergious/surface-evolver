@@ -41,11 +41,6 @@ void calc_volgrads(int mode)
     outstring("Calculating volgrads.\n");
  
    
-  #ifdef MPI_EVOLVER
-   mpi_calc_volgrads(mode);
-  #else
-   local_calc_volgrads(mode);
-  #endif
 
 #ifdef _DEBUGXXX
   if ( itdebug ) /* dump vgrads */
@@ -597,13 +592,6 @@ void calc_leftside()
     rleftside = dmatrix(0,fixcount,0,fixcount);
   }
 
-  #ifdef MPI_EVOLVER
-  if ( sparse_constraints_flag ) 
-    kb_error(3381,"Cannot do sparse constraints yet in MPI.\n",RECOVERABLE);
-  mpi_calc_leftside(fixcount);
-  #else
-  local_calc_leftside();
-  #endif
 
   if ( approx_curve_flag )
   { int NV = SDIM*(1+web.skel[VERTEX].max_ord);
@@ -665,7 +653,6 @@ void calc_leftside()
   }
   degfree += optparamcount;
   
-  #ifndef MPI_EVOLVER
   if ( degfree < fixcount ) 
   { sprintf(errmsg,
        "Degrees of freedom, %d, is less than number of constraints, %d\n",
@@ -674,7 +661,6 @@ void calc_leftside()
       strcat(errmsg,"Perhaps constraint is not applied to any elements?\n");
     kb_error(3004,errmsg,RECOVERABLE);
   }
-  #endif
   
   /* solve for coefficients */
   if ( sparse_constraints_flag )
@@ -774,11 +760,6 @@ void calc_lagrange()
   rightside = (REAL*)temp_calloc(maxquants,sizeof(REAL));
   vpressures = (REAL*)temp_calloc(maxquants,sizeof(REAL));
 
-  #ifdef MPI_EVOLVER
-  mpi_calc_rightside(maxquants);
-  #else
-  local_calc_rightside();
-  #endif
 
   /* optimizing_parameter contributions */
   if ( optparamcount )
@@ -919,11 +900,6 @@ void lagrange_adjust()
   if ( itdebug ) 
     outstring("lagrange_adjust(): subtract multiples of volume gradients from force\n");
 
-  #ifdef MPI_EVOLVER
-  mpi_lagrange_adjust(maxquants);
-  #else
-  local_lagrange_adjust();
-  #endif
 
   /* optimizing parameter adjust */
   if ( optparamcount )
@@ -1194,11 +1170,6 @@ void volume_restore (
        }
      }
 
-  #ifdef MPI_EVOLVER
-  mpi_volume_restore(maxquants,stepsize,mode);
-  #else
-  local_volume_restore(stepsize,mode);
-  #endif
 
   partner_move();  /* in case doing partners */
   
@@ -1449,10 +1420,6 @@ void vgrad_end()
   if ( optparam_congrads ) free_matrix(optparam_congrads);
   optparam_congrads = NULL;
 
-  #ifdef MPI_EVOLVER
-  if ( this_task == 0 )
-    mpi_vgrad_end(); 
-  #endif
 
 } /* end vgrad_end() */
 

@@ -36,10 +36,6 @@ int mode     /* VOLKEEP to keep volumes on both sides same */
   vertex_id v_id;
   int i;
  
-  #ifdef MPI_EVOLVER
-  if ( this_task == 0 )
-    mpi_vertex_average(mode);
-  #endif
 
   if ( web.skel[VERTEX].count == 0 ) return;
 

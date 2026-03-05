@@ -57,9 +57,6 @@ void recalc()
     }
   }
 
-  #ifdef MPI_EVOLVER
-  if ( this_task == 0 )
-  #endif
   {
     calc_content(Q_FIXED);
     /* if ( web.torus_flag ) fix_volconst(); */
@@ -84,15 +81,6 @@ void reset_conj_grad()
   vertex_id v_id;
   int size = SDIM;
 
-#ifdef MPI_EVOLVER
-  if ( this_task == MASTER_TASK )
-  { struct mpi_command message;
-    message.cmd = mpi_RESET_CONJ_GRAD;
-    message.mode = ribiere_flag;
-    MPI_Bcast(&message,sizeof(struct mpi_command),MPI_BYTE,MASTER_TASK,
-          MPI_COMM_WORLD);
-  }
-#endif
   /* reset conjugate gradient */
   if ( cg_hvector ) myfree((char *)cg_hvector);
   cg_hvector = NULL;
@@ -839,9 +827,6 @@ void letter_command (int c)
                loadstub();
 #else
                startup(NULL);
-#ifdef MPI_EVOLVER
-             /*  MPI_Barrier(MPI_COMM_WORLD); */ /* extra kludge needed */
-#endif
                longjmp(jumpbuf[0],1); /* kludge, but current command
                                       list just got deallocated */
 #endif
@@ -1155,9 +1140,6 @@ void show_volumes()
     if ( (quan->timestamp < global_timestamp) 
                  || (quan->timestamp < global_timestamp) )
     { 
-#ifdef MPI_EVOLVER
-      if ( this_task == MASTER_TASK )
-#endif
 	  { if ( !recalc_flag )
           outstring("recalculating...\n");
         recalc_flag = 1;

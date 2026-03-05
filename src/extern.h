@@ -156,11 +156,7 @@ extern REAL **optparam_congrads;  /* constraint gradients */
 #define GRAPH_BLOCK 0xCBCB
 
 /* for per-thread temp memory */
-#if defined(_WIN32)
-#define this_thread   GetCurrentThreadId()
-#define THREADBLOCK(blocktype) blocktype = \
-    (draw_thread_id==GetCurrentThreadId()) ? GRAPH_BLOCK : TEMP_BLOCK
-#elif defined(PTHREADS)
+#ifdef PTHREADS
 #define this_thread   pthread_self()
 #define THREADBLOCK(blocktype) blocktype = \
     (draw_thread_id==pthread_self()) ? GRAPH_BLOCK : TEMP_BLOCK
@@ -1472,9 +1468,6 @@ struct hess_verlist {
             int flags;       /* for marking if done */
             int freedom;     /* degrees of freedom */
             int rownum;      /* starting row in sparse matrix  */
-#ifdef MPI_EVOLVER
-            int global_rownum;
-#endif
             REAL **proj;     /* projection matrix to constraints */
             REAL ***conhess; /* for constraint hessian */
             REAL slant;      /* cos of angle of normal from constraint */
@@ -1652,73 +1645,6 @@ struct linsys { int flags;  /* status bits, see below */
                 void *pt[64];
                 /* Pardiso control parameters. */
                 MKL_INT iparm[64];
-#endif
-#ifdef MPI_EVOLVER
-   /* stuff used in MPI distributed linear systems */
-   int *send_counts; /* counts for general MPI scatter/gather */
-   int *send_starts; /* offsets for general MPI scatter/gather */
-   int *recv_counts; /* counts for general MPI scatter/gather */
-   int *recv_starts; /* offsets for general MPI scatter/gather */
-   int *rowstarts; /* of globals on all tasks */
-   int *rowcounts; /* of globals on all tasks */
-   int local_rows;
-   int local_start; /* of global row numbers */
-   int local_end;
-   int *domain_tasks;  /* domain_tasks[i] is task hosting domain i */
-   int *task_domains;  /* task_domains[i] is domain hosted on task i */
-   int total_factor_fill;  /* just for info */
-   int LA_spot;    /* tracker for allocation in LA workspace */
-   int *IAtrans;  /* translate local row numbers in IA to global rows */
-   int *IAtrans_elim;  /* translate local row numbers to elimination order */
-   int *domain_IA; /* starts of rows in domain_entries list */
-   int scount;  /* number of snodes actually used (info only) */
-   int *listspace;  /* for lists of rows in supernodes */
-   int listspacesize;
-   int listspacespot;
-   int *sepsizes;  /* sizes of final separators between domains */
-
-   int *block_starts; /* interleaved domains and separators in entrylist */
-   int *block_counts;
-   int *domain_entry_starts; /* in entrylist, sending */
-   int *domain_entry_ends; /* in entrylist, sending */
-   int *sep_entry_starts; /* in entrylist, sending */
-   int *sep_entry_counts;
-
-   int local_elim;          /* rows in local domain */
-   int *all_elim_starts;    /* domains and separators postorder */
-   int local_elim_start;    /* handy to have */
-   int local_elim_end;
-   int *homeglobal_elim;    /* elims for home global rows */
-   int *domain_elim_starts; /* in terms of elimination order */
-   int *domain_elim_ends;   /* needed since domains and separators */
-   int *sep_elim_starts;    /* interleaved in elimination order */
-   int *sep_elim_ends;
-   int *row_tasks;       /* home row task destinations based on elim */
-   int *row_tasks_counts; /* counts of those going to each task */
-   int *row_tasks_starts; /* offsets for each task */
-   int *rows_from;          /* elim numbers of incoming global rows */
-   int *rows_from_counts;  /* counts of incoming global rows */
-   int *rows_from_starts;  /* starts of incoming global rows */
-   int *domain_sepnum;   /* postorder node number of domain */
-   int *sep_sepnum;   /* postorder node number of separator */
-   int *block_tasks;  /* which tasks host domains/seps in interleaved order */
-   struct snode *slist;       /* allocated list of supernodes, enough for
-                                 each row in domain and the separator */
-   struct snode *last_snode;  /* of domain */
-   struct snode *sep_snode;   /* of separator */
-   struct snode *csnode[2];   /* of children of separator */
-   int *clist[2];   /* row nums of children of separator */
-   int ctask[2];   /* tasks of children, for knowing clist and csnode order */
-   int *final_list;   /* row nums in final separator */
-   int total_ssize;  /* for debug */
-   REAL *workspace; /* for temp stack of factoring "extra" data */
-   int workspacesize;
-   int *domain_counts;
-   int domain_entries_size; /* number of entries in matrix for domain */
-   int sep_entries_size; /* number of entries in matrix for separator */
-   struct hess_entry *domain_entries; /* matrix entries for domain */
-   struct hess_entry *sep_entries; /* matrix entries for separator */
-
 #endif
             };
 /* flag bits */
@@ -2092,11 +2018,6 @@ extern int mpflag;  /* whether multiprocessing in action */
 extern int m_breakflag[MAXPROCS]; /* for user interrupts */
 
 /* locks and stuff */
-#ifdef SGI_MULTI
-extern usptr_t *lock_arena;  /* arena where locks are */
-extern ulock_t locklist[_MAXLOCKS];  /* only 4096 available */
-extern char lock_arena_name[]; /* for usinit() */
-#endif
 #endif
 
 /* for keeping multiprocessor force updates from conflicting */
@@ -2113,39 +2034,7 @@ extern int pmax[MAXPROCS];    /* available per calculator */
 /* Graphing mutual exclusion for multi-threaded version */
 #define IMMEDIATE_TIMEOUT 0
 #define LONG_TIMEOUT 100000
-#ifdef WIN32
-extern void * graphmutex;
-extern void * transforms_mutex;
-extern void * mem_mutex;
-extern unsigned int locking_thread; /* so we can tell who has it */
-/* Note ENTER_GRAPH_MUTEX and LEAVE_GRAPH_MUTEX form a {} block! */
-/* Also set up to be safe to nest within a thread. */
-#define ENTER_GRAPH_MUTEX { int did_graphlock_here;\
-     if ( locking_thread != GetCurrentThreadId() ) \
-   { MsgWaitForMultipleObjects(1,&graphmutex,0,100000,0); \
-     locking_thread = GetCurrentThreadId(); \
-     did_graphlock_here = 1; } \
-    else did_graphlock_here = 0; 
-#define TRY_GRAPH_MUTEX(timeout) ( \
-   (MsgWaitForMultipleObjects(1,&graphmutex,0,timeout,0)!=WAIT_TIMEOUT) && \
-     ((locking_thread = GetCurrentThreadId())!=0) )
-#define END_TRY_GRAPH_MUTEX    \
-     {locking_thread = 0; ReleaseMutex(graphmutex);}
-#define LEAVE_GRAPH_MUTEX   if ( did_graphlock_here ) \
-     {locking_thread = 0; ReleaseMutex(graphmutex); did_graphlock_here = 0; } } 
-#define ABORT_GRAPH_MUTEX  \
-    if ( GetCurrentThreadId() == locking_thread )\
-     {locking_thread = 0; ReleaseMutex(graphmutex); } else {}
-extern DWORD_PTR graphics_affinity_mask;
-
-/* Note: also have to initialize mutexes in tmain.c */
-#define ENTER_TRANSFORMS_MUTEX { MsgWaitForMultipleObjects(1,&transforms_mutex,0,100000,0); }
-#define LEAVE_TRANSFORMS_MUTEX  { ReleaseMutex(transforms_mutex);  }
-
-#define ENTER_MEM_MUTEX { MsgWaitForMultipleObjects(1,&mem_mutex,0,100000,0); }
-#define LEAVE_MEM_MUTEX  { ReleaseMutex(mem_mutex);  }
-
-#elif defined(PTHREADS)
+#ifdef PTHREADS
 extern pthread_mutex_t graphmutex;
 extern pthread_mutex_t transforms_mutex;
 extern pthread_t locking_thread; /* so we can tell who has it */
@@ -2181,11 +2070,7 @@ extern pthread_mutex_t mem_mutex;
 #endif
 
 /* Multithreading with worker threads */
-#ifdef WIN32
-extern volatile LONG busythreads;  /* number of threads that have started on a task */
-#else
 extern int busythreads;  /* number of threads that have started on a task */
-#endif
 extern int threadflag;   /* 1 if -p option used and worker threads in effect */
 extern int thread_task;  /* which task to do */
 extern element_id global_id;   /* global iteration variable */
@@ -2271,10 +2156,6 @@ struct thread_data {  /* per thread data, pointed to by thread_data_key */
 
          struct qinfo q_info;  /* quantity calculation data */
 
-#ifdef _MSC_VER
-     __int64 stagestart[MAXTHREADSTAGES];
-     __int64 stageend[MAXTHREADSTAGES];
-#endif
 #ifdef PTHREAD_LOG
          int eventcount;  /* for timestamping events */
          struct thread_event events[MAXTHREADEVENTS];
@@ -2303,25 +2184,6 @@ extern pthread_key_t thread_data_key;
 #define GET_THREAD_ID  (((struct thread_data*)(GET_THREAD_DATA))->worker_id)
 #endif
 
-#ifdef WINTHREADS
-#ifndef _WINDOWS_
-/* some stuff so windows.h doesn't have to be included everywhere */
-extern LPCRITICAL_SECTION element_mutex_ptr;
-extern LPCRITICAL_SECTION web_mutex_ptr;
-int __stdcall TryEnterCriticalSection(void *);
-void __stdcall EnterCriticalSection(void *);
-void __stdcall LeaveCriticalSection(void *);
-#endif
-struct thread_data *win_get_thread_data(unsigned long);
-#define GET_THREAD_DATA win_get_thread_data(thread_data_key)
-#define GET_THREAD_ID  (((struct thread_data*)(GET_THREAD_DATA))->worker_id)
-extern unsigned long thread_data_key;
-#define LOCK_ELEMENT(id)  (threadflag?mylock_element(id):0)
-#define UNLOCK_ELEMENT(id)  (threadflag?myunlock_element(id):0)
-#define LOCK_WEB (threadflag?mylock_web():0)
-#define UNLOCK_WEB (threadflag?myunlock_web():0)
-#endif
-
 // for systems without threads activated
 extern struct thread_data default_thread_data;
 extern struct thread_data *default_thread_data_ptr;
@@ -2343,40 +2205,7 @@ extern int m_mode;
 extern REAL *m_rhs;
 
 extern  double   cpu_speed;
-#if defined(_MSC_VER) && !defined(__BORLANDC__) && !(_IA64_==1)
-/***************************************************************************
-  Some macros for cycle-counting profiling.
-  Usage: Put PROF_START(f) at start of function f, PROF_FINISH(f) at end,
-   define global
-__int32 f_elapsed_time[2];
-   and print when done with
-  PROF_PRINT(f);
-  Make sure all return paths go through end of function. 
-***************************************************************************/
-#pragma intrinsic(__rdtsc)
-/* always do PROF_NOW, so can get CPU counter even if not profiling */
-#define PROF_NOW(fullname)  { fullname = __rdtsc(); }
-#define PROF_CYCLES(fullname) ( fullname)
-#ifdef PROF_EVALS
-#define PROF_EVAL_START(ex) { (ex)->elapsed_time -= (REAL)__rdtsc(); }
-#define PROF_COUNT_INCR(ex) { (ex)->call_count++; }
-#define PROF_EVAL_END(ex) { (ex)->elapsed_time += (REAL)__rdtsc(); }
-#endif
-
-#ifdef PROFILING
-#define PROFILING_ENABLED
-#define PROF_START(f) { f -= __rdtsc();  }
-#define PROF_FINISH(f)  {  f += __rdtsc(); }
-#define PROF_ELAPSED(f) (((REAL)f##_elapsed_time)/cpu_speed)
-#define PROF_RESET(f) f##_elapsed_time[0]=f##_elapsed_time[1]=0;
-#define PROF_PRINT(f) { fprintf(stderr,"%22s: %13.0f\n",#f,\
-    (double)f##_elapsed_time); \
-   f##_elapsed_time[0]=f##_elapsed_time[1]=0;}
-#define METHOD_PROFILING_START(mi,mode) {PROF_RESET(mode);PROF_START(mode);}
-#define METHOD_PROFILING_END(mi,mode) {PROF_FINISH(mode);mi->mode##_elapsed_time += PROF_ELAPSED(mode);mi->mode##_call_count++;}
-#endif
-
-#elif defined(__i386) && defined(__GNUC__) && !defined(__STRICT_ANSI__)
+#if defined(__i386) && defined(__GNUC__) && !defined(__STRICT_ANSI__)
   /* operands are in source-destination order in gcc asm */
 #define PROF_NOW(fullname) { \
   asm("rdtsc" : : ); \
@@ -2472,56 +2301,6 @@ extern long long int hessian_factor_elapsed_time;
 extern long long int hessian_CHinvC_elapsed_time;
 
 
-#ifdef _MSC_VER
-/* Elaborate macro to make element loop fast and local.
-   Usage:  THREAD_FOR_ALL_NEW(elementtype,action)
-   where action is executable code.  action should refer to
-   the element id as *idptr.
-   action can be extensive code block, but do not use
-   comma in declaration lists; comma ok in argument lists,
-   but if not in nested parentheses, then looks like end
-   of action argument.
-*/
-
-#define THREAD_FOR_ALL_NEW(elementtype,action)                       \
-{ element_id *idptr;                                                 \
-  int proc,nextproc;                                                 \
-  struct thread_stages_data *th;                                     \
-  struct thread_data *data;                                          \
-  int maxstage;                                                      \
-  int elnum,maxelnum;                                                \
-  __int64 now;                                                       \
-                                                                     \
-  data = GET_THREAD_DATA;                                            \
-  proc = data->worker_id;                                            \
-  nextproc = (proc == nprocs - 1) ? 0 : proc+1;                      \
-  maxstage = (proc == 0) ? max_thread_stages+1 : max_thread_stages;  \
-  th = thread_stages + proc;                                         \
-                                                                     \
-  for ( th->stage = 0 ; th->stage < maxstage ; th->stage++ )         \
-  { /* wait for nextproc to reach same stage */                      \
-    while ( thread_stages[nextproc].stage < th->stage ) ;            \
-                                                                     \
-    PROF_NOW(now);                                                   \
-    data->stagestart[th->stage] = now;                    \
-                                                                     \
-    /* do all elements in this stage */                              \
-    idptr = th->blocks[elementtype][th->stage];                      \
-    maxelnum = th->counts[elementtype][th->stage];                   \
-    for ( elnum = 0 ; elnum < maxelnum ; elnum++,idptr++ )           \
-     action;                                                         \
-                                                                     \
-    PROF_NOW(now);                                                   \
-    data->stageend[th->stage] = now;                      \
-  }                                                                  \
-}           
-
-/* end THREAD_FOR_ALL_NEW */
-
-extern __int64 thread_launch_start;
-extern __int64 thread_launch_end;
-
-#else
 #define THREAD_FOR_ALL_NEW(elementtype,action)                       \
 { element_id *idptr;                                                 \
   int proc,nextproc;                                                 \
@@ -2550,14 +2329,9 @@ extern __int64 thread_launch_end;
 }           
 /* end THREAD_FOR_ALL_NEW */
 
-#endif
 
 /* profiling storage */
-#ifdef MSC
-extern __int64 q_facet_setup_elapsed_time;
-#else
 extern long long int q_facet_setup_elapsed_time;
-#endif
 
 #ifdef  __cplusplus
 }

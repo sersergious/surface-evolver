@@ -56,9 +56,6 @@ int run_checks()
   numerr += method_check();
   if ( web.symmetry_flag ) numerr += wrap_check(); 
 
-  #ifdef MPI_EVOLVER
-  numerr += mpi_task_checks();
-  #endif
 
   check_count = numerr;
   bad_errors_count += bad_next_prev_count;
@@ -118,10 +115,6 @@ int list_check()
   { 
     element_id backid = NULLID;
 
-#ifdef MPI_EVOLVER
-    if ( (this_task == MASTER_TASK) && (type != BODY) )
-      continue;
-#endif
 
     if ( (web.representation == SIMPLEX)  && (type == EDGE) ) continue;
     #ifndef HASH_ID
@@ -254,18 +247,6 @@ int list_check()
 
   } /* end for loop */
 
-  #ifdef MPI_EVOLVER
-  for ( type = VERTEX ; type < NUMELEMENTS ; type++ )
-  { int k;
-    for ( k = 0 ; k < web.skel[type].maxcount ; k++ )
-      if ( web.skel[type].ibase[k] && (web.skel[type].ibase[k]->local_id & OFFSETMASK) != k )
-      { sprintf(errmsg,"Task %d: local_id is %08X on %s ibase[0x%X], self id %08X\n",
-          this_task,(int)(web.skel[type].ibase[k]->local_id),
-           typenames[type],k, (int)(web.skel[type].ibase[k]->self_id));
-        erroutstring(errmsg);
-      }
-  }
-  #endif
     
   return numerr;
 } /* end list_check() */
@@ -291,10 +272,6 @@ int facetedge_check(
   int numerr = 0;
   int n;
 
-#ifdef MPI_EVOLVER
-  if ( this_task == MASTER_TASK )
-    return 0;
-#endif
 
   /* check facetedge chain consistencies */
   if ( numerr >= MAXERR ) numerr = 0;
@@ -303,9 +280,6 @@ int facetedge_check(
   { facetedge_id fe;
 
     f_id = get_fe_facet(fe_id);
- #ifdef MPI_EVOLVER
-	if ( (web.representation==SOAPFILM) || (id_task(f_id)==this_task) )
-#endif
    if ( valid_id(f_id) && !valid_element(f_id) )
      { sprintf(errmsg,"Facetedge  %s links to invalid facet %08lX.\n",
           ELNAME(fe_id), (unsigned long)f_id);
@@ -314,9 +288,6 @@ int facetedge_check(
         if ( ++numerr > MAXERR )
         {erroutstring("Too many errors.\n"); return numerr;}
      }
-#ifdef MPI_EVOLVER
-	if ( (web.representation==SOAPFILM) || (id_task(f_id)==this_task) )
-#endif
     if ( valid_id(f_id) && !valid_element(get_facet_fe(f_id)) )
     { sprintf(errmsg,"Facetedge %s links to facet %s with invalid facetedge %s.\n",
         ELNAME(fe_id),ELNAME1(f_id),ELNAME2(get_facet_fe(f_id)));
@@ -326,9 +297,6 @@ int facetedge_check(
       {erroutstring("Too many errors.\n"); return numerr;}
     }
     e_id = get_fe_edge(fe_id);
- #ifdef MPI_EVOLVER
-    if ( mpi_corona_state > NO_CORONA || id_task(e_id) == this_task )
- #endif
     
     if ( valid_id(e_id) )
     { if ( !valid_element(e_id) )
@@ -384,7 +352,6 @@ int facetedge_check(
       {erroutstring("Too many errors.\n"); return numerr;}
     }
     fe = get_next_edge(fe_id);
-#ifndef MPI_EVOLVER
     if ( valid_id(fe) && !equal_id(get_fe_headv(fe_id),get_fe_tailv(fe)) )
     { sprintf(msg,"Facetedge %s head vertex disagrees with next tail.\n",
       ELNAME(fe_id));
@@ -393,9 +360,7 @@ int facetedge_check(
       if ( ++numerr > MAXERR )
       {erroutstring("Too many errors.\n"); return numerr;}
     }
-#endif
     fe = get_prev_edge(fe_id);
-#ifndef MPI_EVOLVER
     if ( valid_id(fe) && !equal_id(get_fe_tailv(fe_id),get_fe_headv(fe)) )
     { sprintf(msg,"Facetedge %s tail vertex disagrees with prev head.\n",
       ELNAME(fe_id));
@@ -404,7 +369,6 @@ int facetedge_check(
       if ( ++numerr > MAXERR )
       {erroutstring("Too many errors.\n"); return numerr;}
     }
-#endif
     count++;
   }
   if ( count != web.skel[FACETEDGE].count )
@@ -518,9 +482,6 @@ int facetedge_check(
   { vertex_id v_id = get_edge_headv(e_id);
     facetedge_id first_fe;
 
-#ifdef MPI_EVOLVER
-    if ( mpi_corona_state > NO_CORONA || id_task(v_id) == this_task )
-#endif
     if ( get_vattr(v_id) & AXIAL_POINT )
     { sprintf(msg,"Vertex %s is axial and not first vertex of edge %s.\n",
             ELNAME(v_id),ELNAME1(e_id));
@@ -583,14 +544,12 @@ int facetedge_check(
        {erroutstring("Too many errors.\n"); return numerr;}  
      }
   }
-#ifndef MPI_EVOLVER
   if ( count != web.skel[FACETEDGE].count )
   { sprintf(msg,"Edges have %d facetedges out of %ld used.\n",
         count,web.skel[FACETEDGE].count);
     erroutstring(msg);
     ++numerr;
   }
-#endif
 
 facet_check: 
   if ( numerr >= MAXERR ) numerr = 0;
@@ -607,19 +566,6 @@ facet_check:
       { vertex_id v_id;
         edge_id e_id = get_fe_edge(fe_id);
         facet_id ff_id;
-  #ifdef MPI_EVOLVER
-       if ( mpi_corona_state == NO_CORONA )
-       { if ( id_task(e_id) == this_task )
-         { v_id = get_edge_tailv(e_id);
-           if ( id_task(v_id) == this_task )
-           { if ( (thiscount != 0) && (get_vattr(v_id) & AXIAL_POINT))
-             { set_facet_fe(f_id,fe_id);       
-             }
-           }
-         }
-       }
-       else
-   #endif
        { v_id = get_edge_tailv(e_id);
          if ( (thiscount != 0) && (get_vattr(v_id) & AXIAL_POINT))
          { set_facet_fe(f_id,fe_id);       
@@ -1041,10 +987,6 @@ int collapse_check()
 
   if ( web.representation == STRING ) return numerr;
 
-#ifdef MPI_EVOLVER
-  if ( mpi_corona_state == NO_CORONA )
-     return numerr;
-#endif
 
   /* check facets */
   if ( web.skel[FACET].count == 0 ) return numerr;

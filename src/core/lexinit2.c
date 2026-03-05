@@ -2205,14 +2205,6 @@ void convert_to_quantities()
   if ( web.wulff_flag && (web.dimension != 2) ) 
      kb_error(1754,"Can't do wulff energy method for strings yet.\n",RECOVERABLE);
 
-#ifdef MPI_EVOLVER
-  if ( this_task == MASTER_TASK )
-  { mpi_convert_to_quantities();
-    outstring("Converting to all named quantities...");
-  }
-#else
-  outstring("Converting to all named quantities...");
-#endif
 
   /* set up default length or area quantities */
   if ( web.representation == STRING )

@@ -20,27 +20,7 @@ extern "C" {
 char *evolver_version = "2.70a";
 char needed_version[30]; 
 
-#ifdef mpi_evolver 
-char *version = "version 2.70a, August 27, 2013; compiled for MPI";
-#else
-#ifdef SGI_MULTI
-char *VERSION = "Version 2.70a, August 27, 2013; SGI multiprocessing"; 
-#else
-#ifdef _WIN64
-char *VERSION = "Version 2.70a, August 27, 2013; Windows OpenGL";
-#else
-#ifdef WIN32
- #ifdef HOOPS
-   char *VERSION = "Version 2.70a, August 27, 2013; Windows HOOPS";
- #else
-   char *VERSION = "Version 2.70a, August 27, 2013; Windows OpenGL";
-#endif
-#else
-char *VERSION = "Version 2.70a, August 27, 2013";
-#endif
-#endif
-#endif
-#endif
+char *VERSION = "Version 2.70a, August 27, 2013; Linux";
 
 
 char *typenames[NUMELEMENTS] = {"vertex","edge","facet","body","facetedge"};
@@ -62,11 +42,7 @@ int mpi_local_bodies_flag;
 /* Whether in initialization state or tasks are waiting */
 int mpi_initialization_flag = 1;
 
-#ifdef MPI_EVOLVER
-int match_id_flag = 1; /* so remote references to locals work */
-#else
 int match_id_flag = 0; /* to make id match datafile number, option -i */
-#endif
 int echo_flag; /* whether to echo stdin; for piped input */
 struct optparam_t optparam[MAXOPTPARAM]; 
 int optparamcount;  /* number thereof */
@@ -197,11 +173,7 @@ vertex_id comp_quant_vi; /* during calc_quant_hess */
 vertex_id comp_quant_vj; /* during calc_quant_hess */
 
 int gocount = 1;          /* number of iterations left */ 
-#if defined(MAC_APP) || defined(MAC_CW)
-int go_display_flag = 1; /* for displaying each change */
-#else
 int go_display_flag = 0; /* for displaying each change */
-#endif
 int shading_flag = 1;  /* for facet shading by orientation */
 int color_flag = 1;    /* facet coloring by user */
 int rgb_colors_flag;  /* enabling rgb color scheme */
@@ -232,11 +204,7 @@ REAL clip_coeff[MAXCLIPS][MAXCOORD+2];
 int clip_coeff_set_flag;
 
 
-#ifdef IRIS
-int gv_binary_flag = 1;  /* whether to do geomview in binary */
-#else
 int gv_binary_flag = 0;  /* whether to do geomview in binary */
-#endif
 int self_similar_flag;    /* for self-similar motion */
 REAL string_curve_tolerance; /* quadratic string model smoothness, deg */
 int labelflag; /* whether ps doing labels */
@@ -266,10 +234,6 @@ element_id xx_id;  /* for macro temporary to prevent multiple evaluation */
 element_id x1_id,x2_id,x3_id,x4_id,x5_id,x6_id,x7_id,x8_id,x9_id;
 element_id xa_id,xb_id,xc_id,xd_id,xe_id,xf_id,xg_id,xh_id;
 /*so nested macros don't tromp each other*/
-#endif
-
-#ifdef __WIN32__
-extern unsigned _stklen = 0x3000;  /* get bigger stack */
 #endif
 
 /* dynamic load library list */
@@ -403,19 +367,8 @@ struct linsys Met; /* vector-to-form  metric */
 int quantity_function_sparse_flag;
 
 
-#if defined(USEYSMP) || defined(MPI_EVOLVER)
-int ysmp_flag=YSMP_FACTORING;  /* set if doing Yale Sparse Matrix version */
-/* factor matrix */
-void (*sp_factor_func)(struct linsys *,int) = ysmp_factor;
-/* solve given rhs */
-void (*sp_solve_func)(struct linsys *,REAL *,REAL *,int) = ysmp_solve;
-/* solve multiple given rhs */
-void (*sp_solve_multi_func)(struct linsys*,REAL**,REAL**,int,int) = ysmp_solve_multi;
-/* matrix inner product with hessian inverse as metric */
-void (*sp_CHinvC_func)(struct linsys *) = sp_CHinvC;
-#else
 /* use mindeg since doing sparse_constraints */
-int ysmp_flag=MINDEG_FACTORING;  /* Hessian problem in Borland LONGDOUBLE version */
+int ysmp_flag=MINDEG_FACTORING;
 /* factor matrix */
 void (*sp_factor_func)(struct linsys *,int) = xmd_factor;
 /* solve given rhs */
@@ -424,8 +377,6 @@ void (*sp_solve_func)(struct linsys *,REAL *,REAL *,int) = xmd_solve;
 void (*sp_solve_multi_func)(struct linsys*,REAL**,REAL**,int,int) = xmd_solve_multi;
 /* matrix inner product with hessian inverse as metric */
 void (*sp_CHinvC_func)(struct linsys *) = sp_CHinvC;
-
-#endif
 
 /* for mindeg control */
 int mindeg_debug_level;
@@ -1511,11 +1462,6 @@ int mpflag;  /* whether multiprocessing in action */
 int m_breakflag[MAXPROCS]; /* for user interrupts */
 
 /* locks and stuff */
-#ifdef SGI_MULTI
-usptr_t *lock_arena;  /* arena where locks are */
-ulock_t locklist[_MAXLOCKS];  /* only 4096 available */
-char lock_arena_name[] = "/tmp/lock_arena"; /* for usinit() */
-#endif
 #endif
 
 /* for avoiding conflicts in force calculation */
@@ -1524,27 +1470,16 @@ struct procforce *pbase[MAXPROCS];  /* allocated to calculator */
 int ptop[MAXPROCS];    /* used per calculator */
 int pmax[MAXPROCS];    /* available per calculator */
 
-#ifdef WIN32
-void * graphmutex;
-void * mem_mutex;
-void * transforms_mutex;
-unsigned int locking_thread; /* so we can tell who has it */
-DWORD_PTR graphics_affinity_mask;
-#elif defined(PTHREADS)
+#ifdef PTHREADS
 pthread_mutex_t graphmutex;
 pthread_mutex_t transforms_mutex;
 pthread_mutex_t mem_mutex;
 pthread_t locking_thread;
-#else
 #endif
 
 
 /* Multithreading with worker threads */
-#ifdef WIN32
-volatile LONG busythreads;  /* number of threads that have started on a task */
-#else
 int busythreads;  /* number of threads that have started on a task */
-#endif
 int threadflag;   /* 1 if -p option used and worker threads in effect */
 int thread_task;  /* which task to do */
 element_id global_id;   /* global iteration variable */
@@ -1605,11 +1540,6 @@ double cpu_speed;
 
 int mpi_debug;  /* to enable verbose MPI messages */
 int mpi_show_corona_flag; /* whether to display imported elements */
-
-#ifdef _MSC_VER
-__int64 thread_launch_start;
-__int64 thread_launch_end;
-#endif
 
 #ifdef  __cplusplus
 }

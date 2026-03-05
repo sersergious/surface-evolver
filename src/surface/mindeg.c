@@ -2154,13 +2154,6 @@ void mkl_factor(struct linsys *S,int mtype)
   MKL_INT nrhs = 1;		/* Number of right hand sides. */
   int i,j;
 
-#ifdef WINTHREADS
-  // Have to undo affinity_mongering()
-  { DWORD_PTR procmask = 0,sysmask = 0;
-    GetProcessAffinityMask(GetCurrentProcess(),&procmask,&sysmask);
-    SetProcessAffinityMask(GetCurrentProcess(),sysmask);
-  }
-#endif
 
   /* .. Setup Pardiso control parameters. */
   memset(S->iparm,0,sizeof(S->iparm));

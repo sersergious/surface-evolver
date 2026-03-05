@@ -1,6 +1,5 @@
 FROM gcc:latest AS builder
 
-# Install your existing dependencies
 RUN apt-get update && apt-get install -y \
     build-essential \
     libx11-dev \
@@ -21,7 +20,7 @@ RUN cd src && sed -i 's/^CFLAGS= -DGENERIC/CFLAGS= -DLINUX -DOOGL/' Makefile \
 FROM debian:trixie-slim
 WORKDIR /app
 RUN apt-get update && apt-get install -y libx11-6 && apt-get clean && rm -rf /var/lib/apt/lists/*
-COPY --from=builder /app/src/evolver .
+COPY --from=builder /app/src/evolver ./
 COPY fe/ fe/
 CMD ["./evolver", "./fe/cube.fe"]
 

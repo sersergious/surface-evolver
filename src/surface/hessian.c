@@ -747,11 +747,6 @@ void print_hessian_menu()
   outstring("D. Dump Hessian to text file in Matlab sparse format.\n");
   outstring("K. Dump Hessian to text file in Mathematica sparse format.\n");
   outstring("=. Execute Evolver commands in subprompt.\n");
-#ifdef MPI_EVOLVER
-  outstring("A. Build corona (MPI version only).\n");
-  outstring("J. Dissolve corona (MPI version only).\n");
-  outstring("I. Free discard lists (MPI version only).\n");
-#endif
   outstring("0. Exit hessian.\n");
 
 } // end print_hessian_menu()
@@ -781,13 +776,6 @@ void hessian_menu()
     hmode = hessian_normal_flag;
     for(;;)
      {
-#ifdef MPI_EVOLVER
-        prompt("Choice(?,1,2,3,4,7,9,B,C,E,F,L,R,Z,X,P,V,S,Y,U,M,G,D,K,A,=,0,q): ",
-		 response,sizeof(response));
-#else
-        prompt("Choice(?,1,2,3,4,7,9,B,C,E,F,L,R,Z,X,P,V,S,Y,U,M,G,D,K,=,0,q): ",
-		 response,sizeof(response));
-#endif
         switch ( toupper(response[0]) )
           { case '?': print_hessian_menu(); break;
              case '1': 
@@ -1547,30 +1535,6 @@ getkname:
                  }
                break;
 
-#ifdef MPI_EVOLVER
-             case 'A' : 
-   				 mpi_hessian_fill_distrib(Mpi_RHS_MOVE); 
-   		printf("Done fill.  Enter shift: ");
-              scanf("%lf",&S.lambda);
-   				 mpi_hessian_factor_distrib(&S);
-   				 printf("Done factoring. Inertia: pos %d, neg %d, zero %d\n", 
-                   S.pos,S.neg,S.zero); 
-
-   				 mpi_solve_distrib(Mpi_LINSYS_HESSIAN, Mpi_RHS_MOVE, Mpi_SOLUTION_MOVE);
-                 mpi_hessian_distrib_move(1.0,ACTUAL_MOVE);
-#ifdef RANDOMRHS
-   				 mpi_create_random_rhs();
-   				 printf("Created random rhs\n");
-   				 mpi_solve_distrib(Mpi_LINSYS_HESSIAN, Mpi_RHS_RANDOM, Mpi_SOLUTION_RANDOM);
-                 printf("Solved random rhs\n");
-                 if ( S.lambda == 0.0 )
-                 { mpi_mult_hess_distrib(); /* check */
-                   printf("Multiplied solution by original\n");
-                 }
-#endif
-                 
-   				 break;
-#endif
              default : outstring("Illegal choice.\n");
           }
      }
@@ -2126,14 +2090,6 @@ void hessian_fill(
   body_id b_id;
   REAL *rhs = rhsptr ? *rhsptr : NULL;
 
-  #ifdef MPI_EVOLVER
-  if ( this_task == 0 )
-  { mpi_hessian_fill(S,rhsptr);
-    temp_free((char*)S->hashtable); /* since not calling hash_end() */
-    rhs = rhsptr ? *rhsptr : NULL;  /* mpi_hessian_fill reallocates it */
-    goto rhs_constraints;
-  }
-  #endif
  
   /* clear entries */
   if ( rhs_flag ) memset((char*)rhs,0,S->total_rows*sizeof(REAL));
@@ -2185,9 +2141,6 @@ quantplace:
 
   }
 
-#ifdef MPI_EVOLVER
-rhs_constraints:
-#endif
 
   /* rhs for body constraint rows */
   if ( rhs && !everything_quantities_flag )
@@ -2242,11 +2195,6 @@ void hessian_move(
     }
   }
   /* move vertices */
-  #ifdef MPI_EVOLVER
-  if ( this_task == 0 ) 
-    mpi_hessian_move(stepsize,mode,X);
-  else
-  #endif 
 
   FOR_ALL_VERTICES(v_id)
   {
@@ -2286,9 +2234,6 @@ void hessian_move(
      }
   }
 
-  #ifdef MPI_EVOLVER
-  if ( this_task != 0 ) return;
-  #endif
 
   if ( mode == SET_VELOCITY ) return;
   if ( hess_move_con_flag )
@@ -2420,11 +2365,6 @@ void sp_hessian_mult(
 
 void hessian_cleanup()
 {
-  #ifdef MPI_EVOLVER
-  if ( this_task == 0 )
-  { mpi_hessian_cleanup();
-  }
-  #endif
   
   if ( vhead ) temp_free((char *)vhead); vhead = NULL;
   if ( vproj_base ) myfree((char*)vproj_base); vproj_base = NULL;

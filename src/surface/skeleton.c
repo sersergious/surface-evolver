@@ -93,10 +93,6 @@ void set_facet_body(
   if ( web.skel[BODY].count == 0 ) return;
   if ( !valid_id(f_id) ) return;
 
-#ifdef MPI_EVOLVER
-  if ( id_task(f_id) != this_task )
-	  return; /* imported facets not part of local body chains */
-#endif
 
   bb_id = get_facet_body(f_id);
   if ( equal_id(bb_id,b_id) ) return;
@@ -811,7 +807,6 @@ facetedge_id new_facetedge(
   set_next_edge(fe_id,NULLFACETEDGE);
   set_prev_facet(fe_id,NULLFACETEDGE);      
   set_prev_facet(fe_id,NULLFACETEDGE);
-  #ifndef MPI_EVOLVER
   { vertex_id headv,tailv;
     tailv = get_edge_tailv(e_id);  
     headv = get_edge_headv(e_id);
@@ -820,7 +815,6 @@ facetedge_id new_facetedge(
     if ( !valid_id(get_vertex_edge(headv)) )
       set_vertex_edge(headv,e_id);
   }
-  #endif
 
   if ( web.representation==STRING && everything_quantities_flag )
   { /* attach volume quantities */
@@ -1330,31 +1324,6 @@ int add_attribute(
   if ( att_inx >= 0 )
     return att_inx;
 
-#ifdef MPI_EVOLVER
-  if ( (this_task == MASTER_TASK) && (mpi_propagate==MPI_PROPAGATE) && !mpi_initialization_flag )
-  { struct mpi_command message;
-    int i;
-
-    if ( code )
-    { kb_error(4525,"MPI Evolver doesn't do code attributes yet.\n",
-          RECOVERABLE);
-    }
-    message.cmd = mpi_ADD_ATTRIBUTE;
-    strncpy(message.name,name,MPI_NAME_SIZE);
-    message.i = attr_type;
-    message.type = e_type;
-    message.mode = dumpflag;
-	message.size = dims ? 1 : 0; /* just using as indicator */
-    message.count = dim;
-	if ( dim )
-      for (i = 0 ; i < dim ; i++ )
-		  message.data[i] = dims ? dims[i] : 0;
-	else 
-		message.data[0] = dims ? dims[0] : 0;
-    MPI_Bcast(&message,sizeof(struct mpi_command),MPI_BYTE,MASTER_TASK,
-        MPI_COMM_WORLD);
-  }
-#endif
 
   if ( web.skel[e_type].extra_count >= web.skel[e_type].maxextra-1 )
   { web.skel[e_type].dy_extras = 
@@ -1453,22 +1422,6 @@ void expand_attribute(
 
   ex = EXTRAS(e_type) + attr_num;
 
-#ifdef MPI_EVOLVER
-  if ( (this_task == MASTER_TASK) && !mpi_initialization_flag )
-  { struct mpi_command message;
-    int i;
-    message.cmd = mpi_EXPAND_ATTRIBUTE;
-    message.i = attr_num;
-    message.type = e_type;
-    message.count = ex->array_spec.dim;
-	if ( ex->array_spec.dim )
-      for (i = 0 ; i < ex->array_spec.dim ; i++ )
-        message.data[i] = newsizes[i];
-	else message.data[0] = newsizes[0];
-    MPI_Bcast(&message,sizeof(struct mpi_command),MPI_BYTE,MASTER_TASK,
-        MPI_COMM_WORLD);
-  }
-#endif
 
   dsize = ex->array_spec.itemsize;
 
@@ -1590,14 +1543,6 @@ skipentry2:    ;
     ex->array_spec.sizes[n] = newsizes[n];
   parallel_update_flag[e_type] = 1;
 
-#ifdef MPI_EVOLVER
-  mpi_export_voffset = EXTRAS(VERTEX)[web.mpi_export_attr[VERTEX]].offset;
-  mpi_export_eoffset = EXTRAS(EDGE)[web.mpi_export_attr[EDGE]].offset;
-  mpi_export_foffset = EXTRAS(FACET)[web.mpi_export_attr[FACET]].offset;
-  mpi_export_boffset = EXTRAS(BODY)[web.mpi_export_attr[BODY]].offset;
-  mpi_export_feoffset =
-          EXTRAS(FACETEDGE)[web.mpi_export_attr[FACETEDGE]].offset; 
-#endif
 } // end expand_attribute()
 
 /*************************************************************************

@@ -48,10 +48,6 @@ void update_display()
   if ( (torus_display_mode == TORUS_DEFAULT_MODE) && showflag ) 
     ask_wrap_display();
 
-  #ifdef MPI_EVOLVER
-  if ( this_task == 0 )
-     mpi_update_display();
-  #endif
 
   local_update_display();
 
@@ -90,10 +86,6 @@ void do_show()
   char line[100]; /* for reading user commands */
   int old_flag = iterate_flag;
 
-#ifdef MAC_OS_X
-  do_show_flag++;  /* kludge so mac_exec_commands() does do_show() again */
-#endif
-
 #ifndef OPENGL
   /* to prevent unnecessary recalculation of display */
   graph_timestamp = ++global_timestamp;  /* new surface */
@@ -109,9 +101,6 @@ void do_show()
       if ( showflag ) display();
       showflag = 1; /* default to show next time around, unless option
                              below decides otherwise */
-#ifdef MOTIF
-      return;
-#endif
       if ( prompt("Graphics command: ",line,sizeof(line)) == EOF ) 
         break;
       else line_no++;

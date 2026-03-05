@@ -385,10 +385,6 @@ void plain_facets()
     ATTR fattr = get_fattr(f_id);
     if ( breakflag ) break;
 
-    #ifdef MPI_EVOLVER
-    if ( !mpi_show_corona_flag && (id_task(f_id) != this_task) )
-       continue;
-    #endif
 
     if ( (fattr & (BOUNDARY|CONSTRAINT)) && !bdry_showflag )
         continue;
@@ -745,10 +741,6 @@ void plain_string_facets()
 
     if ( breakflag ) break;
 
-    #ifdef MPI_EVOLVER
-    if ( !mpi_show_corona_flag && (id_task(f_id) != this_task) )
-       continue;
-    #endif
 
     if ( !show_expr[FACET] || !show_expr[FACET]->start || 
                            !eval(show_expr[FACET],NULL,f_id,NULL) ) 
@@ -1130,10 +1122,6 @@ void plain_edges()
   MFOR_ALL_EDGES(e_id)
   { if ( breakflag ) break;
 
-    #ifdef MPI_EVOLVER
-    if ( !mpi_show_corona_flag && (id_task(e_id) != this_task) )
-       continue;
-    #endif
 
     if ( show_expr[EDGE] && show_expr[EDGE]->start )
       if ( !eval(show_expr[EDGE],NULL,e_id,NULL) )
@@ -1395,10 +1383,6 @@ void bare_edges()
      { 
         if ( breakflag ) break;
 
-        #ifdef MPI_EVOLVER
-        if ( !mpi_show_corona_flag && (id_task(e_id) != this_task) )
-           continue;
-        #endif
 
         gdata[0].id = e_id;
         fe = get_edge_fe(e_id);
@@ -1453,10 +1437,6 @@ void triple_edges()
      { 
         if ( breakflag ) break;
 
-        #ifdef MPI_EVOLVER
-        if ( !mpi_show_corona_flag && (id_task(e_id) != this_task) )
-           continue;
-        #endif
 
         fe_id = get_edge_fe(e_id);
         if ( equal_id(get_next_facet(fe_id),get_prev_facet(fe_id)) ) continue;
@@ -2265,10 +2245,6 @@ void torus_bodies()
   MFOR_ALL_FACETS(f_id)
   { body_id front,back;
 
-    #ifdef MPI_EVOLVER
-    if ( !mpi_show_corona_flag && (id_task(f_id) != this_task) )
-       continue;
-    #endif
 
     front = get_facet_body(f_id);
     back = get_facet_body(facet_inverse(f_id));
@@ -2830,10 +2806,6 @@ void torus_cells()
   { int show_this_facet = 0;
 
 
-    #ifdef MPI_EVOLVER
-    if ( !mpi_show_corona_flag && (id_task(f_id) != this_task) )
-       continue;
-    #endif
 
     if ( show_expr[FACET] && show_expr[FACET]->start )
     { if ( !eval(show_expr[FACET],NULL,f_id,NULL) ) continue;

@@ -68,11 +68,6 @@ void thread_calc_facet_forces()
 
 void calc_energy() 
 {
-#ifdef MPI_EVOLVER
-  mpi_calc_energy();
-#else
-  local_calc_energy();
-#endif
 } // end calc_energy()
 
 /*******************************************************************
@@ -258,11 +253,6 @@ quantities_only:
 
 void calc_force()  
 {
-  #ifdef MPI_EVOLVER
-  mpi_calc_force();
-  #else
-  local_calc_force();
-  #endif
 } // end calc_force()
 
 /****************************************************************
@@ -639,11 +629,6 @@ REAL calc_content (
      }
   }
 
-  #ifdef MPI_EVOLVER
-  if ( this_task == MASTER_TASK )
-	  mpi_calc_content(mode);
-  else
-  #endif
   local_calc_content(mode);
 
   if ( web.torus_flag )

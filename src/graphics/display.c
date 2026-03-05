@@ -48,7 +48,7 @@ void display_file(
      outstring("5. Softimage file \n");
      outstring("6. OFF file \n");
      outstring("7. binary OFF file (for evmovie) \n");
-#if defined(OOGL) && !defined(WIN32)
+#ifdef OOGL
      outstring("8. Start simultaneous geomview  \n");
      outstring("9. End simultaneous geomview  \n");
 #endif

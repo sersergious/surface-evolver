@@ -1608,9 +1608,6 @@ void do_dump(char *name)
   if ( name == NULL )
     { /* construct default name */
       strncpy(defaultname,datafilename,sizeof(defaultname)-5);
-#ifdef MPI_EVOLVER
-      sprintf(defaultname+strlen(defaultname),".task%d",this_task);
-#endif
       strcat(defaultname,".dmp");
       name = defaultname;
     }
@@ -1648,9 +1645,7 @@ void do_dump(char *name)
      facet_dump(f_id,dumpfd);
 
   /* body dump */
-  #ifndef MPI_EVOLVER
 //  calc_content(Q_FIXED|Q_INFO|Q_ENERGY|Q_CONSERVED);
-  #endif
   fputs("\nbodies  /* facets */\n",dumpfd);
   MFOR_ALL_BODIES(b_id)
      body_dump(b_id,dumpfd);

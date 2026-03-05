@@ -40,14 +40,8 @@ Or memory caching?  But at least set-up is fast.
 
 #undef DOUBLE 
   
-#if defined(WIN32) || defined(_WIN32)
-#undef FIXED
-#include <GL\glaux.h>
-HWND hwnd;
-#else
 #include <GL/aux.h>
 #define CALLBACK 
-#endif
 
 #include "include.h"
 

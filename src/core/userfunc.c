@@ -178,12 +178,6 @@ REAL (*userfunc_seconds[])(REAL*,REAL*,REAL**) = {usr1_seconds,usr_poly_hess};
 *              EVOLVERPATH, default library path.
 */
 
-#ifdef WIN32
-#define dlopen(name,mode)  LoadLibrary(name)
-#define dlclose(handle)    FreeLibrary(handle)
-#define dlsym(handle,name) GetProcAddress(handle,name)
-#endif
-
 void load_library(char *libname)
 {  
 #ifdef ENABLE_DLL
@@ -224,9 +218,7 @@ void load_library(char *libname)
   
   if ( ! fd )
   { sprintf(errmsg,"Cannot open dynamic library %s. Reason:\n",libname);
-#ifndef WIN32
     strncpy(errmsg+strlen(errmsg),dlerror(),sizeof(errmsg)-strlen(errmsg)-2);
-#endif   
     kb_error(2203,errmsg,DATAFILE_ERROR);
   }
 

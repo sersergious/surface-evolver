@@ -1069,15 +1069,6 @@ edge_id edge_divide(edge_id e_id)
     new_fe = get_next_facet(new_fe);
   } while (  valid_id(new_fe) &&!equal_id(new_fe,first_fe) );
 
- #ifdef MPI_EVOLVER
- { unsigned short *nbr = mpi_export_eattr_ptr(e_id);
-   for (i = 0 ; i < MPI_EXPORT_MAX ; i++ )
-   { if ( nbr[i] == 0 ) break;
-     if ( nbr[i] != this_task )
-        mpi_refine_edge(e_id,divider,new_e,(int)nbr[i]);
-    }
- }
- #endif
 
  if ( (web.representation==STRING) && everything_quantities_flag )
     check_edge_vol_methods(new_e);

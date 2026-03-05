@@ -14,15 +14,8 @@
 #include "include.h" 
 #include "lex.h"
 #include "ytab.h"
-#ifdef MSC
-#include "psapi.h"
-#endif
-
-#ifdef MAC_APP
-#define S_IFIFO 0x100
-#elif !defined(MAC_CW)
 #include <sys/stat.h>
- #include <sys/wait.h> 
+#include <sys/wait.h>
 #ifndef S_IFIFO
 #ifdef __S_IFIFO
 #define S_IFIFO __S_IFIFO
@@ -30,7 +23,6 @@
 #define S_IFIFO _S_IFIFO
 #else
 #define S_IFIFO 0010000
-#endif
 #endif
 #endif
 /*
@@ -461,9 +453,6 @@ void other_stuff(
       /* get old value */
       switch(node->op1.name_id)
       {
-#ifdef MPI_EVOLVER
-        case V_CORONA_STATE : oldvalue = mpi_corona_state; break;
-#endif
         case V_BOUNDING_BOX_COLOR: oldvalue = bounding_box_color; break;
         case V_DETORUS_EPSILON: oldvalue = dt_eps; break;
         case V_PS_LABELSIZE:  oldvalue = ps_labelsize; break;
@@ -555,12 +544,6 @@ void other_stuff(
            case V_PS_CONEDGEWIDTH: ps_conedgewidth = val; break;
            case V_PS_BAREEDGEWIDTH: ps_bareedgewidth = val; break;
            case V_PS_GRIDEDGEWIDTH: ps_gridedgewidth = val; break;
-#ifdef MPI_EVOLVER
-           case V_CORONA_STATE: mpi_set_corona((int)val); break;
-#else
-           case V_CORONA_STATE: ; break;
-         
-#endif
            case V_BRIGHTNESS: 
              if ( (val < 0.0) || (val > 1.0) )
              { sprintf(errmsg,"Brightness is %f; must be between 0 and 1.\n",
@@ -2122,12 +2105,8 @@ void other_stuff(
            else outfd = fopen(s,"a");
            if ( outfd == NULL )
            { 
-#ifdef MAC_APP
-             sprintf(errmsg,"Cannot open file %s. \n",s);
-#else
              perror(s);
              sprintf(errmsg,"Cannot open redirection file %s.\n",s);
-#endif
              sprintf(errmsg+strlen(errmsg),"(source file %s, line %d)\n",
                  file_names[node->file_no],node->line_no);
              kb_error(1218,errmsg,RECOVERABLE);
@@ -2160,12 +2139,8 @@ void other_stuff(
            else erroutfd = fopen(s,"a");
            if ( erroutfd == NULL )
            { erroutfd = stderr;
-#ifdef MAC_APP
-             sprintf(errmsg,"Cannot open file %s. \n",s);
-#else
              perror(s);
              sprintf(errmsg,"Cannot open redirection file %s.\n",s);
-#endif
              sprintf(errmsg+strlen(errmsg),"(source file %s, line %d)\n",
                  file_names[node->file_no],node->line_no);
              kb_error(5218,errmsg,RECOVERABLE);
@@ -2196,12 +2171,8 @@ void other_stuff(
            if ( outfd == NULL )
               { 
                 outfd = *(FILE**)(stacktop--);
-#ifdef MAC_APP
-                sprintf(errmsg,"Cannot open pipe %s. \n",s);
-#else
                 perror(s);
                 sprintf(errmsg,"Cannot open pipe %s.\n",s);
-#endif
                 sprintf(errmsg+strlen(errmsg),"(source file %s, line %d)\n",
                      file_names[node->file_no],node->line_no);
                 kb_error(1219,errmsg,RECOVERABLE);
@@ -2492,20 +2463,11 @@ void other_stuff(
            break;
 
     case SHELL_NODE:  /* execute subshell */
-#if defined(__WIN32__) || defined(_WIN32)
-       _spawnlp(_P_WAIT,"cmd.exe","cmd.exe",NULL);
-#else
-#if defined(MAC_APP) || defined(MAC_CW)
-       kb_error(1221,"No subshell on Mac.\n",RECOVERABLE);
-
-#else
        if ( fork() == 0 )
        { execlp("sh","sh",NULL);
          perror("sh");
        }
        else wait(NULL);
-#endif
-#endif
           break;
 
     case SHOW_TRANS_NODE:
@@ -2549,13 +2511,6 @@ void other_stuff(
          break;
 
     case REPARTITION_NODE:
-#ifdef MPI_EVOLVER
-       mpi_repartition();
-       update_display();
-#else
-       kb_error(5005,"'Repartition' command only implemented in MPI Evolver.\n",
-          WARNING);
-#endif
        break;
 
     case EXEC_NODE:
@@ -2563,42 +2518,10 @@ void other_stuff(
        break;
 
     case PARALLEL_EXEC_NODE:
-#ifdef MPI_EVOLVER
-       mpi_parallel_exec(*(char**)(stacktop--));
-#else
-       command(*(char**)(stacktop--),NO_HISTORY);
-#endif
        break;
 
     case TASK_EXEC_NODE:
        { int task = (int)(stacktop[-1]); 
-#ifdef MPI_EVOLVER
-         if ( task == 0 ) command(*(char**)(stacktop--),NO_HISTORY);
-         else if ( task >= mpi_nprocs )
-         { sprintf(errmsg,"Node number %d exceeds maximum node number, %d.\n",
-              task,mpi_nprocs-1);
-           sprintf(errmsg+strlen(errmsg),"(source file %s, line %d)\n",
-                                file_names[node->file_no],node->line_no);
-           kb_error(3167,errmsg,RECOVERABLE);
-         }
-         else if ( task < 0 )
-         { sprintf(errmsg,"Node number %d is negative!\n", task);
-           sprintf(errmsg+strlen(errmsg),"(source file %s, line %d)\n",
-                                file_names[node->file_no],node->line_no);
-           kb_error(3168,errmsg,RECOVERABLE);
-         }
-         else
-           mpi_task_exec(task,*(char**)(stacktop--));
-#else
-         if ( task != 0 )
-         { 
-            sprintf(errmsg,"Node_exec node number must be 0 for non-MPI Evolver.\n");
-            sprintf(errmsg+strlen(errmsg),"(source file %s, line %d)\n",
-                                file_names[node->file_no],node->line_no);
-            kb_error(3169,errmsg,RECOVERABLE);
-         }
-         command(*(char**)(stacktop--),NO_HISTORY);
-#endif
          stacktop--; /* pop node number */
        }
        break;
@@ -2608,17 +2531,6 @@ void other_stuff(
        break;
 
     case CHDIR_NODE:
-#ifdef MSC
-       k = _chdir(*(char**)(stacktop--));
-       if ( k < 0 )
-       { sprintf(errmsg,"Unable to change directory. \n");
-         if ( !strchr(*(char**)(stacktop+1),'\\') )
-           strcat(errmsg,"Try using \\\\ or / instead of \\.\n");
-         sprintf(errmsg+strlen(errmsg),"(source file %s, line %d)\n",
-                 file_names[node->file_no],node->line_no);
-         kb_error(2034,errmsg,RECOVERABLE);
-       }
-#else
        k = chdir(*(char**)(stacktop--));
        if ( k < 0 )
        { sprintf(errmsg,"Unable to change to directory \"%s\".\n",
@@ -2627,7 +2539,6 @@ void other_stuff(
                  file_names[node->file_no],node->line_no);
          kb_error(1116,errmsg,RECOVERABLE);
        }
-#endif
 
        break;
 
@@ -3554,9 +3465,6 @@ void more_other_stuff(
     case MPI_DEBUG_NODE:
          flip_toggle(&mpi_debug,node->op1.toggle_state,"mpi_debug");
          update_display();
-         #ifdef MPI_EVOLVER
-         mpi_synch_mpi_debug();
-         #endif
          break;
 
     case MPI_LOCAL_BODIES_NODE:
@@ -3988,10 +3896,6 @@ void more_other_stuff(
        if ( little_endian_flag && (*(char*)&test_int)==0x01)
          byte_reverse = 1;
 
-#ifdef WIN32
-       fflush(outfd);
-       _setmode(_fileno(outfd),_O_BINARY);
-#endif
        n = node[node->right].op1.argcount;
        if ( node[node->left].op1.string ) 
            s = node[node->left].op1.string;
@@ -4116,10 +4020,6 @@ void more_other_stuff(
          stacktop -= n; /* pop args */
        }
        if ( node[node->left].op1.string == NULL ) stacktop--;
-#ifdef WIN32
-       fflush(outfd);
-       _setmode(_fileno(outfd),_O_TEXT);
-#endif
       }
      break;
 
@@ -4459,10 +4359,6 @@ void more_other_stuff(
          { if ( !(g->flags & INTERNAL_NAME) )
               g->value.string = calloc(strlen(s)+1,sizeof(char));
            strcpy(g->value.string,s);
-           #ifdef WIN32
-           if ( node->op1.name_id == console_title_global )
-             SetConsoleTitleA(console_title);
-           #endif
            if ( node->op1.name_id == graphics_title_global )
              set_graphics_title(1, graphics_title);
            else if ( node->op1.name_id == graphics_title2_global )
@@ -5365,15 +5261,6 @@ REAL get_internal_variable(int vartok /* token number of variable */)
     case V_HIGH_CONSTRAINT: return web.highcon;
     case V_RANDOM: return kb_drand();
     case V_MPI_MAXTASK: 
-#ifdef MPI_EVOLVER
-         return mpi_nprocs-1;
-#else
-         return 1;
-#endif
-#ifdef MPI_EVOLVER
-    case V_CORONA_STATE: 
-      return (REAL)mpi_corona_state; 
-#endif
     case V_VERTEXCOUNT:
       return (REAL)web.skel[VERTEX].count; 
     case V_EDGECOUNT:
@@ -5589,72 +5476,11 @@ REAL get_internal_variable(int vartok /* token number of variable */)
       }
 
     case V_MEMARENA:
-#if defined(M_MXFAST) && defined(IRIS)
-      { struct mallinfo m = mallinfo();
-        return (REAL)m.arena;
-      }
-#else
-#if defined(_UNISTD_H)
-  /* do this only on unix systems with unistd.h */
   return  (char*)sbrk(0)-(char*)&evolver_version;
-#else
-#ifdef MSC
-      { 
-
-          /*
-        struct _heapinfo hinfo;
-        size_t mem_use=0,mem_free=0;
-        hinfo._pentry = NULL;
-        while ( _heapwalk(&hinfo) == _HEAPOK )
-           if (hinfo._useflag) { mem_use+= hinfo._size; }
-           else {  mem_free += hinfo._size; }
-        return (REAL)(mem_use+mem_free);
-        */
-        PROCESS_MEMORY_COUNTERS meminfo;
-        meminfo.cb = sizeof(meminfo);
-        GetProcessMemoryInfo(GetCurrentProcess(),&meminfo,sizeof(meminfo));
-        return (REAL)meminfo.WorkingSetSize;
-      }          
-
-#else
-#ifdef TC
-      { struct heapinfo hinfo;
-        long mem_use=0,mem_free=0;
-        hinfo.ptr = NULL;
-        while ( heapwalk(&hinfo) == _HEAPOK )
-           if (hinfo.in_use) { mem_use+= hinfo.size; }
-           else {  mem_free += hinfo.size; }
-        return (REAL)(mem_use+mem_free);
-      }          
-
-#else
-      return 0.0;
-#endif
-#endif
-#endif
-#endif
       break;
 
     case V_MEMUSED:
-#if defined(M_MXFAST) && defined(IRIS)
-      { struct mallinfo m = mallinfo();
-        return (REAL)(m.uordblks + m.usmblks);
-      }
-#else
-#ifdef WIN32
-      { struct _heapinfo hinfo;
-        size_t mem_use=0,mem_free=0;
-        hinfo._pentry = NULL;
-        while ( _heapwalk(&hinfo) == _HEAPOK )
-           if (hinfo._useflag) { mem_use+= hinfo._size; }
-           else {  mem_free += hinfo._size; }
-        return (REAL)(mem_use);
-      }          
-
-#else
       return 0.0;
-#endif
-#endif
       break;
 
     default: 

@@ -51,24 +51,8 @@ Or memory caching?  But at least set-up is fast.
 /* so can use glutPostWindowRedisplay() */
 #define GLUT_API_VERSION 4
 
-#if defined(WIN32) || defined(_WIN32)
-
-#undef FIXED
-#include <process.h>   
-#include <glut.h>
-
-#else
-
 #define __cdecl
-
-#if defined(MAC_OS_X)
-#include <glut.h>
-#else
 #include <GL/glut.h>
-
-#endif
-
-#endif
 
 #include "include.h"
 
@@ -130,9 +114,6 @@ struct graph_thread_data {
    int arrays_timestamp; /* last arrays computed in this thread */
    int declared_timestamp; /* last arrays declared in this thread */
    long win_id;  /* GLUT graphics window id */
-#ifdef WIN32
-   HWND draw_hwnd;  /* handle to graphics window */
-#endif
    int olddim;
    double scrx[4],scry[4];  /* screen corners */
    double aspect;  /* aspect ratio */
@@ -408,9 +389,6 @@ void glut_text_display()
 void my_glLoadName(element_id id)
 { GLuint name;
   name = id_type(id) << NAMETYPESHIFT;
-#ifdef MPI_EVOLVER
-  name |= id_task(id) << NAMEOFFSETBITS;
-#endif
   if ( valid_id(id) )
     name |= id & OFFSETMASK & NAMEOFFSETMASK;
   else 
@@ -430,9 +408,6 @@ element_id name_to_id(GLuint name)
   id = (element_id)((name & NAMETYPE_MASK) >> NAMETYPESHIFT) << TYPESHIFT;
   if ( (name & NAMEOFFSETMASK) != NAMEOFFSETMASK )
      id |=   VALIDMASK | (name & NAMEOFFSETMASK);
-#ifdef MPI_EVOLVER
-  id |= (element_id)((name & NAMETASKMASK) >> NAMEOFFSETBITS) << TASK_ID_SHIFT;
-#endif
   return id;
 
 } // end name_to_id()
@@ -791,32 +766,6 @@ void set_title(struct graph_thread_data *td)
   size_t titlespot = ((int)strlen(datafilename) > 60) ? (strlen(datafilename)-60):0;
   size_t k = td - gthread_data;
 
-#ifdef MPI_EVOLVER
-
-    if ( this_task == MASTER_TASK )
-    {
-      if ( k == 1 )
-        sprintf(td->wintitle," %1.*s (task %d from task %d)  ",
-           WINTITLESIZE-30, datafilename+titlespot,
-            this_task,td->mpi_graph_task
-           );
-      else  sprintf(td->wintitle," %1.*s (task %d from task %d) - Camera %d",
-         WINTITLESIZE-45,datafilename+titlespot,this_task,td->mpi_graph_task,k);
-    }
-    else
-    {
-      if ( k == 1 )
-        sprintf(td->wintitle,"%1.*s (task %d)  ",WINTITLESIZE-20,
-          datafilename+titlespot,this_task);
-      else  sprintf(td->wintitle," %1.*s (task %d) - Camera %d",
-          WINTITLESIZE-30, datafilename+titlespot,this_task,k);
-    }
-#else
-    if ( k == 1 )
-      sprintf(td->wintitle," %1.*s",WINTITLESIZE-10,datafilename+titlespot);
-    else  sprintf(td->wintitle,"  %1.*s - Camera %d",WINTITLESIZE-20,
-      datafilename+titlespot,(int)k);
-#endif
     td->new_title_flag = 1;
     switch (k)
     { case 1: strcpy(graphics_title,td->wintitle); break;
@@ -906,11 +855,6 @@ void pick_func(int x, int y)
   erroutstring("\n");  /* to get to next line after prompt */
   if ( valid_id(v_id) )
     { pickvnum = ordinal(v_id) + 1;
-      #ifdef MPI_EVOLVER
-      sprintf(msg,"Picked vertex %d@%d\n",pickvnum,id_task(v_id));
-      #else
-      sprintf(msg,"Picked vertex %d\n",pickvnum);
-      #endif
       erroutstring(msg); 
     }
 
@@ -947,20 +891,10 @@ void pick_func(int x, int y)
     }
     if ( valid_id(v_id) )
     { pickvnum = ordinal(v_id) + 1;
-      #ifdef MPI_EVOLVER
-      sprintf(msg,"Picked vertex %d@%d\n",pickvnum,id_task(v_id));
-      #else
-      sprintf(msg,"Picked vertex %d\n",pickvnum);
-      #endif
       erroutstring(msg); 
     }
 #endif
     pickenum = ordinal(e_id) + 1;
-    #ifdef MPI_EVOLVER
-    sprintf(msg,"Picked edge %d@%d\n",pickenum,id_task(e_id));
-    #else
-    sprintf(msg,"Picked edge %d\n",pickenum);
-    #endif
     erroutstring(msg);
   }
   else 
@@ -969,11 +903,6 @@ void pick_func(int x, int y)
 
   if ( valid_id(f_id) ) 
   { pickfnum = ordinal(f_id) + 1;
-    #ifdef MPI_EVOLVER
-    sprintf(msg,"Picked facet %d@%d\n",pickfnum,id_task(f_id));
-    #else
-    sprintf(msg,"Picked facet %d\n",pickfnum);
-    #endif
     erroutstring(msg);
   }
   erroutstring(current_prompt);
@@ -1830,25 +1759,12 @@ void key_func(
       break;
 
 
-   #ifdef MPI_EVOLVER
-   case 'y': /* MPI version only */
-      mpi_show_corona_flag = ! mpi_show_corona_flag;
-      td->newarraysflag = 1;
-      erroutstring(mpi_show_corona_flag ?
-       "\nShowing MPI corona ON\n":"\nShowing MPI corona OFF\n");
-      erroutstring(current_prompt);
-      break;
-   #endif
 
    case 'x': 
       Ogl_close();
       return;
    case 'X': 
-#ifdef WIN32
-     ExitProcess(0);
-#else
      my_exit(0);
-#endif
      return;
 
    case 'h': case '?':
@@ -1911,9 +1827,6 @@ void key_func(
      erroutstring("       Caution: assumes display facets same as real, with no gaps.\n");
      erroutstring("u  Toggle window update every graphics command, now ");
      erroutstring("Q  Toggle printing some statistics during drawing\n");
-     #ifdef MPI_EVOLVER
-     erroutstring("y  Toggle corona display\n");
-     #endif
  
      erroutstring(current_prompt);
      break;
@@ -1936,18 +1849,6 @@ void key_func(
    key_func(choice,0,0);
  }
  
- #ifdef MPI_EVOLVER
- void mpi_taskmenu_func ( task )
- int task;
- { struct graph_thread_data *td = GET_DATA;
-   td->mpi_graph_task = task;
-   set_title(td);
-   glutSetWindowTitle(td->wintitle);
-   graph_timestamp = ++global_timestamp; 
-   td->newarraysflag = 1;
-   glutPostRedisplay();
- }
- #endif
 
  void myMenuInit()
  { mainmenu = glutCreateMenu(mainmenu_func);
@@ -1987,25 +1888,9 @@ void key_func(
    glutAddMenuEntry("Toggle strip coloring (Y)",'Y');
    glutAddMenuEntry("Toggle display lists (D)",'D');
    glutAddMenuEntry("Print drawing stats (Q)",'Q');
-   #ifdef MPI_EVOLVER
-   glutAddMenuEntry("Toggle corona display (y)",'y');
-   #endif
    glutSetMenu(mainmenu);
    glutAddSubMenu("Advanced",submenu);
 
-   #ifdef MPI_EVOLVER
-   { int task;
-     mpi_taskmenu = glutCreateMenu(mpi_taskmenu_func);
-     glutSetMenu(mpi_taskmenu);
-     for ( task = 1 ; task < mpi_nprocs ; task++ )
-     { char number[10];
-       sprintf(number," %4d ",task);
-       glutAddMenuEntry(number,task);
-     }
-     glutSetMenu(mainmenu);
-     glutAddSubMenu("Pick MPI task",mpi_taskmenu);
-   }
-   #endif
 
    glutAddMenuEntry("Close graphics (x)",'x');
    glutAddMenuEntry("Exit Evolver (X)",'X');
@@ -2029,30 +1914,7 @@ void key_func(
  static GLfloat light1_diffuse[] = {INTENSITY2,INTENSITY2,INTENSITY2,1.0f};
  static GLfloat light_none[] = {0.f,0.f,0.f,.0f};
 
-#ifdef WIN32
- /*******************************************************************
- *
- * function: handle_func()
- *
- * purpose: callback for EnumThreadWindows()
- */
 
-static int handle_count;
-
-BOOL __stdcall handle_func(HWND hwnd, LPARAM lParam)
-{ int i;
-  for ( i = 1 ; i < MAXGRAPHWINDOWS ; i++ )
-  { if ( gthread_data[i].draw_hwnd == hwnd ) return TRUE;
-    if ( !gthread_data[i].draw_hwnd )
-    { gthread_data[i].draw_hwnd = hwnd;
-      break;
-    }    
-  }
-  return TRUE;
-}
-#endif
-
-#ifndef WIN32
 
  /*****************************************************************
  *
@@ -2066,7 +1928,6 @@ BOOL __stdcall handle_func(HWND hwnd, LPARAM lParam)
    signal(SIGKICK,glut_catcher);
  }
 
- #endif
 
  /*****************************************************************
  *
@@ -2088,20 +1949,10 @@ void __cdecl draw_thread(void *arglist)
   int glut_id;
   int xpixels,ypixels;
 
-#ifdef WIN32
-  HWND foregroundhwnd = GetForegroundWindow();
-  draw_thread_id = GetCurrentThreadId();
-  /* set per-thread data */
-  TlsSetValue(thread_data_key,(void*)&glutgraph_thread_data);
-  if ( graphics_affinity_mask )
-	  SetThreadAffinityMask(GetCurrentThread(),graphics_affinity_mask);
-  
-#else
   draw_thread_id = pthread_self();  /* get thread id */
   draw_pid = getpid();
   /* set per-thread data */
   pthread_setspecific(thread_data_key,(void*)&glutgraph_thread_data);
-#endif
 
   for ( i = 0 ; i < 16 ; i++ )
     for ( j = 0 ; j < 4 ; j++ )
@@ -2126,14 +1977,7 @@ void __cdecl draw_thread(void *arglist)
     ypixels = 400;
   }
   glutInitWindowSize(xpixels,ypixels); 
-#ifdef MAC_OS_X
-  { char title[1000];
-    sprintf(title,"   %s (CTRL-click for right mouse button)",datafilename);
-    glutCreateWindow(title);
-  }
-#else
   glutCreateWindow(datafilename);
-#endif
 
 
 
@@ -2175,18 +2019,6 @@ void __cdecl draw_thread(void *arglist)
   }
   else td = gthread_data + glut_id;
 
-#ifdef WIN32
-  /* get window handle, do this before setting win_id to prevent
-     race with main thread display() */
-  handle_count = 1;
-  EnumThreadWindows(draw_thread_id,handle_func,0);
-
-  /* try to get on top */
- 
-  SetForegroundWindow(gthread_data[glut_id].draw_hwnd);
-  SetForegroundWindow(foregroundhwnd);  /* get console back on top */
-
-#endif
   td = GET_DATA;
   td->in_use = 1;
   td->win_id = glut_id;
@@ -2210,9 +2042,6 @@ void __cdecl draw_thread(void *arglist)
          datafilename+strlen(datafilename)-60, glut_id);
     else  sprintf(wintitle,"  %1.*s - Camera %d",WINTITLESIZE-30,
          datafilename,glut_id);
-#ifdef MPI_EVOLVER
-    sprintf(wintitle+strlen(wintitle)," (task %d)",this_task);
-#endif
     glutSetWindowTitle(wintitle);
   }
 
@@ -2284,9 +2113,7 @@ void __cdecl draw_thread(void *arglist)
   if ( !graph_thread_running ) 
   {
   
-#ifndef WIN32
    signal(SIGKICK,glut_catcher);
-#endif
 
     graph_thread_running = 1;
     glutMainLoop();
@@ -2310,28 +2137,7 @@ void init_Oglz()
 
     if ( !no_graphthread_flag )
     {
-#ifdef WIN32
-     _beginthread(draw_thread,0,0);
-     if ( cpu_affinity_flag )
-       SetThreadAffinityMask(GetCurrentThread(),1);
-     if ( cpu_affinity_flag )
-     {  DWORD_PTR  proc_affinity_mask,system_affinity_mask;
-        int want_cpu = threadflag ? (nprocs+1) : 1;  // 0-based cpu numbering
-        GetProcessAffinityMask(GetCurrentProcess(),&proc_affinity_mask,
-            &system_affinity_mask);
-        if ( proc_affinity_mask & (((size_t)1)<<want_cpu) )
-        { SetThreadAffinityMask(GetCurrentThread(),((size_t)1)<<want_cpu);
-          sprintf(msg,"Set affinity of graphics thread to cpu %d.\n",want_cpu);
-          outstring(msg);
-        }
-        else
-        { sprintf(errmsg,"Cannot set affinity of graphics thread to cpu %d; process affinity mask is %X.\n",
-                  want_cpu,proc_affinity_mask);
-          kb_error(1930,errmsg,WARNING);
-        }
-     }
-
-#elif defined(PTHREADS)
+#ifdef PTHREADS
    { pthread_t th;
     /*
     {
@@ -2341,18 +2147,10 @@ void init_Oglz()
     }
     */
     main_pid = getpid();
-#ifdef MAC_OS_X
-    /* GLUT doesn't work as secondary thread on 10.0.2, so main draws */
-    curdir = getcwd(NULL,0);  /* so command thread gets proper directory */
-    pthread_create(&th,NULL,(void*(*)(void*))mac_exec_commands,NULL);
-    draw_thread(NULL);
-#else
     pthread_create(&th,NULL,draw_thread,NULL);
-#endif
    }
 #else
     kb_error(2447,"Internal error: Evolver compiled with GLUT graphics without threading.\n",RECOVERABLE);
-#endif
     }
   }
 } // end init_Oglz()
@@ -2578,7 +2376,6 @@ void Ogl_close(void)
   glutDestroyWindow(td->win_id);
   memset((char*)td,0,sizeof(struct graph_thread_data));
 
-#ifndef MAC_OS_X
  /* Mac objects to closing graphics thread */
 
  { int i;
@@ -2594,14 +2391,11 @@ void Ogl_close(void)
     td->arrays_timestamp = 0;
     graph_thread_running = 0;
   
-#ifdef WIN32
-  ExitThread(0);
-#elif defined(PTHREADS)
+#ifdef PTHREADS
   pthread_exit(NULL);
 #endif
   }
 }
-#endif
 
 } // end Ogl_close()
 
@@ -3349,12 +3143,6 @@ void idle_func()
 #endif
 #endif
 
-#ifdef WIN32
-    /* sleep until some event */
-    { HANDLE pHandles[MAXIMUM_WAIT_OBJECTS];
-      MsgWaitForMultipleObjects(0,pHandles,FALSE,100,QS_ALLINPUT);
-    }
-#endif
   }
 } // end idle_func()
 
@@ -3386,26 +3174,14 @@ void display()
     { if ( window_aspect_ratio != td->window_aspect )
         td->aspect_flag = 1;
  
-#ifdef MAC_OS_X
-      /* glutPostRedisplay() generates ugly NSEvent leak messages */
-  /*      glutSetWindow(td->win_id); */
-     /*   draw_screen();  Conflict with graphics thread! */
-         
-      glutPostWindowRedisplay(td->win_id);  /* generate redraw message */    
-#else
 /*   WARNING: glutSetWindow() in non-drawing thread causes problems. */
 /*      glutSetWindow(td->win_id); */
  /*     glutPostRedisplay(); */  /* generate redraw message */ 
       glutPostWindowRedisplay(td->win_id);  /* generate redraw message */
-#ifdef WIN32
-      InvalidateRect(td->draw_hwnd,NULL,FALSE);  /* give draw thread a kick */
-#else
      if ( draw_pid != main_pid )
-     { 
+     {
        kill(draw_pid,SIGKICK);  /* unix version of kick */
-     } 
-#endif
-#endif
+     }
     }
 
 }  // end display()
@@ -3846,13 +3622,6 @@ int build_arrays()
    REAL now = get_internal_variable(V_CLOCK);
    int timeout = (now-last_mutex_time > .5) ? LONG_TIMEOUT : IMMEDIATE_TIMEOUT;
 
-#ifdef MPI_EVOLVER
-  if ( this_task == MASTER_TASK )
-  { mpi_get_task_graphics(td->mpi_graph_task);
-    return 1;
-  }
-  else
-#endif
     if ( TRY_GRAPH_MUTEX(timeout) )
     { int oldflag;
    
@@ -3861,9 +3630,6 @@ int build_arrays()
   /*      int i;
   for ( i = 0 ; i < MAXGRAPHWINDOWS ; i++ )
         if ( td != gthread_data + i 
-        #ifdef MPI_EVOLVER
-                 && td->mpi_graph_task == gthread_data[i].mpi_graph_task 
-        #endif
                && td->arrays_timestamp < gthread_data[i].arrays_timestamp )
          { td->fullarray = gthread_data[i].fullarray;  
            td->edgestart = gthread_data[i].edgestart; 
@@ -3983,123 +3749,3 @@ int build_arrays()
 
 }  /* end build_arrays() */
 
-#ifdef MPI_EVOLVER
-
-/***********************************************************************
-*
-* Function: mpi_get_task_graphics()
-*
-* Purpose: Fetch graphics data from task in array format suitable for OpenGL.
-*          Called by master task graphics module.
-*
-*/
-
-void mpi_get_task_graphics(int task  /* which task to get from  */)
-{ struct mpi_command message;
-  MPI_Status status;
-  struct graph_metadata metadata; 
-  struct graph_thread_data *td = GET_DATA;
-  int i,j;
-  struct vercol *old_array;
-
-  ENTER_MPI_MUTEX;
-
-  message.cmd = mpi_GET_GRAPHICS;
-  message.task = task;
-/*
-  MPI_Send(&message,sizeof(struct mpi_command),MPI_BYTE,task,GRAPHICS_TAG,
-    mpi_comm_graphics);
-*/
-  MPI_Bcast(&message,sizeof(struct mpi_command),MPI_BYTE,MASTER_TASK,
-        MPI_COMM_WORLD);
-  if ( mpi_debug )
-    printf("Task %d requested graphics from task %d\n",this_task,task);
-  
-  MPI_Recv(&metadata,sizeof(struct graph_metadata),MPI_BYTE,task,GRAPHICS_TAG,
-         MPI_COMM_WORLD, &status);
-
-  if ( mpi_debug )
-    printf("Got metadata\n");
-
-  td->edgestart = metadata.edgestart;
-  td->edgecount = metadata.edgecount;
-  td->facetstart = metadata.facetstart;
-  td->facetcount = metadata.facetcount;
-  if ( !td->view_initialized )
-    for ( i = 0 ; i < 4 ; i++ )
-      for ( j = 0 ; j < 4 ; j++ )
-        td->view[i][j] = metadata.view[i][j];
-  td->view_initialized = 1;
-  
-  /* allocate room for graphics data */
-  old_array = td->fullarray;
-  td->fullarray = realloc(td->fullarray,(td->facetstart+td->facetcount+5)*sizeof(struct vercol)); 
-  if ( td->fullarray == NULL )
-      { kb_error(5704,"Graphics too complicated for arrays.  Switching to non-array graphics.\n",
-          WARNING);
-        td->arraysflag = 0;
-        td->doing_lazy = 0;
-        free((char*)old_array); 
-        return;
-      }
- 
-  MPI_Recv(td->fullarray,(td->facetstart+td->facetcount)*sizeof(struct vercol),
-     MPI_BYTE,task,GRAPHICS_TAG,MPI_COMM_WORLD,&status); 
-  if ( mpi_debug )
-    printf("Got graphics data, edgecount %d facetcount %d\n",td->edgecount,
-       td->facetcount);
-
-  td->arrays_timestamp = graph_timestamp;
-  MPI_Barrier(MPI_COMM_WORLD);
-
-  LEAVE_MPI_MUTEX;
-} // end mpi_get_task_graphics()
-  
-/**********************************************************************
-*
-* Function: mpi_task_send_graphics()
-*
-* Purpose: Task handler for mpi_get_task_graphics().  Sends graphics
-*          data array back to master task for display.
-*/
-
-void mpi_task_send_graphics()
-{ struct graph_metadata metadata;
-  int i,j;
-  struct graph_thread_data *td = GET_DATA;
-  
-  memset(&metadata,0,sizeof(metadata));
-  
-  if ( mpi_debug )
-    printf("Task %d got request for graphics.\n",this_task);
-  gthread_data[0].facetshow_flag = 1; /* kludge */
-  td->arraysflag = 1;
-  color_flag = 1;
-  for ( i = 0 ; i < 16 ; i++ )
-    for ( j = 0 ; j < 4 ; j++ )
-      rgba[i][j] = (float)rgb_colors[i][j];
-
-  no_graphthread_flag = 1;
-  build_arrays();
-  no_graphthread_flag = 0;
-  metadata.edgecount = td->edgecount;
-  metadata.edgestart = td->edgestart;
-  metadata.facetcount = td->facetcount;
-  metadata.facetstart = td->facetstart;
-  for ( i = 0 ; i <= SDIM ; i++ )
-    for ( j = 0 ; j <= SDIM ; j++ )
-      metadata.view[i][j] = view[i][j];
-
-  if ( mpi_debug )
-    printf("Sending metadata\n");
-  MPI_Send(&metadata,sizeof(metadata),MPI_BYTE,MASTER_TASK,GRAPHICS_TAG,
-    MPI_COMM_WORLD);
-   
-  if ( mpi_debug )
-    printf("Sending graph data\n");
-  MPI_Send(td->fullarray,(td->facetstart+td->facetcount)*sizeof(struct vercol),
-    MPI_BYTE,MASTER_TASK,GRAPHICS_TAG,MPI_COMM_WORLD);
-
-} /* end mpi_task_send_graphics() */
-
-#endif

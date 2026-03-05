@@ -30,12 +30,10 @@ void iterate()
   int old_flag = iterate_flag;
   REAL old_energy = web.total_energy; /* for estimate */
 
-#ifndef MPI_EVOLVER
   if ( web.skel[VERTEX].count == 0 )
   { kb_error(1051,"No vertices. Did you forget to load a surface?\n",WARNING);
     return;
   }
-#endif
 
   iterate_flag = 1;  /* for interrupt handler */
 
@@ -521,12 +519,6 @@ void move_vertices(
   if ( itdebug )
     outstring("move_vertices(): by scale factor times velocity\n");
 
-  #ifdef MPI_EVOLVER
-  if ( this_task != 0 ) return;
-  mpi_move_vertices(mode,scale);
-  #else
-  local_move_vertices(mode,scale);
-  #endif
   
   if ( web.homothety )
      homothety();
@@ -793,12 +785,6 @@ void save_coords(
             /* SAVE_SEPARATE for separate memory allocation */
 )
 {
-  #ifdef MPI_EVOLVER
-  if ( this_task != 0 ) return;
-  mpi_save_coords(mode);
-  #else
-  local_save_coords(saver,mode);
-  #endif
   
 } // end save_coords()
 
@@ -890,12 +876,6 @@ void restore_coords(
   int mode
 )
 {
-  #ifdef MPI_EVOLVER
-  if ( this_task != 0 ) return;
-  mpi_restore_coords(mode);
-  #else
-  local_restore_coords(saver,mode);
-  #endif
 } // end restore_coords()
 
 /****************************************************************
@@ -1005,12 +985,6 @@ void unsave_coords(
   int mode
 )
 {
-  #ifdef MPI_EVOLVER
-  if ( this_task != 0 ) return;
-  mpi_unsave_coords(mode);
-  #else
-  local_unsave_coords(saver,mode);
-  #endif
 } // end unsave_coords()
 
 /********************************************************************
@@ -1233,11 +1207,6 @@ REAL estimate_decrease()
   for ( i = 0 ; i < optparamcount ; i++ ) 
     change += web.scale*optparam[i].grad*optparam[i].velocity;
 
-#ifdef MPI_EVOLVER
-  change += mpi_v_estimate();
-#else
-  change += v_estimate();
-#endif
 
   estimated_change = -change;  /* for estimated_change internal variable */
   return -change;  /* negative since forces are opposite gradients */
@@ -1335,11 +1304,6 @@ void cg_calc_gamma()
 
   if ( ribiere_flag )
   { 
-#ifdef MPI_EVOLVER
-    rsum = mpi_ribiere_calc();
-#else
-    rsum = ribiere_calc();
-#endif
 
     for ( i = 0 ; i < optparamcount ; i++ ) 
     { rsum += optparam[i].grad*optparam[i].oldgrad;
@@ -1347,11 +1311,6 @@ void cg_calc_gamma()
     }
   }
 
-#ifdef MPI_EVOLVER
-    sum = mpi_cg_sum_calc();
-#else
-    sum = cg_sum_calc();
-#endif
 
   for ( i = 0 ; i < optparamcount ; i++ ) 
       sum += optparam[i].velocity*optparam[i].grad;
@@ -1426,11 +1385,6 @@ void cg_direction()
 {
   int i;
 
-#ifdef MPI_EVOLVER
-  mpi_cg_direction();  /* do vertices */
-#else
-  cg_direction_local();
-#endif
 
   for ( i = 0 ; i < optparamcount ; i++ ) 
   { optparam[i].grad += cg_gamma*optparam[i].cg;
@@ -1474,14 +1428,6 @@ void cg_direction_local()
 
 void cg_restart()
 {
-#ifdef MPI_EVOLVER
-   if ( this_task == MASTER_TASK )
-   { struct mpi_command message;
-     message.cmd = mpi_CG_RESTART;
-     MPI_Bcast(&message,sizeof(struct mpi_command),MPI_BYTE,MASTER_TASK,
-         MPI_COMM_WORLD);
-   }
-#endif
    { myfree((char *)cg_hvector); cg_hvector = NULL; cg_oldsum = 0.0;}
 } // end cg_restart()
 
@@ -1711,12 +1657,6 @@ void convert_forms_to_vectors(
     outstring(msg);
   }
 
-  #ifdef MPI_EVOLVER
-  if ( this_task != 0 ) return;
-  mpi_convert_forms_to_vectors(mode);
-  #else
-  local_convert_forms_to_vectors(mode);
-  #endif
 } // end convert_forms_to_vectors()
 
 /***************************************************************

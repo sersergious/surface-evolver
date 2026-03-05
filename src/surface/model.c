@@ -45,10 +45,6 @@ void adjust_integration_orders(int l_order  /* new element order */)
 */
 void lagrange_to_linear() 
 { 
-#ifdef MPI_EVOLVER
-  if ( this_task == MASTER_TASK )
-    mpi_model(1,LINEAR);
-#endif
 
   lagrange_to_lagrange(1);
   web.headvnum = 1;
@@ -68,10 +64,6 @@ void lagrange_to_quad()
 { edge_id e_id;
   vertex_id *v,vv;
 
-#ifdef MPI_EVOLVER
-  if ( this_task == MASTER_TASK )
-    mpi_model(2,QUADRATIC);
-#endif
 
   lagrange_to_lagrange(2);
 
@@ -111,10 +103,6 @@ void linear_to_lagrange(int l_order)
           RECOVERABLE);
     }
 
-#ifdef MPI_EVOLVER
-  if ( this_task == MASTER_TASK )
-    mpi_model(l_order,LAGRANGE);
-#endif
 
   if ( web.representation == SOAPFILM )
   {  MFOR_ALL_FACETS(f_id)
@@ -159,10 +147,6 @@ void quad_to_lagrange(int l_order)
           RECOVERABLE);
   }
 
-#ifdef MPI_EVOLVER
-  if ( this_task == MASTER_TASK )
-    mpi_model(l_order,LAGRANGE);
-#endif
 
   ENTER_GRAPH_MUTEX;
 
@@ -231,10 +215,6 @@ void lagrange_to_lagrange(int l_order)
     kb_error(3505,errmsg, RECOVERABLE);
   }
 
-#ifdef MPI_EVOLVER
-  if ( this_task == MASTER_TASK )
-    mpi_model(l_order,LAGRANGE);
-#endif
 
   ENTER_GRAPH_MUTEX;
 
@@ -722,10 +702,6 @@ void linear_to_quad()
         RECOVERABLE);
   }
 
-#ifdef MPI_EVOLVER
-  if ( this_task == MASTER_TASK )
-    mpi_model(2,QUADRATIC);
-#endif
 
   ENTER_GRAPH_MUTEX;
   
@@ -845,10 +821,6 @@ void quad_to_linear()
 
   if ( web.modeltype == LINEAR ) return;
 
-#ifdef MPI_EVOLVER
-  if ( this_task == MASTER_TASK )
-    mpi_model(1,LINEAR);
-#endif
 
   ENTER_GRAPH_MUTEX;
   

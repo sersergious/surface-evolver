@@ -38,11 +38,7 @@ struct dstack *stacktop;
   SECOND = 0.0;
 }
 
-#ifdef MAC_CW
-#define ESTACKSIZE 20
-#else
 #define ESTACKSIZE 100
-#endif
 
 /*****************************************************************
 *
@@ -1749,21 +1745,6 @@ void eval_second(
              }
              id |= VALIDMASK;
            }
-#ifdef MPI_EVOLVER
-         { int task;
-           if ( node->right )
-              task = (int)((stacktop--)->value);
-           else task = this_task;
-           if ( task < 0 || task >= mpi_nprocs )
-           { sprintf(errmsg,
-                "Illegal task number %d.  Must be between 1 and %d.\n",task,mpi_nprocs);
-             sprintf(errmsg+strlen(errmsg),"(source file %s, line %d)\n",
-                 file_names[node->file_no],node->line_no);
-             kb_error(1914,errmsg,RECOVERABLE);
-           }
-           id |= (element_id)task << TASK_ID_SHIFT;
-         }
-#endif
           
            *(element_id *)&(stacktop->value) = id;
            break;

@@ -13,16 +13,8 @@ int crit_count; /* debugging */
 *  Contents:  main() for Surface Evolver
 */
 
-#if defined(WIN32) && !defined(WINVER)
-#define _WIN32_WINNT 0x0500
-#define _WIN32_WINDOWS 0x0410
-#define WINVER 0x0400
-#endif
 #include "include.h"
 
-#ifdef WIN32
-#include <psapi.h>
-#endif
 
 int just_lex_flag = 0;  /* for -l option */
 
@@ -31,21 +23,6 @@ int cpu_affinity_flag = 0 ;  /* for -A option, fix thread affinities */
 /***********************************************************************/
 /* System-specific thread stuff is all in this file.                   */
 
-#ifdef WINTHREADS
-/* MS Windows multithreading */
-DWORD WINAPI winthread_worker( void * arg );
-CRITICAL_SECTION thread_cs;  /* main thread critical section */
-CRITICAL_SECTION element_cs;  /* per element critical section */
-CRITICAL_SECTION web_cs;  /* web structure critical section */
-LPCRITICAL_SECTION element_mutex_ptr = &element_cs; /* for use in other files */
-LPCRITICAL_SECTION web_mutex_ptr = &web_cs; /* for use in other files */
-HANDLE workthread_wakeup; /* worker thread wake-up event */
-HANDLE mainthread_wakeup; /* resume main thread event */
-HANDLE barrier_event;  /* for synchronizing worker threads */
-volatile LONG barrier_count;
-HANDLE *threadlist;   /* thread handles */
-DWORD thread_data_key;
-#endif
 #ifdef PTHREADS
 /* portable Unix multithreading */
 #include <semaphore.h>
@@ -90,9 +67,6 @@ void m_set_idlist()
 { proc_ids[GET_THREAD_ID] = getpid(); }
 #endif
 
-#if defined(MPI_EVOLVER)
-#define main old_main 
-#endif
 
 /********************************************************************
 *
@@ -138,9 +112,6 @@ int main(int argc,char *argv[])
 #endif
   outstring("\n");
 
-#ifdef MPI_EVOLVER
-  MPI_Barrier(MPI_COMM_WORLD); /* wait for everybody to print */
-#endif
 
 
  if ( sizeof(element_id) > sizeof(REAL) )
@@ -152,28 +123,11 @@ int main(int argc,char *argv[])
  using_history(); 
 #endif
 
-#ifdef SGI_MULTI
-  procs_requested = 1;  /* default at John's request.  m_get_numprocs(); */
-#endif
 
-#ifdef WIN32
-/* Mutex for use between graph thread and main thread. */
-/* Nameless to prevent interference between separate processes. */
-  graphmutex = CreateMutex(NULL,0,NULL);
-  mem_mutex = CreateMutex(NULL,0,NULL);
-  transforms_mutex = CreateMutex(NULL,0,NULL);
-
-
-#ifdef MPI_EVOLVER
-  mpi_mutex = CreateMutex(NULL,0,NULL);
-#endif
-#elif defined(PTHREADS)
+#ifdef PTHREADS
   pthread_mutex_init(&graphmutex,NULL);
   pthread_mutex_init(&transforms_mutex,NULL);
   pthread_mutex_init(&mem_mutex,NULL);
-#ifdef MPI_EVOLVER
-  pthread_mutex_init(&mpi_mutex,NULL);
-#endif
 #endif
 
 
@@ -189,9 +143,6 @@ int main(int argc,char *argv[])
      while (  argc && (argv[0] != NULL) && (argv[0][0] == '-') )
      { switch ( argv[0][1] )
      {    case 'U': 
-#ifdef WIN32
-          FreeConsole();
-#endif
             break;
           case 'E': err_tok_gen_flag = 1;
                     break;
@@ -200,9 +151,6 @@ int main(int argc,char *argv[])
           case 'Q': quiet_load_flag = 1; break;
           case 'e': echo_flag = 1; break;
 		  case 'Z': pause_flag = 1; break;  /* chance to attach debugger */
-#ifdef MPI_EVOLVER
-          case 'z': mpi_debug = 1; break;
-#endif
           case 't': tty_flag = 1;
                 break; 
           case 'u': tty_flag = 1; 
@@ -249,30 +197,7 @@ int main(int argc,char *argv[])
                 { procs_requested = atoi(argv[1]);
                   argv++; argc--;
                 }
-#if defined(SGI_MULTI) || defined (THREADS)
-                if ( procs_requested < 1 )
-                  { kb_error(1321, 
-                      "-p with nonpositive number. Threads set to 1.\n",
-                                    WARNING);
-                     procs_requested = 1;
-                  }
-                if ( procs_requested > MAXPROCS )
-                { sprintf(errmsg,
-    "This Evolver only compiled for a maximum of %d threads.\n",MAXPROCS);
-                   kb_error(2551,errmsg,WARNING);
-                  sprintf(errmsg,
-     "Threads set to %d. Recompile with -DMAXPROCS=%d if you want more.\n",
-                    MAXPROCS,procs_requested);
-                  erroutstring(errmsg);
-                  procs_requested = MAXPROCS;
-               }
-                  
-#ifdef THREADS
-                threadflag = 1;
-#endif
-#else
                 kb_error(1322,"-p option not effective.  This Evolver not compiled for multithreading.\n", WARNING);
-#endif
                 break; 
           case 'A' : cpu_affinity_flag = 1; break;
           case 'x' : exit_after_error = 1; break;
@@ -293,9 +218,6 @@ int main(int argc,char *argv[])
                  outstring("  -y                     break after warning\n"); 
                  outstring("  -d                     parser debugging on\n"); 
                  outstring("  -m                     memory debugging on\n"); 
-#ifdef SGI_MULTI
-                 outstring("  -pn                    use n processes \n"); 
-#endif
 #if defined(THREADS)
                  outstring("  -pn                    use n worker threads \n"); 
 #endif
@@ -308,129 +230,12 @@ int main(int argc,char *argv[])
 
   if ( pause_flag )
   { 
-    #ifdef MPI_EVOLVER
-      MPI_Barrier(MPI_COMM_WORLD);   // to get all banners printed first
-      if ( this_task == MASTER_TASK )  // only master gets input, but all tasks wait on master anyway.
-         prompt("\nPausing due to -Z option. Hit ENTER to continue.\n",msg,sizeof(msg));
-      MPI_Barrier(MPI_COMM_WORLD);
-    #else
          prompt("Pausing due to -Z option. Hit ENTER to continue.\n",msg,sizeof(msg));
-    #endif
   }
 
  
-#ifdef SGI_MULTI
-  sprintf(msg,"Using %d processes on %d processors.\n\n",
-      procs_requested,m_get_numprocs()); 
-  outstring(msg);
-  m_set_procs(procs_requested);
-  if ( m_get_numprocs() > 1 )
-  { int n;
-     /* set up list of locks available for critical sections */
-     usconfig(CONF_INITSIZE,200*_MAXLOCKS);
-     usconfig(CONF_ARENATYPE,US_SHAREDONLY);
-     usconfig(CONF_INITUSERS,4+m_get_numprocs());
-     lock_arena = usinit(lock_arena_name);
-     if ( lock_arena == NULL ) { perror(lock_arena_name); exit(2); }
-     for ( n = 0 ; n < _MAXLOCKS ; n++ )
-     { locklist[n] = usnewlock(lock_arena);
-        if ( locklist[n] == NULL )
-        { fprintf(stderr,"lock allocation failure on lock %d.\n",n);
-          perror("usnewlock");
-          exit(2);
-        }
-     }
-     m_fork(m_set_idlist);
-     m_park_procs();
-     mpflag = M_INACTIVE;
-  }
-#endif
   nprocs = procs_requested;
 
-#ifdef WINTHREADS
-  main_thread_id = GetCurrentThreadId();
-  if ( cpu_affinity_flag )
-  { SetThreadAffinityMask(GetCurrentThread(),1);
-    outstring("Set affinity of main thread to cpu 0.\n");
-  }
-  else if ( procs_requested <= 1 )
-    affinity_mongering();
-
-  /* Set up worker threads for MS-Windows multiprocessor machines */
-  thread_data_key = TlsAlloc();
-  TlsSetValue(thread_data_key,(void*)&default_thread_data);  // for main thread
-  if ( threadflag )
-  { int i;
-    int retval;
-    SYSTEM_INFO si;
-    GetSystemInfo(&si);
-    workthread_wakeup = CreateEvent(NULL,TRUE,FALSE,NULL);
-    mainthread_wakeup = CreateEvent(NULL,TRUE,TRUE,NULL);
-    barrier_event = CreateEvent(NULL,TRUE,TRUE,NULL);
-
-#if _WIN32_WINNT >= 0x0500  
-    { retval = InitializeCriticalSectionAndSpinCount(&thread_cs,spincount); 
-      retval = InitializeCriticalSectionAndSpinCount(&element_cs,spincount); 
-      retval = InitializeCriticalSectionAndSpinCount(&web_cs,spincount); 
-    }
-#else
-    { InitializeCriticalSection(&thread_cs); 
-      InitializeCriticalSection(&element_cs); 
-      InitializeCriticalSection(&web_cs); 
-    }
-#endif
-    if ( cpu_affinity_flag )  
-      SetThreadAffinityMask(GetCurrentThread(),1);
-
-    threadlist = (HANDLE*)my_list_calloc(procs_requested,sizeof(HANDLE),
-                       ETERNAL_BLOCK);
-    thread_data_ptrs = (struct thread_data**)my_list_calloc(procs_requested,
-                      sizeof(struct thread_data*),ETERNAL_BLOCK);
-    busythreads = procs_requested;
-    barrier_count = procs_requested;
-    ResetEvent(barrier_event);
-    for ( i = 0 ; i < procs_requested ; i++ )
-    { DWORD tid;  /* dummy for thread id */
-      thread_data_ptrs[i] = 
-           (struct thread_data *)my_list_calloc(1,sizeof(struct thread_data),
-                 ETERNAL_BLOCK);
-      thread_data_ptrs[i]->worker_id = i;
-      threadlist[i] = CreateThread(NULL,0,winthread_worker,
-                         thread_data_ptrs[i],0,&tid);  
-      if ( threadlist[i] == NULL )
-      { FormatMessage( 
-           FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
-           NULL, GetLastError(),
-           MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), /* Default language */
-           (LPTSTR) &errmsg, ERRMSGSIZE, NULL );
-        erroutstring("Cannot create worker threads.\n");
-        kb_error(2190,errmsg,UNRECOVERABLE);
-      }
-      if ( cpu_affinity_flag )
-      { DWORD_PTR  proc_affinity_mask,system_affinity_mask;
-        GetProcessAffinityMask(GetCurrentProcess(),&proc_affinity_mask,
-            &system_affinity_mask);
-        if ( proc_affinity_mask & (2<<i) )
-        { SetThreadAffinityMask(threadlist[i],2<<i);
-          sprintf(msg,"Set affinity of worker thread %d to cpu %d.\n",i+1,i);
-          outstring(msg);
-        }
-        else
-        { sprintf(errmsg,"Cannot set affinity of worker thread %d to cpu %d; \n  process affinity mask is 0x%X.\n",
-                  i+1,i+1,proc_affinity_mask);
-          kb_error(1932,errmsg,WARNING);
-        }
-      }
-    }
-    WaitForSingleObject(mainthread_wakeup,INFINITE);
-    sprintf(msg,"Created %d worker threads on %d processor machine.\n",
-        procs_requested,si.dwNumberOfProcessors);
-    if ( si.dwNumberOfProcessors == 1 ) 
-       spincount = 1;  /* spin worthless on 1 cpu */
-    else spincount = 4000;
-    outstring(msg);
-  }
-#endif
 
 #ifdef PTHREADS
   main_thread_id = pthread_self();
@@ -477,10 +282,6 @@ int main(int argc,char *argv[])
   if ( thread_data_ptrs == NULL )
   { thread_data_ptrs = &default_thread_data_ptr;
     thread_data_ptrs[0] = &default_thread_data;
-    #ifdef WINTHREADS
-    /* set per-thread data */
-    TlsSetValue(thread_data_key,(void*)&default_thread_data);
-    #endif
     #ifdef PTHREADS
     /* set per-thread data */
     pthread_setspecific(thread_data_key,(void*)&default_thread_data);
@@ -560,10 +361,6 @@ int main(int argc,char *argv[])
   { /* LOAD command returns here */
     if ( list && (list != permlist)) 
     { myfree((char*)list); list = NULL; }/* plug memory leak */
-#ifdef MPI_EVOLVER
-    if ( this_task == MASTER_TASK )
-       mpi_loadfile();
-#endif
     mpi_initialization_flag = 1;
     startup(loadfilename);
     mpi_initialization_flag = 0;
@@ -578,10 +375,6 @@ int main(int argc,char *argv[])
 	    startup(argv[0]);
       else
 	  {
-#ifdef MPI_EVOLVER
-		  if ( this_task != MASTER_TASK )
-		    return 0; /* let master task ask for datafile */  
-#endif
 		  startup(NULL);
        }
 
@@ -590,12 +383,6 @@ int main(int argc,char *argv[])
   datafile_flag = 0;
 #endif
 
-#ifdef MPI_EVOLVER
-//  MPI_Barrier(MPI_COMM_WORLD);
-  if ( this_task > 0 )
-    return 0;   /* return to mpi main() */
-  calc_energy();  /* initial energy */
-#endif
 
   subshell_depth = 0;
 #ifdef __cplusplus
@@ -617,90 +404,6 @@ void loadstub()
 }
 #endif
 
-#ifdef WINTHREADS
-/********************************************************************
-* Function: affinity_mongering()
-*
-* Purpose: Since Windows wants to run all programs of the same name
-*          on the same CPU, this function looks for other processes
-*          whose name starts with "ev" and tries to set affinity
-*          to an unused CPU.
-*/
-void affinity_mongering()
-{   char szProcessName[MAX_PATH];
-    DWORD aProcesses[1024];
-	DWORD this_process = GetCurrentProcessId();
-	unsigned int cbNeeded, cProcesses;
-    unsigned int i;
-	DWORD_PTR procmask = 0,sysmask = 0,cummask = 0, maskcopy = 0, mainmask = 0, graphmask = 0;
-	unsigned int cpu_top;
-	unsigned int prime;
-
-	// Get the list of process identifiers.
-    if ( !EnumProcesses( aProcesses, sizeof(aProcesses), &cbNeeded ) )
-        return ;
-
-    // Calculate how many process identifiers were returned.
-    cProcesses = cbNeeded / sizeof(DWORD);
-
-	for ( i = 0; i < cProcesses; i++ )
-    { if( (aProcesses[i] != 0) && (aProcesses[i] != this_process) )
-      { HANDLE hProcess = OpenProcess( PROCESS_QUERY_INFORMATION |
-                                   PROCESS_VM_READ, FALSE, aProcesses[i] );
-	    if (NULL != hProcess )
-        { HMODULE hMod;
-          DWORD cbNeeded;
-
-          if ( EnumProcessModules( hProcess, &hMod, sizeof(hMod), &cbNeeded) )
-          { GetModuleBaseName( hProcess, hMod, szProcessName, sizeof(szProcessName)/sizeof(TCHAR) );
-		    if ( strncmp(szProcessName,"ev",2) == 0 )
-			{ GetProcessAffinityMask(hProcess,&procmask,&sysmask);
-			  cummask |= procmask;
-			}
-		  }
-		}
-   	  }
-	}
-	// Be sure to get sysmask, in case this first Evolver
-	GetProcessAffinityMask(GetCurrentProcess(),&procmask,&sysmask);
-
-	// get highest cpu number
-	for ( cpu_top = 0, maskcopy = sysmask ; maskcopy ; maskcopy >>= 1 )
-		cpu_top++;
-
-	// Now pick an unused CPU, if there are any.  Complicated by the fact
-	// there might be hyperthreading, and we would rather not assign two
-	// processes to the same physical core.  Also, want to give affinity
-	// to two CPUs so graphics thread can have one.  To take care of
-	// both kinds of hyperthread numbering, we increment by a prime
-	// not dividing cpu_top.
-	prime = 3;
-	if ( (cpu_top % prime) == 0 ) prime = 5;
-	if ( (cpu_top % prime) == 0 ) prime = 7;
-
-	for ( i = 0 ; i < cpu_top ; i++ )
-	{ unsigned int spot = (i*prime) % cpu_top;
-	  unsigned int mask = 1 << spot;
-	  if ( !(cummask & mask) )
-	  { if ( mainmask )
-	       graphmask = mask;
-	    else
-		   mainmask = mask;
-	  }
-	  if ( graphmask )
-		 break;
-	}
-
-    if ( !graphmask )
-		// nothing free, so don't do anything
-		return;
-
-//	SetProcessAffinityMask(GetCurrentProcess(),mainmask+graphmask);
-	SetThreadAffinityMask(GetCurrentThread(),mainmask);
-	graphics_affinity_mask = graphmask; // for graphics thread to use when launched
-
-}
-#endif
 
 /********************************************************************
 *
@@ -717,16 +420,7 @@ void my_exit(int code)
   signal(SIGTERM,SIG_DFL);
 #endif
 
-#ifdef SGI_MULTI
-  if ( nprocs > 1)
-     { m_rele_procs();
-       m_kill_procs();  /* kill any parallel threads */
-     }
-#endif
 
-#if defined(MPI_EVOLVER)
-  mpi_my_exit();
-#endif
 
 #ifdef USE_READLINE /* CSL */
   save_readline_history();
@@ -769,96 +463,6 @@ int exec_commands(
   return 0;
 } // end exec_commands()
 
-#ifdef MAC_OS_X
-/********************************************************************
-*
-* function: mac_exec_commands()
-*
-* purpose: wrapper for exec_commands so Mac main thread (which is
-*          the draw thread) can call with one argument.
-*/
-struct thread_data mac_exec_thread_data;
-void *mac_exec_commands(FILE *arg)
-{
-
-#ifdef __cplusplus
-  char *to_load = NULL;
-  int flag; /* so doesn't prompt user for input file first time, if have */
-  pthread_setspecific(thread_data_key,(void*)&mac_exec_thread_data);
-  flag = !datafilename[0];
-  for ( ;; )
-  {
-    if ( flag )
-       startup(to_load);
-    flag = 1;
-    try
-    {
-      /* use C++ exception mechanism instead of setjmp/longjmp */
-      for (;;)
-      {
-        try
-        { 
-          chdir(curdir);
-          exec_commands(NULL,"Enter command: "); /* command read/execute loop */
-        }
-        catch ( int k )
-        { 
-        }
-      }
-    }
-    catch ( loadexcep k )  /* corresponds to loadjmpbuf */
-    { /* LOAD command returns here */
-      if ( list && (list != permlist)) 
-      { myfree((char*)list); list = NULL; }/* plug memory leak */
-      to_load = loadfilename[0] ? loadfilename : NULL;
-    }
-    catch ( int j )   /* corresponds to jumpbuf */
-    { to_load = NULL;
-    }
-  }
-
-#else
-  pthread_setspecific(thread_data_key,(void*)&mac_exec_thread_data);
-  if ( setjmp(loadjumpbuf) )
-  { /* LOAD command returns here */
-    if ( list && (list != permlist)) 
-    { myfree((char*)list); list = NULL; }/* plug memory leak */
-    startup(loadfilename);
-
-  }
-  else
-  { if ( setjmp(jumpbuf[subshell_depth]) )    /* return here after datafile errors */
-    { 
-       exec_commands(NULL,"Enter command: "); /* command read/execute loop */
-       // startup(NULL);
-    }
-    else
-    { if ( do_show_flag == 1 )
-         do_show(); 
-      chdir(curdir);   /* so command thread gets proper directory */
-      exec_commands(NULL,"Enter command: "); /* command read/execute loop */
-     //  startup(NULL);
-    }
-  }
-  datafile_flag = 0;
-#endif
-
-#ifdef MPI_EVOLVER
-  MPI_Barrier(MPI_COMM_WORLD);
-  if ( this_task > 0 )
-    return 0;   /* return to mpi main() */
-  calc_energy();  /* initial energy */
-#endif
-
-#ifdef __cplusplus
-#else
-  while ( setjmp(jumpbuf[subshell_depth]) != 0 );    /* return here after commandfile  errors */
-  exec_commands(NULL,"Enter command: ");  /* command read and execute loop */
-#endif
-
-  return NULL;
-} // end mac_exec_commands()
-#endif
 
 /********************************************************************
 *
@@ -916,10 +520,6 @@ void startup(char *file_name)  /* NULL if need to ask for name */
 file_retry:
   if ( name == NULL )
   { char *c;
-#ifdef MPI_EVOLVER
-    if ( this_task != MASTER_TASK )
-       return; /* wait for master to get new name */
-#endif
     prompt("Enter new datafile name (none to continue, q to quit): ",
        response,sizeof(response));
     c = strchr(response,'\n');
@@ -944,10 +544,6 @@ file_retry:
         goto emptybailout;
     }
     name = response;
-#ifdef MPI_EVOLVER
-	strcpy(loadfilename,name);
-	mpi_loadfile();
-#endif
   }
   newfd = path_open(name,SETDATAFILENAME);
   if (newfd == NULL)
@@ -963,14 +559,6 @@ file_retry:
     return; /* continue with old */
   }
 
-#ifdef WIN32
-#ifdef MPI_EVOLVER
-  sprintf(console_title,"Surface Evolver MPI - %s",name);
-#else
-  sprintf(console_title,"Surface Evolver - %s",name);
-#endif
-  SetConsoleTitleA(console_title);
-#endif
 
 emptybailout:
 
@@ -984,11 +572,6 @@ if (memdebug) memory_report();
 
   push_commandfd(newfd,name); /* start #include stack */
 
-#ifdef __WIN32__
-if ( heapcheck() < 0 )
-  kb_error(1324,"Internal error: Corrupt heap.\n",UNRECOVERABLE);
-
-#endif
 
   datafile_flag = 1;  /* so parser knows */
   datafile_input_flag = 1;  /* so lex input knows */
@@ -1025,14 +608,12 @@ if ( heapcheck() < 0 )
   run_checks();
   update_display();
   
-  #ifndef MPI_EVOLVER
   calc_content(Q_ENERGY|Q_FIXED|Q_INFO|Q_RENORMALIZE);
   if ( web.torus_flag ) fix_volconst();
   calc_pressure();
   calc_energy();  /* just to get initial total area */
   target_length = web.total_area; /* for square curvature string model */
   if ( OOGL_flag ) ask_wrap_display();
-  #endif 
 } // end startup()
 
 #ifdef THREADS
@@ -1113,46 +694,6 @@ PROF_PRINT(task_caller)
 } // end task_caller()
 #endif
 
-#ifdef WINTHREADS
-/*****************************************************************************
-*
-* function: winthread_worker()
-*
-* purpose: Main winthread worker function.  Waits for wakeup call and
-*          then executes task.
-*
-*/
-
-DWORD WINAPI winthread_worker( void * arg )
-{ struct thread_data *data = (struct thread_data *)arg;
-
-  /* set per-thread data */
-  TlsSetValue(thread_data_key,(void*)data);
- 
-  /* Set affinity mask.  Actually seems to hurt. */ 
-  /*
-  SetThreadAffinityMask(threadlist[data->worker_id],1<<data->worker_id);
-  */
-  
-  /* Loop waiting for wakeup calls.  Use single event rather than event */
-  /* for each type of task since MAXIMUM_WAIT_OBJECTS is 64. */
-  for (;;)
-  { 
-    InterlockedDecrement(&busythreads);
-    if ( busythreads == 0 )
-    { 
-      ResetEvent(workthread_wakeup); 
-      SetEvent(barrier_event);
-    }
-    WaitForSingleObject(barrier_event,INFINITE);
-    InterlockedDecrement(&barrier_count);
-    if ( barrier_count == 0 )
-       SetEvent(mainthread_wakeup);
-    WaitForSingleObject(workthread_wakeup,INFINITE);
-    task_caller(thread_task);
-  }
-} // end winthread_worker()
-#endif
 
 #ifdef PTHREADS
 /*****************************************************************************
@@ -1479,69 +1020,6 @@ void make_thread_lists()
 
 #endif
 
-#ifdef WINTHREADS
-/**************************************************************************
-*
-* function: thread_launch()
-*
-* purpose: Send signal to launch worker threads, after initializing
-*          global iteration variable.
-*/
-
-void thread_launch(int task, int element_type)
-{ int i,j,proc;
-  long long int now=0;
-  
-  PROF_NOW(now);
-  thread_launch_start = now;
-
-  global_id = web.skel[element_type].used;  /* in case no threads */
-
-  if ( partition_timestamp < top_timestamp )
-    thread_stage_setup();
-  for ( proc = 0 ; proc < nprocs ; proc++ )
-    thread_stages[proc].stage = thread_stages[proc].spot = 0;
-
-  thread_task = task; 
-  ResetEvent(mainthread_wakeup);  /* just to be sure */
-  busythreads = procs_requested;
-  ResetEvent(barrier_event);
-  barrier_count = procs_requested;
-  SetEvent(workthread_wakeup);
-  WaitForSingleObject(mainthread_wakeup,INFINITE);
-
-  /* Cleanup and amalgamation of data */
-  switch ( task )
-  { case TH_CALC_FACET_ENERGY:
-      for ( i = 0 ; i < nprocs ; i++ )
-      { web.total_energy += thread_data_ptrs[i]->total_energy;
-        web.total_area  += thread_data_ptrs[i]->total_area;
-      }
-      break;
-  }
-
-  PROF_NOW(now);
-  thread_launch_end = now;
-
-if ( verbose_flag )
-{
-/* print detailed clock timing */
-printf("thread_launch_start   %12I64X\n",thread_launch_start-thread_launch_start);
-for (i = 0 ; i <= max_thread_stages ; i++ )
-  printf("task 0 stage %d start: %12I64X end: %12I64X\n",i,
-    thread_data_ptrs[0]->stagestart[i]-thread_launch_start,
-    thread_data_ptrs[0]->stageend[i]-thread_launch_start);
-for ( j = 1; j < nprocs ; j++ )
-{ for (i = 0 ; i < max_thread_stages ; i++ )
-    printf("task 1 stage %d start: %12I64X end: %12I64X\n",i,
-      thread_data_ptrs[j]->stagestart[i]-thread_launch_start,
-      thread_data_ptrs[j]->stageend[i]-thread_launch_start);
-}
-printf("thread_launch_end     %12I64X\n",thread_launch_end-thread_launch_start);
-}
-
-} // end thread_launch()
-#endif
 
 #ifdef PTHREADS
 /**************************************************************************
@@ -1696,36 +1174,6 @@ data->stagestart[th->stage] = now;
 *
 */
 
-#ifdef WINTHREADS
-/* Indirection to lock functions to avoid including windows.h everywhere */
-int mylock_element(element_id id)
-{  if ( TryEnterCriticalSection(element_mutex_ptr)==0 )
-    {EnterCriticalSection(element_mutex_ptr);
-     element_locks++;
-    }
-   else element_unlocks++; 
-   return 0;  /* so can be used in conditionals */
-}
-int myunlock_element(element_id id)
-{  LeaveCriticalSection(element_mutex_ptr); 
-   return 0;
-}
-int mylock_web(void)
-{  if ( TryEnterCriticalSection(web_mutex_ptr)==0 )
-    {EnterCriticalSection(web_mutex_ptr);
-     web_locks++;
-    }
-   else web_unlocks++; 
-   return 0;
-}
-int myunlock_web(void)
-{  LeaveCriticalSection(web_mutex_ptr); 
-   return 0;
-}
-struct thread_data *win_get_thread_data(DWORD key)
-{ return (struct thread_data *)TlsGetValue(key);
-}
-#endif
 
 #ifdef PTHREADS
 int mylock_element(element_id id)

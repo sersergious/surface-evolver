@@ -11,10 +11,6 @@
 *              through this file for easy porting.
 */
 
-#ifdef WIN32
-#undef FIXED
-#undef DOUBLE
-#endif
 #include "include.h"
 
 /***********************************************************************
@@ -36,15 +32,8 @@ void outstring(char *outmsg)
   if ( logfile_flag && (outfd==stdout) )
       fprintf(logfilefd,"%s",outmsg);
 
-#if defined(MAC_APP) || defined(WIN32S) || defined(MAC_CW)
-  if ( outfd == stdout )
-     write_to_console(outmsg);
-  else
-     fputs(outmsg,outfd);
-#else
   fputs(outmsg,outfd);
   fflush(outfd);
-#endif
 }  // end outstring()
 
 /***********************************************************************
@@ -59,15 +48,8 @@ void erroutstring(char *outmsg)
 {
   if ( !outmsg || suppress_erroutstring ) 
 	  return;
-#if defined(MAC_APP) || defined(WIN32S) || defined(MAC_CW)
-  write_to_console(outmsg);
-#else
-#ifdef MPI_EVOLVER
-  fprintf(stderr,"Task %d: ",this_task);
-#endif
   fputs(outmsg,erroutfd);
   fflush(erroutfd);
-#endif
   if ( logfile_flag )
       fprintf(logfilefd,"%s",outmsg);
 
@@ -138,15 +120,11 @@ void getstring(
   /* from stdin */
   broken_pipe_flag = 0; /* in case left over */
 
-#if defined(MAC_APP) || defined(WIN32S) || defined(MAC_CW)
-  read_line_from_console(inmsg);
-#else
   if ( my_fgets(inmsg,max,stdin) == NULL )
      my_exit(0);
   c = inmsg + strlen(inmsg) - 1;
   if ( *c == '\n' ) *c = 0;
   if ( echo_flag ) { outstring(inmsg);  outstring("\n"); }
-#endif
 
   if ( keylogfile_flag ) fprintf(keylogfilefd,"%s\n",inmsg);
 } // end getstring()
@@ -309,7 +287,7 @@ int check_pick()
   poll(pp,2,-1);
   if ( pp[1].revents ) 
      return read_pick();
-#elif !defined(WIN32)
+#else
 /* try using select() from time.h */
   fd_set fdset;
   struct timeval timeout;
@@ -419,10 +397,6 @@ if ( threadflag )
   current_prompt = promptmsg; /* for those who want to redisplay prompt */
 #endif
 
-#if defined(MAC_APP) || defined(WIN32S) || defined(MAC_CW)
-  write_to_console(promptmsg);
-  read_line_from_console(inmsg);
-#else
 #if defined(_READLINE_H_)
   if(use_readline(promptmsg,inmsg,max) == EOF )
       return EOF;
@@ -433,10 +407,6 @@ if ( threadflag )
   oldquiet = quiet_flag; quiet_flag = 0;
   outstring(promptmsg);
   quiet_flag = oldquiet;
-
-#ifdef WIN32
-  signal(SIGINT,SIG_IGN); /* no interrupt during input (esp. WIN32) */
-#endif
 
 #ifdef OOGL
   /* check for geomview pick */
@@ -450,7 +420,6 @@ if ( threadflag )
   if ( echo_flag ) { outstring(inmsg); outstring("\n"); }
   signal(SIGINT,catcher);
   }
-#endif
 #endif
 
   current_prompt = NULL;
@@ -632,21 +601,6 @@ void pop_commandfd()
 {
   if ( in_comment )
           { kb_error(2205,"End of file in comment\n",WARNING );  }
-#ifdef WIN32
-  if ( commandfd == stdin )
-  { int tty = _isatty(_fileno(stdin));
-    if ( !tty ) 
-       my_exit(0); /* exit in case of redirected input */
-    else return; /* Ctrl-C gives spurious EOF */
-    /* Note:   SIGINT is not supported for any Win32 application, 
-       including Windows 98/Me and Windows NT/2000/XP. When a CTRL+C 
-       interrupt occurs, Win32 operating systems generate a new thread 
-       to specifically handle that interrupt. This can cause a 
-       single-thread application such as UNIX, to become multithreaded, 
-       resulting in unexpected behavior. (MSDN Library on SIGINT )
-       */
- }
-#endif
   if ( datafile_input_flag && !cmdfile_stack[read_depth-1].datafile_flag 
           /*&& !addload_flag */)
   { datafile_input_flag = 0;
@@ -957,11 +911,6 @@ void kb_error(
         {  ABORT_GRAPH_MUTEX
         }
         #endif
-        #ifdef WINTHREADS
-        if ( GetCurrentThreadId() == locking_thread )
-        {  ABORT_GRAPH_MUTEX
-        }
-        #endif
         if ( subshell_depth == 0 )
           temp_free_all();
         if ( exit_after_error ) my_exit(errnum);
@@ -1029,12 +978,7 @@ void kb_error(
 
 bailout:
 
-  #ifdef MPI_EVOLVER
-  if ( (this_task != 0) && !mpi_local_error_bailout )
-  { erroutstring("ALL SLAVE TASK ERRORS FATAL! KILLING ALL PROCESSES!\n");
-    MPI_Abort(MPI_COMM_WORLD,1);
-  }
-  #endif
+
 
   if ( outfd != stdout )
   { if ( outfd != NULL )
@@ -1072,11 +1016,6 @@ bailout:
   {  ABORT_GRAPH_MUTEX
   }
   #endif
-  #ifdef WINTHREADS
-  if ( GetCurrentThreadId() == locking_thread )
-  {  ABORT_GRAPH_MUTEX
-  }
-  #endif
   if ( subshell_depth == 0 )
      temp_free_all();      
   if ( list && (list != permlist) )
@@ -1087,13 +1026,8 @@ bailout:
   if ( exit_after_error ) my_exit(errnum);
   FPRESET;
   ABORT_GRAPH_MUTEX;
-#ifdef WIN32
-  if ( draw_thread_id == GetCurrentThreadId() )
-#elif defined(PTHREADS)
-  if ( draw_thread_id == pthread_self() ) 
-#endif
-
-#if defined(WIN32) || defined(PTHREADS)
+#ifdef PTHREADS
+  if ( draw_thread_id == pthread_self() )
 #ifdef __cplusplus
       do_graph_throw();
 #else
@@ -1208,17 +1142,7 @@ void stop_keylogfile()
 
 void set_scroll_size(int rows)
 {
-#ifdef MSC
-  COORD size;
-  if ( rows < 1)
-    kb_error(2428,"Minimum scroll buffer size is 1.  Command ignored.\n",
-         WARNING);
-  size.X = 80;
-  size.Y = (short)rows;
-  SetConsoleScreenBufferSize(GetStdHandle(STD_OUTPUT_HANDLE),size);
-#else
   kb_error(2429,"ScrollBufferSize not implemented on this system.\n",
      WARNING);
-#endif
 } // end set_scroll_size()
 
