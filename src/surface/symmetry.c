@@ -68,14 +68,14 @@ WRAPTYPE wrap;  /* encoded symmetry group element, 3 bits per dimension */
 {
   int i,j;
 
-  memcpy((char*)y,(char*)x,web.space_dimension*sizeof(REAL));
+  memcpy((char*)y,(char*)x,web.sdim*sizeof(REAL));
   for ( i = 0 ; wrap != 0 ; i++, wrap >>= TWRAPBITS )
     switch ( wrap & WRAPMASK )
       {  case 0: break;
-         case POSWRAP: for ( j = 0 ; j < web.space_dimension ; j++ )
+         case POSWRAP: for ( j = 0 ; j < web.sdim ; j++ )
                    y[j] += web.torus_period[i][j];
                  break;
-         case NEGWRAP: for ( j = 0 ; j < web.space_dimension ; j++ )
+         case NEGWRAP: for ( j = 0 ; j < web.sdim ; j++ )
                    y[j] -= web.torus_period[i][j];
                  break;
          default: error("Unexpectedly large torus wrap.\n",WARNING);

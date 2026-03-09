@@ -2999,6 +2999,14 @@ void read_faces()
         }
       }
 
+      /* Close the facetedge ring so face_triangulate receives a circular chain.
+         Without this, the last fe's next pointer stays NULLFACETEDGE and
+         face_triangulate walks off the end causing an infinite loop. */
+      if ( valid_id(old_fe) && valid_id(first_fe) )
+      { set_next_edge(old_fe, first_fe);
+        set_prev_edge(first_fe, old_fe);
+      }
+
       if ( ((web.representation == STRING) && (edge_count < 1))
               || ((web.representation == SOAPFILM) && (edge_count < 3)) )
       { sprintf(errmsg,"Face %d has too few edges.\n",k);

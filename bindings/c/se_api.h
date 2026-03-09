@@ -1,11 +1,10 @@
-/*
- * Public C facade header for Surface Evolver.
- *
- * This header declares a small, stable API that external code (e.g. Python
- * via ctypes) can use without having to depend on Evolver's internal headers.
- *
- * The corresponding implementation is in bindings/c/se_api.c.
- */
+/*************************************************************
+*  Surface Evolver C API
+*  Facade for use with Python ctypes or other FFI callers.
+*
+*  Build: see Makefile target `libse`
+*  Usage: #include "se_api.h", link against libse.so
+*************************************************************/
 
 #ifndef SE_API_H
 #define SE_API_H
@@ -14,80 +13,84 @@
 extern "C" {
 #endif
 
-/*-----------------------------------------------------------------------------
- *  Runtime lifecycle
- *---------------------------------------------------------------------------*/
+/* ── lifecycle ────────────────────────────────────────────────────────── */
 
-/* Initialize Evolver runtime (call once per process before other calls). */
-int  se_init_runtime(void);
+/* Initialize the SE runtime.  Must be called once before any other se_*
+ * function.  Returns 0 on success, -1 on failure. */
+int se_init(void);
 
-/* Optional cleanup hook for explicit teardown. */
-void se_shutdown_runtime(void);
+/* Load a Surface Evolver datafile (.fe).  Replaces any currently loaded
+ * surface.  Returns 0 on success, -1 on failure. */
+int se_load(const char *filename);
 
-/*-----------------------------------------------------------------------------
- *  Datafile loading
- *---------------------------------------------------------------------------*/
+/* ── command execution ────────────────────────────────────────────────── */
 
-/* Load a Surface Evolver datafile (.fe) from disk. */
-int  se_load_datafile(const char *path);
+/* Execute a single SE language command (e.g. "g", "r", "u 3").
+ * Output is captured; retrieve it with se_pop_output().
+ * Returns 0 on success, non-zero if the command had an error. */
+int se_run(const char *cmd);
 
-/* Load a model from an in‑memory datafile string. */
-int  se_load_data(const char *text, int length);
+/* Run `steps` gradient-descent iterations (equivalent to "g steps"). */
+void se_iterate(int steps);
 
-/*-----------------------------------------------------------------------------
- *  Command execution
- *---------------------------------------------------------------------------*/
+/* ── scalar state ─────────────────────────────────────────────────────── */
 
-/*
- * Execute a single Evolver command line.
- *
- * - cmd      : null‑terminated command string.
- * - out_buf  : buffer to receive textual output (stdout + stderr).
- * - out_len  : size of out_buf in bytes.
- *
- * Returns 0 on success, non‑zero on error.
- */
-int  se_exec_command(const char *cmd, char *out_buf, int out_len);
+double se_get_energy(void);   /* web.total_energy               */
+double se_get_area(void);     /* web.total_area                  */
+double se_get_scale(void);    /* web.scale (step-size factor)    */
+void   se_set_scale(double s);
 
-/*-----------------------------------------------------------------------------
- *  Mesh export (for graphics)
- *---------------------------------------------------------------------------*/
+/* Spatial dimension of the ambient space (usually 3). */
+int se_get_sdim(void);
 
-/* Counts of active vertices / facets. */
-int  se_get_vertex_count(void);
-int  se_get_facet_count(void);
+/* ── element counts ───────────────────────────────────────────────────── */
 
-/*
- * Export vertex positions as doubles:
- *  - out_xyz length >= 3 * max_vertices
- *  - vertex i → out_xyz[3*i + 0..2] = (x, y, z)
- * Returns number of vertices written.
- */
-int  se_get_vertices(double *out_xyz, int max_vertices);
+int se_get_vertex_count(void);
+int se_get_edge_count(void);
+int se_get_facet_count(void);
+int se_get_body_count(void);
 
-/*
- * Export triangular facets as vertex indices:
- *  - out_tris length >= 3 * max_facets
- *  - facet j → out_tris[3*j + 0..2] = (v0, v1, v2)
- * Returns number of facets written.
- */
-int  se_get_facets(int *out_tris, int max_facets);
+/* ── mesh geometry ────────────────────────────────────────────────────── */
 
-/*-----------------------------------------------------------------------------
- *  Status helpers
- *---------------------------------------------------------------------------*/
+/* Fill out[0..n*sdim-1] with vertex coordinates packed as
+ *   [x0,y0,z0,  x1,y1,z1, ...]
+ * where sdim = se_get_sdim() and n = min(vertex_count, max_count).
+ * Returns number of vertices written, or -1 on error.
+ * Caller must allocate: double out[max_count * se_get_sdim()]. */
+int se_get_vertices(double *out, int max_count);
 
-double se_get_total_energy(void);
-double se_get_total_area(void);
+/* Fill ids[0..n-1] with the 1-based SE ordinal for each vertex in the
+ * same order as se_get_vertices().  Useful for diagnostics/mapping.
+ * Returns number of vertices, or -1 on error. */
+int se_get_vertex_ids(int *ids, int max_count);
 
-/* Surface dimension (e.g. 2 for surfaces). */
-int    se_get_dimension(void);
+/* Fill out[0..n*3-1] with triangle vertex indices (0-based, matching the
+ * row order of se_get_vertices()) packed as [v0,v1,v2, v0,v1,v2, ...].
+ * Only valid for SOAPFILM LINEAR representation.
+ * Returns number of triangles written, or -1 on error / wrong representation.
+ * Caller must allocate: int out[max_count * 3]. */
+int se_get_facets(int *out, int max_count);
 
-/* Ambient space dimension (e.g. 3 for R^3). */
-int    se_get_space_dim(void);
+/* ── body data ────────────────────────────────────────────────────────── */
+
+/* Fill volumes[0..n-1] and/or pressures[0..n-1] (either may be NULL)
+ * in body ordinal order.  Returns number of bodies, or -1 on error. */
+int se_get_body_volumes(double *volumes, double *pressures, int max_count);
+
+/* ── output capture ───────────────────────────────────────────────────── */
+
+/* Copy SE's captured stdout into buf (NUL-terminated), then reset the
+ * capture buffer.  Returns number of bytes copied (excluding NUL). */
+int se_pop_output(char *buf, int bufsize);
+
+/* Same for SE's stderr / error messages. */
+int se_pop_errout(char *buf, int bufsize);
+
+/* NUL-terminated string describing the last API-level error. */
+const char *se_last_error(void);
 
 #ifdef __cplusplus
-} /* extern "C" */
+}
 #endif
 
 #endif /* SE_API_H */

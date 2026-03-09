@@ -1,5 +1,3 @@
 /.cache
 /backup
 /build
-/cmake-build-debug
-CMakeLists.txt

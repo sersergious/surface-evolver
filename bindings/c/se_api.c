@@ -1,223 +1,357 @@
-/*
- * Surface Evolver C facade for external bindings (e.g. Python ctypes).
- *
- * This file is intentionally small and self‑contained: it exposes a stable,
- * C‑style API that higher‑level code can call without needing to know about
- * internal globals, macros, or data structures. The implementations below are
- * just boilerplate scaffolding; fill them in by calling existing Evolver
- * internals (from tmain.c, userio.c, calcforc.c, quantity.c, etc.).
- */
+/*************************************************************
+*  Surface Evolver C API  —  se_api.c
+*
+*  Provides a clean, FFI-friendly facade over the SE runtime
+*  for use with Python ctypes (or any other foreign caller).
+*
+*  Compilation note
+*  ────────────────
+*  This file must be compiled together with all other SE object
+*  files.  The shared-library target in the Makefile is `libse`:
+*
+*    make libse          →  builds libse.so
+*
+*  Output produced by SE (via outstring / erroutstring) is
+*  silently redirected to in-memory streams.  Call se_pop_output()
+*  and se_pop_errout() to retrieve it after each operation.
+*************************************************************/
 
-#include "include.h"
+#include "include.h"    /* pulls in every SE header transitively */
+#include "se_api.h"
 
-/*-----------------------------------------------------------------------------
- *  Runtime lifecycle
- *---------------------------------------------------------------------------*/
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <math.h>
+#include <signal.h>
+#include <setjmp.h>
 
-/*
- * Initialize Evolver runtime (global state, memory, etc.).
- *
- * Recommended implementation:
- *  - Factor the non-interactive initialization parts out of main() in
- *    core/tmain.c into a helper, then call that helper here.
- *  - Do NOT start the command loop here; this should be a one-shot init.
- */
-int se_init_runtime(void)
+/* ── output capture ───────────────────────────────────────────────────── */
+
+static char   *cap_out_buf  = NULL;
+static size_t  cap_out_size = 0;
+static FILE   *cap_out_fd   = NULL;
+
+static char   *cap_err_buf  = NULL;
+static size_t  cap_err_size = 0;
+static FILE   *cap_err_fd   = NULL;
+
+/* Last API-level error description (not the same as SE's errmsg). */
+static char se_errmsg_buf[4096];
+
+static int se_initialized = 0;
+
+/* Open (or re-open) both capture streams and point SE's global FILE*
+ * pointers at them. */
+static void open_capture_streams(void)
 {
-  /* TODO: factor initialization from main() in core/tmain.c and call it. */
-  return 0;  /* 0 = success */
+    cap_out_fd = open_memstream(&cap_out_buf, &cap_out_size);
+    cap_err_fd = open_memstream(&cap_err_buf, &cap_err_size);
+    outfd    = cap_out_fd;
+    erroutfd = cap_err_fd;
 }
 
-/*
- * Optional: clean up global state if you need explicit teardown.
- * For now this is just a placeholder.
- */
-void se_shutdown_runtime(void)
+/* Flush, close, free, and reopen a single capture stream.
+ * *global_fd is updated so SE's outfd / erroutfd stay valid. */
+static void reset_cap(FILE **fd, char **buf, size_t *sz, FILE **global_fd)
 {
-  /* TODO: add any explicit cleanup needed for a long‑running host process. */
+    fflush(*fd);
+    fclose(*fd);
+    free(*buf);
+    *buf = NULL;
+    *sz  = 0;
+    *fd  = open_memstream(buf, sz);
+    if (global_fd)
+        *global_fd = *fd;
 }
 
-/*-----------------------------------------------------------------------------
- *  Datafile loading
- *---------------------------------------------------------------------------*/
+/* ── se_init ──────────────────────────────────────────────────────────── */
 
-/*
- * Load a Surface Evolver datafile (.fe) from disk.
- *
- * Recommended implementation:
- *  - Use the same path as normal startup does when invoked as
- *      evolver some.fe
- *    e.g. via startup(path) or exec_file(), and associated datafile
- *    parsing helpers in core/datafile.lex and core/userio.c.
- */
-int se_load_datafile(const char *path)
+int se_init(void)
 {
-  if ( path == NULL )
-    return -1;
+    if (se_initialized)
+        return 0;
 
-  /* TODO: open and load the datafile using existing Evolver loaders. */
-  (void)path;
-  return -1;  /* non-zero = failure until implemented */
-}
+    /* message buffer used by SE's sprintf-based output helpers */
+    msgmax = 2000;
+    if (!msg)
+        msg = my_list_calloc(1, msgmax, ETERNAL_BLOCK);
 
-/*
- * Load a model from an in‑memory datafile string.
- *
- * Recommended implementation:
- *  - Wrap the text in a FILE* (e.g. fmemopen on POSIX) and feed it to the
- *    existing datafile parser (exec_file / push_datafd stack).
- */
-int se_load_data(const char *text, int length)
-{
-  if ( text == NULL || length <= 0 )
-    return -1;
+    set_ctypes();   /* ctype tables used by the parser */
 
-  /* TODO: feed 'text' into the datafile parser (e.g. via fmemopen + exec_file). */
-  (void)text;
-  (void)length;
-  return -1;
-}
+    /* compute machine epsilon, precision constants */
+    { REAL eps, one = 1.0;
+      for (eps = 1.0; one + eps != one; eps /= 2.0);
+      machine_eps      = 2.0 * eps;
+      root8machine_eps = sqrt(sqrt(sqrt((double)machine_eps)));
+      DPREC            = (int)floor(-log((double)machine_eps) / log(10.0));
+      DWIDTH           = DPREC + 3;
+    }
 
-/*-----------------------------------------------------------------------------
- *  Command execution with captured text output
- *---------------------------------------------------------------------------*/
+    if (sizeof(element_id) > sizeof(REAL)) {
+        snprintf(se_errmsg_buf, sizeof(se_errmsg_buf),
+                 "Bad datatype sizes: element_id (%zu bytes) > REAL (%zu bytes)",
+                 sizeof(element_id), sizeof(REAL));
+        return -1;
+    }
 
-/*
- * Execute a single Evolver command line, capturing textual output.
- *
- * Arguments:
- *  - cmd       : null‑terminated command string (e.g. "iterate 10").
- *  - out_buf   : caller‑allocated buffer to hold combined stdout/stderr.
- *  - out_len   : size of out_buf in bytes.
- *
- * Returns:
- *  - 0 on success, non‑zero on error.
- *
- * Recommended implementation:
- *  - Save current outfd / erroutfd (from userio.c).
- *  - Redirect them to a temporary FILE* or custom writer that appends to
- *    an internal buffer.
- *  - Call command((char *)cmd, 0) or exec_commands(...) as appropriate.
- *  - Restore outfd / erroutfd.
- *  - Copy the captured text into out_buf, ensuring null‑termination.
- */
-int se_exec_command(const char *cmd, char *out_buf, int out_len)
-{
-  if ( cmd == NULL || out_buf == NULL || out_len <= 0 )
-    return -1;
+    /* redirect SE output to in-memory buffers */
+    open_capture_streams();
 
-  /* Ensure the buffer always contains a valid empty string. */
-  out_buf[0] = '\0';
+    /* SE internal initializations that main() performs */
+    print_express(NULL, 0);   /* initialise string-expression allocation */
+    find_cpu_speed();
+    scoeff_init();            /* 1-D Gaussian integration coefficients   */
+    vcoeff_init();            /* volume integration coefficients          */
 
-  /* TODO:
-   *  - Capture output by temporarily redirecting outfd / erroutfd.
-   *  - Invoke command((char *)cmd, 0) or exec_commands().
-   *  - Copy captured output into out_buf (truncating if needed).
-   */
+    /* set up single-thread data structure (non-threaded path) */
+    if (!thread_data_ptrs) {
+        thread_data_ptrs    = &default_thread_data_ptr;
+        thread_data_ptrs[0] = &default_thread_data;
+    }
 
-  (void)cmd;
-  return -1;
-}
+    /* signal handlers – mirrors what main() installs */
+    signal(SIGINT, catcher);
+#ifdef SIGUSR1
+    signal(SIGUSR1, catcher);
+#endif
+#ifdef SIGTERM
+    signal(SIGTERM, catcher);
+#endif
+#ifdef SIGHUP
+    signal(SIGHUP, catcher);
+#endif
+#ifdef SIGPIPE
+    signal(SIGPIPE, catcher);
+#endif
 
-/*-----------------------------------------------------------------------------
- *  Mesh export for graphics
- *---------------------------------------------------------------------------*/
+    /* prime the error-recovery jump target so kb_error longjmps land
+     * somewhere safe rather than into uninitialised stack memory */
+    subshell_depth = 0;
+    setjmp(jumpbuf[0]);
 
-/*
- * Get the number of active vertices and facets in the current web.
- *
- * Recommended implementation:
- *  - Use web.skel[VERTEX].count and web.skel[FACET].count, or iterate with
- *    FOR_ALL_VERTICES / FOR_ALL_FACETS if you need more control.
- */
-int se_get_vertex_count(void)
-{
-  /* TODO: return the actual number of active vertices. */
-  return 0;
-}
-
-int se_get_facet_count(void)
-{
-  /* TODO: return the actual number of active facets. */
-  return 0;
-}
-
-/*
- * Export vertex positions as doubles in a flat array.
- *
- * Conventions:
- *  - out_xyz must have space for at least 3 * max_vertices doubles.
- *  - Vertex i is stored at out_xyz[3*i + 0..2] = (x, y, z).
- *  - Returns the number of vertices actually written (<= max_vertices).
- *
- * Recommended implementation:
- *  - Iterate over all vertices in a deterministic order (e.g. by ordinal or
- *    FOR_ALL_VERTICES).
- *  - For each vertex_id v, obtain coordinates with get_coord(v) (REAL*),
- *    then cast to double.
- */
-int se_get_vertices(double *out_xyz, int max_vertices)
-{
-  if ( out_xyz == NULL || max_vertices <= 0 )
+    se_errmsg_buf[0] = '\0';
+    se_initialized   = 1;
     return 0;
-
-  /* TODO: fill out_xyz with vertex coordinates and return count. */
-  (void)out_xyz;
-  (void)max_vertices;
-  return 0;
 }
 
-/*
- * Export triangular facets as indices into the vertex array.
- *
- * Conventions:
- *  - out_tris must have space for at least 3 * max_facets ints.
- *  - Facet j is stored at out_tris[3*j + 0..2] = (v0, v1, v2), where
- *    v* are 0‑based indices into the vertex list returned by se_get_vertices.
- *  - Returns the number of facets actually written (<= max_facets).
- *
- * Recommended implementation:
- *  - Build a mapping from vertex_id to a compact index [0..N-1] using
- *    loc_ordinal(v) and an auxiliary array.
- *  - Iterate over facets with FOR_ALL_FACETS(f_id) and, for each,
- *    recover its 3 vertices via facetedge / edge helpers.
- */
-int se_get_facets(int *out_tris, int max_facets)
+/* ── se_load ──────────────────────────────────────────────────────────── */
+
+int se_load(const char *filename)
 {
-  if ( out_tris == NULL || max_facets <= 0 )
+    if (!se_initialized)
+        return -1;
+
+    /* kb_error(UNRECOVERABLE,...) longjmps to jumpbuf[subshell_depth].
+     * Catch it here so the caller gets a clean error return. */
+    subshell_depth = 0;
+    if (setjmp(jumpbuf[0]) != 0) {
+        fflush(cap_out_fd);
+        snprintf(se_errmsg_buf, sizeof(se_errmsg_buf),
+                 "Error loading '%s'", filename ? filename : "(null)");
+        return -1;
+    }
+
+    /* startup() resets global web state, opens and parses the .fe file */
+    startup((char *)filename);
+
+    /* ensure energy / area / volumes are computed */
+    recalc();
+
+    se_errmsg_buf[0] = '\0';
     return 0;
-
-  /* TODO: fill out_tris with facet vertex indices and return count. */
-  (void)out_tris;
-  (void)max_facets;
-  return 0;
 }
 
-/*-----------------------------------------------------------------------------
- *  Simple status helpers (optional)
- *---------------------------------------------------------------------------*/
+/* ── se_run ───────────────────────────────────────────────────────────── */
 
-double se_get_total_energy(void)
+int se_run(const char *cmd)
 {
-  /* TODO: read from web.total_energy or recompute as needed. */
-  return 0.0;
+    if (!se_initialized || !cmd)
+        return -1;
+
+    /* Establish a fresh jumpbuf[0] so that RECOVERABLE errors (which call
+     * longjmp(jumpbuf[subshell_depth], 1) from kb_error's bailout path)
+     * land here rather than in a stale stack frame from se_load().
+     * kb_error's bailout also closes our capture streams and resets
+     * outfd/erroutfd to stdout/stderr, so we must re-open them on error. */
+    subshell_depth = 0;
+    if (setjmp(jumpbuf[0]) != 0) {
+        /* A RECOVERABLE error escaped command()'s cmdbuf handler.
+         * Re-establish the capture streams that kb_error's bailout closed. */
+        open_capture_streams();
+        snprintf(se_errmsg_buf, sizeof(se_errmsg_buf),
+                 "SE error during command: %s", cmd);
+        return -1;
+    }
+
+    /* old_menu() calls command() which has its own cmdbuf setjmp for
+     * parse/command errors, then calls recalc() if change_flag is set.
+     * command() returns 1 on normal success, 0 on parse/runtime error,
+     * END_COMMANDS on quit.  Normalise to POSIX: 0 = success, -1 = error. */
+    int retval = old_menu((char *)cmd);
+    return (retval == 1) ? 0 : -1;
 }
 
-double se_get_total_area(void)
+/* ── se_iterate ───────────────────────────────────────────────────────── */
+
+void se_iterate(int steps)
 {
-  /* TODO: read from web.total_area or recompute as needed. */
-  return 0.0;
+    char buf[64];
+    if (!se_initialized || steps <= 0)
+        return;
+    snprintf(buf, sizeof(buf), "g %d", steps);
+    se_run(buf);
 }
 
-int se_get_dimension(void)
+/* ── scalar state accessors ───────────────────────────────────────────── */
+
+double se_get_energy(void) { return (double)web.total_energy; }
+double se_get_area(void)   { return (double)web.total_area;   }
+double se_get_scale(void)  { return (double)web.scale;        }
+
+void se_set_scale(double s)
 {
-  /* Web dimension (surface dimension). */
-  return web.dimension;
+    web.scale = (REAL)s;
 }
 
-int se_get_space_dim(void)
+int se_get_sdim(void)         { return web.sdim; }
+int se_get_vertex_count(void) { return (int)web.skel[VERTEX].count; }
+int se_get_edge_count(void)   { return (int)web.skel[EDGE].count;   }
+int se_get_facet_count(void)  { return (int)web.skel[FACET].count;  }
+int se_get_body_count(void)   { return web.bodycount;               }
+
+/* ── se_get_vertices ──────────────────────────────────────────────────── */
+
+int se_get_vertices(double *out, int max_count)
 {
-  /* Ambient space dimension. */
-  return SDIM;
+    vertex_id v_id;
+    int sdim = web.sdim;
+    int n    = 0;
+
+    if (!se_initialized || !out || max_count <= 0)
+        return -1;
+
+    FOR_ALL_VERTICES(v_id) {
+        REAL *x = get_coord(v_id);
+        int j;
+        if (n >= max_count)
+            break;
+        for (j = 0; j < sdim; j++)
+            out[n * sdim + j] = (double)x[j];
+        n++;
+    }
+    return n;
 }
 
+/* ── se_get_vertex_ids ────────────────────────────────────────────────── */
+
+int se_get_vertex_ids(int *ids, int max_count)
+{
+    vertex_id v_id;
+    int n = 0;
+
+    if (!se_initialized || !ids || max_count <= 0)
+        return -1;
+
+    FOR_ALL_VERTICES(v_id) {
+        if (n >= max_count)
+            break;
+        ids[n++] = ordinal(v_id) + 1;  /* 1-based, matching SE display */
+    }
+    return n;
+}
+
+/* ── se_get_facets ────────────────────────────────────────────────────── */
+
+int se_get_facets(int *out, int max_count)
+{
+    facet_id f_id;
+    int n = 0;
+
+    if (!se_initialized || !out || max_count <= 0)
+        return -1;
+    if (web.representation != SOAPFILM)
+        return -1;
+
+    FOR_ALL_FACETS(f_id) {
+        facetedge_id fe;
+        int verts[3];
+        int k;
+
+        if (n >= max_count)
+            break;
+        if (inverted(f_id))
+            continue;
+
+        fe = get_facet_fe(f_id);
+        if (!valid_id(fe))
+            continue;
+
+        for (k = 0; k < 3; k++) {
+            verts[k] = ordinal(get_fe_tailv(fe));  /* 0-based vertex index */
+            fe = get_next_facet(fe);
+        }
+        out[n * 3 + 0] = verts[0];
+        out[n * 3 + 1] = verts[1];
+        out[n * 3 + 2] = verts[2];
+        n++;
+    }
+    return n;
+}
+
+/* ── se_get_body_volumes ──────────────────────────────────────────────── */
+
+int se_get_body_volumes(double *volumes, double *pressures, int max_count)
+{
+    body_id b_id;
+    int n = 0;
+
+    if (!se_initialized || max_count <= 0)
+        return -1;
+
+    FOR_ALL_BODIES(b_id) {
+        if (n >= max_count)
+            break;
+        if (volumes)   volumes[n]   = (double)get_body_volume(b_id);
+        if (pressures) pressures[n] = (double)get_body_pressure(b_id);
+        n++;
+    }
+    return n;
+}
+
+/* ── output capture helpers ───────────────────────────────────────────── */
+
+int se_pop_output(char *buf, int bufsize)
+{
+    int n;
+    if (!buf || bufsize <= 0)
+        return -1;
+    fflush(cap_out_fd);
+    n = (int)(cap_out_size < (size_t)(bufsize - 1)
+              ? cap_out_size : (size_t)(bufsize - 1));
+    if (n > 0)
+        memcpy(buf, cap_out_buf, n);
+    buf[n] = '\0';
+    reset_cap(&cap_out_fd, &cap_out_buf, &cap_out_size, &outfd);
+    return n;
+}
+
+int se_pop_errout(char *buf, int bufsize)
+{
+    int n;
+    if (!buf || bufsize <= 0)
+        return -1;
+    fflush(cap_err_fd);
+    n = (int)(cap_err_size < (size_t)(bufsize - 1)
+              ? cap_err_size : (size_t)(bufsize - 1));
+    if (n > 0)
+        memcpy(buf, cap_err_buf, n);
+    buf[n] = '\0';
+    reset_cap(&cap_err_fd, &cap_err_buf, &cap_err_size, &erroutfd);
+    return n;
+}
+
+const char *se_last_error(void)
+{
+    return se_errmsg_buf;
+}
