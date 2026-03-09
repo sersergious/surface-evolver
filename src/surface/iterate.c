@@ -519,7 +519,8 @@ void move_vertices(
   if ( itdebug )
     outstring("move_vertices(): by scale factor times velocity\n");
 
-  
+  local_move_vertices(mode, scale);  /* actually displace vertex coordinates */
+
   if ( web.homothety )
      homothety();
 
@@ -528,9 +529,9 @@ void move_vertices(
   partner_move(); /* in case doing partners */
 
   project_all(1, mode);
- 
 
-  if ( fixed_constraint_flag || web.pressure_flag || web.pressflag ) 
+
+  if ( fixed_constraint_flag || web.pressure_flag || web.pressflag )
      calc_pressure();
 
   calc_energy();  /* energy after motion */
@@ -780,12 +781,12 @@ void thread_project_all(int mode2)
 *   NOTE: relies on mode to determine where to save, rather than saver
 */
 void save_coords(
-  struct oldcoord *saver,  
+  struct oldcoord *saver,
   int mode  /* SAVE_IN_ATTR if use vertex attribute __oldx  */
             /* SAVE_SEPARATE for separate memory allocation */
 )
 {
-  
+  local_save_coords(saver, mode);
 } // end save_coords()
 
 
@@ -876,6 +877,7 @@ void restore_coords(
   int mode
 )
 {
+  local_restore_coords(saver, mode);
 } // end restore_coords()
 
 /****************************************************************
@@ -1651,11 +1653,13 @@ void convert_forms_to_vectors(
   int mode /* bits for CALC_FORCE and CALC_VOLGRADS */
 )
 {
-  if ( itdebug ) 
+  if ( itdebug )
   { sprintf(msg,"convert_forms_to_vectors(%s %s)\n",
        (mode&CALC_FORCE)?"CALC_FORCE":"",(mode&CALC_VOLGRADS)?"CALC_VOLGRADS":"");
     outstring(msg);
   }
+
+  local_convert_forms_to_vectors(mode);
 
 } // end convert_forms_to_vectors()
 

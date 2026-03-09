@@ -66,8 +66,9 @@ void thread_calc_facet_forces()
 *  Purpose:  Wrapper for total energy calculation.    
 */
 
-void calc_energy() 
+void calc_energy()
 {
+  local_calc_energy();
 } // end calc_energy()
 
 /*******************************************************************
@@ -251,8 +252,9 @@ quantities_only:
 *
 */
 
-void calc_force()  
+void calc_force()
 {
+  local_calc_force();
 } // end calc_force()
 
 /****************************************************************

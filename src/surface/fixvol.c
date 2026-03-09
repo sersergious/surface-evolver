@@ -39,8 +39,8 @@ void calc_volgrads(int mode)
 {
    if ( itdebug)
     outstring("Calculating volgrads.\n");
- 
-   
+
+  local_calc_volgrads(mode);
 
 #ifdef _DEBUGXXX
   if ( itdebug ) /* dump vgrads */
@@ -652,8 +652,10 @@ void calc_leftside()
     }
   }
   degfree += optparamcount;
-  
-  if ( degfree < fixcount ) 
+
+  local_calc_leftside();  /* add vertex volume-gradient contributions */
+
+  if ( degfree < fixcount )
   { sprintf(errmsg,
        "Degrees of freedom, %d, is less than number of constraints, %d\n",
        degfree,fixcount);
@@ -914,6 +916,8 @@ void lagrange_adjust()
               globals(optparam[i].pnum)->attr.varstuff.pscale*
                  optparam_congrads[i][volk];
       }
+
+  local_lagrange_adjust();  /* adjust vertex forces by Lagrange multipliers */
 
 } /* end lagrange_adjust() */
 
