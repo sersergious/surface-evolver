@@ -428,6 +428,7 @@ void painter_start()
      maxcount *= web.dimension+1; /* each simplex face becomes facet */
   allocsize = (long)maxcount*sizeof(struct tsort);
   painter_multiple_sweep_flag = 0;
+#ifdef __linux__
   { struct sysinfo s;
     sysinfo(&s);
     if ( allocsize > (size_t)(s.freeram)*s.mem_unit/4 )
@@ -435,6 +436,7 @@ void painter_start()
       maxcount = (size_t)(s.freeram)*s.mem_unit/4;
     }
   }
+#endif
   trilist = (struct tsort *)temp_calloc(maxcount,sizeof(struct tsort));
   count = 0;
   if ( painter_multiple_sweep_flag )

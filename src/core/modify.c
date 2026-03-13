@@ -1175,10 +1175,15 @@ void cross_cut(
   }
 
   /* link up facet-edges */
-  set_next_edge(get_prev_edge(first_fe),new_fe_old);
-  set_prev_edge(new_fe_old,get_prev_edge(first_fe));
-  set_prev_edge(get_next_edge(last_fe),new_fe_old);
-  set_next_edge(new_fe_old,get_next_edge(last_fe));
+  /* Save these before any writes: when prev(first_fe)==last_fe, line 1178 would corrupt
+     the value that lines 1180-1181 need to read, creating a self-loop and infinite loop. */
+  { facetedge_id prev_first = get_prev_edge(first_fe);
+    facetedge_id next_last  = get_next_edge(last_fe);
+    set_next_edge(prev_first, new_fe_old);
+    set_prev_edge(new_fe_old, prev_first);
+    set_prev_edge(next_last,  new_fe_old);
+    set_next_edge(new_fe_old, next_last);
+  }
   set_prev_edge(first_fe,new_fe_new);
   set_next_edge(new_fe_new,first_fe);
   set_next_edge(last_fe,new_fe_new);

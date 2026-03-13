@@ -3,7 +3,7 @@
 ## Docker Instructions
 
 - First, build the program using Docker:
-    ```ockerfile    
+    ```dockerfile    
     docker build -t surface-evolver .
     ```
 - Run by executing the following:
