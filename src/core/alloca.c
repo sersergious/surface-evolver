@@ -23,6 +23,10 @@
 
 #include "include.h"
 
-void * alloca(size_t size) 
-{ return (void*)malloc(size); 
+/* GCC and Clang provide alloca as a builtin; only compile this fallback
+ * on compilers that don't (e.g. old MSVC or exotic embedded toolchains). */
+#ifndef __GNUC__
+void * alloca(size_t size)
+{ return (void*)malloc(size);
 }
+#endif

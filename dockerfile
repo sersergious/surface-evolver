@@ -1,26 +1,28 @@
-FROM gcc:latest AS builder
+# ── Stage 1: Build ──────────────────────────────────────────────────────────
+FROM debian:bookworm-slim AS builder
 
-RUN apt-get update && apt-get install -y \
-    build-essential \
-    libx11-dev \
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        build-essential \
+        cmake \
     && rm -rf /var/lib/apt/lists/*
-    
 
 WORKDIR /app
 COPY . .
-RUN apt-get update && apt-get install -y  libx11-dev && apt-get clean && rm -rf /var/lib/apt/lists/*
-RUN cd src && sed -i 's/^CFLAGS= -DGENERIC/CFLAGS= -DLINUX -DOOGL/' Makefile \
-            && sed -i 's/^GRAPH= xgraph.o/GRAPH= xgraph.o/' Makefile \
-            && sed -i 's/^GRAPHLIB= -lX11/GRAPHLIB= -lX11/' Makefile \
-            && sed -i 's/^GRAPH_INCLUDE= xgraph.h/GRAPH_INCLUDE= xgraph.h/' Makefile \
-            && sed -i 's/^GRAPH_LIBRARY= xgraph.o/GRAPH_LIBRARY= xgraph.o/' Makefile \
-            && sed -i 's/^GRAPH_LIBRARY_PATH= \/usr\/local\/lib/GRAPH_LIBRARY_PATH= \/usr\/local\/lib/' Makefile \
-            && make clean && make -f Makefile
 
-FROM debian:trixie-slim
+# Headless build: no X11 needed inside a container.
+# Produces both surface_evolver and libse.so (Python/FFI bindings).
+RUN cmake -B build \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DSE_HEADLESS=ON \
+    && cmake --build build --parallel
+
+# ── Stage 2: Runtime ────────────────────────────────────────────────────────
+FROM debian:bookworm-slim
+
 WORKDIR /app
-RUN apt-get update && apt-get install -y libx11-6 && apt-get clean && rm -rf /var/lib/apt/lists/*
-COPY --from=builder /app/src/evolver ./
-COPY fe/ fe/
-CMD ["./evolver", "./fe/cube.fe"]
 
+COPY --from=builder /app/build/surface_evolver ./
+COPY --from=builder /app/build/libse.so ./
+COPY fe/ fe/
+
+CMD ["./surface_evolver", "./fe/cube.fe"]

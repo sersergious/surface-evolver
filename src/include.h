@@ -105,7 +105,9 @@ extern int DPREC;
 #include <sys/times.h>
 #include <sys/time.h>
 #include <sys/param.h>
+#ifdef __linux__
 #include <sys/sysinfo.h>
+#endif
 #include <glob.h>
 #define is_finite(x) (((x)>(-1e300))&&((x)<1e300))
 /* MAXALLOC is maximum size allocable by calloc() */
