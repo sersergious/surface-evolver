@@ -1,145 +1,192 @@
 """
 tests/python/test_se_api.py
 
-Python-layer tests for the Surface Evolver C API accessed via ctypes.
-These mirror the C tests in tests/c/test_se_api.c and serve as a
-canary for the Python binding layer that will live in bindings/python/.
+Pytest tests for the SurfaceEvolver CFFI wrapper (bindings/python/se.py).
 
-All tests use the session-scoped `loaded_cube` fixture (cube.fe loaded).
+Fixtures are session-scoped (cube.fe loaded once for the whole run).
 """
 
-import ctypes
 import math
+import os
 
-from conftest import _drain
+import pytest
 
-
-# ── element counts ────────────────────────────────────────────────────────────
-
-def test_vertex_count_positive(loaded_cube):
-    assert loaded_cube.se_get_vertex_count() > 0
+from bindings.python.se import SurfaceEvolver, SEError, _find_library
 
 
-def test_edge_count_positive(loaded_cube):
-    assert loaded_cube.se_get_edge_count() > 0
+# ── library path resolution ────────────────────────────────────────────────────
+
+class TestFindLibrary:
+    def test_default_path_resolves_to_existing_file(self):
+        """_find_library() must return a path that actually exists."""
+        path = _find_library()
+        assert os.path.isfile(path), f"Library not found at resolved path: {path}"
+
+    def test_env_var_override_is_used(self, monkeypatch, tmp_path):
+        """SE_LIB_PATH env var takes precedence over the default build directory."""
+        fake = tmp_path / "libse_fake.so"
+        fake.touch()
+        monkeypatch.setenv("SE_LIB_PATH", str(fake))
+        assert _find_library() == str(fake)
+
+    def test_missing_library_raises_file_not_found(self, monkeypatch):
+        """_find_library() raises FileNotFoundError when nothing is found."""
+        monkeypatch.delenv("SE_LIB_PATH", raising=False)
+        # Point the build dir somewhere that definitely has no library.
+        import bindings.python.se as se_module
+        original = se_module.__file__
+
+        # Temporarily redirect __file__ so _find_library resolves to /tmp.
+        monkeypatch.setattr(se_module, "__file__", "/nonexistent/path/se.py")
+        with pytest.raises(FileNotFoundError, match="libse not found"):
+            se_module._find_library()
 
 
-def test_facet_count_positive(loaded_cube):
-    assert loaded_cube.se_get_facet_count() > 0
+# ── SurfaceEvolver constructor ─────────────────────────────────────────────────
+
+class TestConstructor:
+    def test_instantiation_succeeds(self):
+        """SurfaceEvolver() succeeds when the library is present."""
+        se = SurfaceEvolver()
+        assert se is not None
+
+    def test_explicit_bad_path_raises(self):
+        """Passing a non-existent path raises an appropriate error."""
+        with pytest.raises(Exception):
+            SurfaceEvolver("/nonexistent/path/libse.so")
 
 
-def test_body_count_nonnegative(loaded_cube):
-    assert loaded_cube.se_get_body_count() >= 0
+# ── element counts ─────────────────────────────────────────────────────────────
+
+class TestElementCounts:
+    def test_vertex_count_positive(self, loaded_cube):
+        assert loaded_cube.vertex_count() > 0
+
+    def test_edge_count_positive(self, loaded_cube):
+        assert loaded_cube.edge_count() > 0
+
+    def test_facet_count_positive(self, loaded_cube):
+        assert loaded_cube.facet_count() > 0
+
+    def test_body_count_nonnegative(self, loaded_cube):
+        assert loaded_cube.body_count() >= 0
 
 
-def test_sdim_is_3(loaded_cube):
-    assert loaded_cube.se_get_sdim() == 3
+# ── scalar properties ──────────────────────────────────────────────────────────
+
+class TestScalarProperties:
+    def test_sdim_is_3(self, loaded_cube):
+        assert loaded_cube.sdim == 3
+
+    def test_energy_finite(self, loaded_cube):
+        assert math.isfinite(loaded_cube.energy)
+
+    def test_area_positive(self, loaded_cube):
+        assert math.isfinite(loaded_cube.area) and loaded_cube.area > 0.0
+
+    def test_scale_positive(self, loaded_cube):
+        assert math.isfinite(loaded_cube.scale) and loaded_cube.scale > 0.0
+
+    def test_scale_setter_roundtrip(self, loaded_cube):
+        original = loaded_cube.scale
+        loaded_cube.scale = original * 0.5
+        assert abs(loaded_cube.scale - original * 0.5) < 1e-12
+        loaded_cube.scale = original  # restore
 
 
-# ── scalar state ──────────────────────────────────────────────────────────────
+# ── iteration ──────────────────────────────────────────────────────────────────
 
-def test_energy_finite(loaded_cube):
-    assert math.isfinite(loaded_cube.se_get_energy())
-
-
-def test_area_positive(loaded_cube):
-    area = loaded_cube.se_get_area()
-    assert math.isfinite(area) and area > 0.0
-
-
-def test_scale_positive(loaded_cube):
-    scale = loaded_cube.se_get_scale()
-    assert math.isfinite(scale) and scale > 0.0
+class TestIteration:
+    def test_iterate_energy_nonincreasing(self, loaded_cube):
+        e0 = loaded_cube.energy
+        loaded_cube.iterate(10)
+        loaded_cube.pop_output()
+        e1 = loaded_cube.energy
+        assert math.isfinite(e1)
+        assert e1 >= 0.0
+        assert e1 <= e0 + 1e-6, f"Energy increased: {e0} → {e1}"
 
 
-def test_set_scale_roundtrip(loaded_cube):
-    original = loaded_cube.se_get_scale()
-    loaded_cube.se_set_scale(ctypes.c_double(original * 0.5))
-    assert abs(loaded_cube.se_get_scale() - original * 0.5) < 1e-12
-    loaded_cube.se_set_scale(ctypes.c_double(original))  # restore
+# ── mesh geometry ──────────────────────────────────────────────────────────────
+
+class TestMeshGeometry:
+    def test_get_vertices_returns_correct_count(self, loaded_cube):
+        n = loaded_cube.vertex_count()
+        verts = loaded_cube.get_vertices()
+        assert len(verts) == n
+
+    def test_get_vertices_are_3d_tuples(self, loaded_cube):
+        verts = loaded_cube.get_vertices()
+        assert all(len(v) == 3 for v in verts)
+
+    def test_get_vertices_all_finite(self, loaded_cube):
+        verts = loaded_cube.get_vertices()
+        assert all(math.isfinite(c) for v in verts for c in v)
+
+    def test_get_vertex_ids_returns_correct_count(self, loaded_cube):
+        n = loaded_cube.vertex_count()
+        ids = loaded_cube.get_vertex_ids()
+        assert len(ids) == n
+
+    def test_get_vertex_ids_are_positive(self, loaded_cube):
+        ids = loaded_cube.get_vertex_ids()
+        assert all(i > 0 for i in ids), "SE uses 1-based ordinals; all IDs must be > 0"
+
+    def test_get_facets_returns_list(self, loaded_cube):
+        facets = loaded_cube.get_facets()
+        # Non-linear models return an empty list; linear models return triangles.
+        assert isinstance(facets, list)
+
+    def test_get_facets_indices_nonnegative(self, loaded_cube):
+        facets = loaded_cube.get_facets()
+        if facets:
+            assert all(idx >= 0 for tri in facets for idx in tri)
+
+    def test_get_facets_are_triples(self, loaded_cube):
+        facets = loaded_cube.get_facets()
+        if facets:
+            assert all(len(tri) == 3 for tri in facets)
 
 
-# ── iteration ─────────────────────────────────────────────────────────────────
+# ── body data ──────────────────────────────────────────────────────────────────
 
-def test_iterate_energy_nonincreasing(loaded_cube):
-    e0 = loaded_cube.se_get_energy()
-    loaded_cube.se_iterate(10)
-    _drain(loaded_cube)
-    e1 = loaded_cube.se_get_energy()
-    assert math.isfinite(e1)
-    assert e1 >= 0.0
-    assert e1 <= e0 + 1e-6, f"Energy increased: {e0} → {e1}"
+class TestBodyData:
+    def test_get_body_volumes_returns_correct_count(self, loaded_cube):
+        nb = loaded_cube.body_count()
+        bodies = loaded_cube.get_body_volumes()
+        assert len(bodies) == nb
 
+    def test_get_body_volumes_finite(self, loaded_cube):
+        bodies = loaded_cube.get_body_volumes()
+        for b in bodies:
+            assert math.isfinite(b["volume"])
+            assert math.isfinite(b["pressure"])
 
-# ── mesh geometry ─────────────────────────────────────────────────────────────
-
-def test_get_vertices_shape_and_finite(loaded_cube):
-    n = loaded_cube.se_get_vertex_count()
-    assert n > 0
-
-    buf = (ctypes.c_double * (n * 3))()
-    written = loaded_cube.se_get_vertices(buf, n)
-    assert written == n
-
-    coords = list(buf)
-    assert all(math.isfinite(c) for c in coords), "Non-finite vertex coordinate found"
+    def test_get_body_volumes_have_expected_keys(self, loaded_cube):
+        bodies = loaded_cube.get_body_volumes()
+        for b in bodies:
+            assert "volume" in b and "pressure" in b
 
 
-def test_get_vertex_ids_positive(loaded_cube):
-    n = loaded_cube.se_get_vertex_count()
-    buf = (ctypes.c_int * n)()
-    written = loaded_cube.se_get_vertex_ids(buf, n)
-    assert written == n
-    assert all(i > 0 for i in buf), "Vertex ID <= 0 found (SE uses 1-based ordinals)"
+# ── command execution & output capture ────────────────────────────────────────
 
+class TestCommandExecution:
+    def test_run_print_captured_in_output(self, loaded_cube):
+        out = loaded_cube.run('print "hello_pytest"')
+        assert "hello_pytest" in out
 
-def test_get_facets_returns_valid(loaded_cube):
-    nf = loaded_cube.se_get_facet_count()
-    assert nf > 0
+    def test_pop_output_empty_after_drain(self, loaded_cube):
+        loaded_cube.pop_output()
+        assert loaded_cube.pop_output() == ""
 
-    buf = (ctypes.c_int * (nf * 3))()
-    written = loaded_cube.se_get_facets(buf, nf)
-    # -1 means non-LINEAR representation, which is valid for some models
-    assert written >= -1
-    if written > 0:
-        assert all(i >= 0 for i in buf), "Negative facet vertex index found"
+    def test_pop_errout_returns_string(self, loaded_cube):
+        result = loaded_cube.pop_errout()
+        assert isinstance(result, str)
 
+    def test_invalid_command_raises_se_error(self, loaded_cube):
+        with pytest.raises(SEError):
+            loaded_cube.run("not_a_real_command_xyz_abc")
 
-# ── body data ─────────────────────────────────────────────────────────────────
-
-def test_body_volumes_finite(loaded_cube):
-    nb = loaded_cube.se_get_body_count()
-    if nb == 0:
-        return  # no bodies in this model — skip silently
-
-    vols  = (ctypes.c_double * nb)()
-    press = (ctypes.c_double * nb)()
-    written = loaded_cube.se_get_body_volumes(vols, press, nb)
-    assert written == nb
-    assert all(math.isfinite(v) for v in vols)
-    assert all(math.isfinite(p) for p in press)
-
-
-# ── output capture ────────────────────────────────────────────────────────────
-
-def test_pop_output_captures_print(loaded_cube):
-    loaded_cube.se_run(b'print "hello_pytest"')
-    buf = ctypes.create_string_buffer(512)
-    n = loaded_cube.se_pop_output(buf, len(buf))
-    assert n >= 0
-    assert b"hello_pytest" in buf.raw
-
-
-def test_pop_output_empty_after_drain(loaded_cube):
-    _drain(loaded_cube)
-    buf = ctypes.create_string_buffer(512)
-    n = loaded_cube.se_pop_output(buf, len(buf))
-    assert n == 0
-
-
-def test_invalid_command_produces_error(loaded_cube):
-    rc = loaded_cube.se_run(b"not_a_real_command_xyz_abc")
-    err_buf = ctypes.create_string_buffer(1024)
-    loaded_cube.se_pop_errout(err_buf, len(err_buf))
-    # Either the call returns non-zero OR SE emits something on stderr
-    assert rc != 0 or len(err_buf.value) > 0
+    def test_last_error_returns_string(self, loaded_cube):
+        result = loaded_cube.last_error()
+        assert isinstance(result, str)
