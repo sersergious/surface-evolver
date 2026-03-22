@@ -10,30 +10,37 @@ This project wraps the C engine in a REST API and a browser UI so simulations ca
 
 ## Architecture
 
+### UI Layout
+
 ```
 ┌─────────────────┬────────────────────┬─────────────────────┐
-│   File Selector  │   CLI Interface    │   3D Visualization  │
-│  [cube.fe]       │  > g 5             │   [WebGL mesh]      │
-│  [octa.fe]       │  Energy: 2.45      │                     │
-│  [mound.fe]      │  > r               │   [OrbitControls]   │
+│   File Selector │   CLI Interface    │   3D Visualization  │
+├─────────────────┼────────────────────┼─────────────────────┤
+│  [cube.fe]      │  > g 5             │                     │
+│  [octa.fe]      │  Energy: 2.45      │   [WebGL mesh]      │
+│  [mound.fe]     │  > r               │   [OrbitControls]   │
 └─────────────────┴────────────────────┴─────────────────────┘
+```
 
+### System Architecture
+
+```
 React Frontend (port 3000)
-       ↕ HTTP/REST + WebSocket
+        ↕ HTTP/REST + WebSocket
 FastAPI Backend (port 8000)
-       ↕ CFFI (ABI mode)
-Python Wrapper  bindings/python/se.py
-       ↕ dlopen
-C API Facade    bindings/c/se_api.h  (17 functions)
-       ↕ direct calls
-Surface Evolver Engine  src/  (~100 C files)
+        ↕ CFFI (ABI mode)
+Python Wrapper (bindings/python/se.py)
+        ↕ dlopen
+C API Facade (bindings/c/se_api.h — 17 functions)
+        ↕ direct calls
+Surface Evolver Engine 
 ```
 
 ## Stack
 
 | Layer | Technology |
 |---|---|
-| Core engine | C (C11, ~100 files) — parser, gradient descent, mesh topology |
+| Core engine | C — parser, gradient descent, mesh topology |
 | C API | `bindings/c/se_api.h` — 17-function facade with output capture |
 | Python binding | CFFI ABI mode — `SurfaceEvolver` class in `bindings/python/se.py` |
 | Backend | FastAPI + uvicorn, Pydantic v2, asyncio + ThreadPoolExecutor(1) |
