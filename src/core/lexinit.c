@@ -112,7 +112,7 @@ void reset_web()
 
   reset_skeleton();  /* cleans out web and resets to 0 */
 
-
+  random_seed = default_random_seed;
   srand(random_seed); srand48(random_seed);
 
   file_no = 0;
@@ -191,6 +191,8 @@ void reset_web()
   bad_errors_count = 0; 
   hessian_slant_cutoff = 0.0;
   hessian_epsilon = hessian_epsilon_default;
+  sparse_constraints_flag = 1;
+  augmented_hessian_flag = -1;
   blas_flag = 0;
   last_error = 0;
   check_increase_flag = 0;

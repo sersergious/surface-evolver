@@ -25,4 +25,4 @@ COPY --from=builder /app/build/surface_evolver ./
 COPY --from=builder /app/build/libse.so ./
 COPY fe/ fe/
 
-CMD ["./surface_evolver", "./fe/cube.fe"]
+CMD ["./surface_evolver"]
