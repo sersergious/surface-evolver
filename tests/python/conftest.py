@@ -8,6 +8,13 @@ Set SE_FE_DIR   to override the directory containing .fe datafiles.
 """
 
 import os
+import sys
+
+# Allow `from app.xxx import ...` to resolve against backend/
+_BACKEND_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "backend")
+if _BACKEND_DIR not in sys.path:
+    sys.path.insert(0, os.path.abspath(_BACKEND_DIR))
+
 import pytest
 
 from bindings.python.se import SurfaceEvolver
