@@ -1,3 +1,8 @@
 /.cache
 /backup
 /build
+/.pytest_cache
+/.claude 
+/.github
+/__pycache__
+/.vscode

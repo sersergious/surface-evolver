@@ -158,6 +158,18 @@ int se_load(const char *filename)
     /* ensure energy / area / volumes are computed */
     recalc();
 
+    /* If startup produced error output and loaded no vertices, report failure */
+    fflush(cap_err_fd);
+    if (cap_err_size > 0 && web.skel[VERTEX].count == 0) {
+        int n = (int)(cap_err_size < sizeof(se_errmsg_buf) - 1
+                      ? cap_err_size : sizeof(se_errmsg_buf) - 1);
+        memcpy(se_errmsg_buf, cap_err_buf, n);
+        while (n > 0 && (se_errmsg_buf[n-1] == '\n' || se_errmsg_buf[n-1] == '\r'))
+            n--;
+        se_errmsg_buf[n] = '\0';
+        return -1;
+    }
+
     se_errmsg_buf[0] = '\0';
     return 0;
 }
@@ -177,10 +189,24 @@ int se_run(const char *cmd)
     subshell_depth = 0;
     if (setjmp(jumpbuf[0]) != 0) {
         /* A RECOVERABLE error escaped command()'s cmdbuf handler.
-         * Re-establish the capture streams that kb_error's bailout closed. */
+         * Flush and save errout content BEFORE reopening streams (which
+         * would discard it), so the caller can see the actual SE error. */
+        fflush(cap_err_fd);
+        if (cap_err_size > 0) {
+            int n = (int)(cap_err_size < sizeof(se_errmsg_buf) - 1
+                          ? cap_err_size : sizeof(se_errmsg_buf) - 1);
+            memcpy(se_errmsg_buf, cap_err_buf, n);
+            /* strip trailing newline for cleaner messages */
+            while (n > 0 && (se_errmsg_buf[n-1] == '\n' ||
+                             se_errmsg_buf[n-1] == '\r'))
+                n--;
+            se_errmsg_buf[n] = '\0';
+        } else {
+            snprintf(se_errmsg_buf, sizeof(se_errmsg_buf),
+                     "SE error during command: %s", cmd);
+        }
+        /* Re-establish the capture streams that kb_error's bailout closed. */
         open_capture_streams();
-        snprintf(se_errmsg_buf, sizeof(se_errmsg_buf),
-                 "SE error during command: %s", cmd);
         return -1;
     }
 
@@ -266,12 +292,30 @@ int se_get_vertex_ids(int *ids, int max_count)
 int se_get_facets(int *out, int max_count)
 {
     facet_id f_id;
+    vertex_id v_id;
     int n = 0;
+    int max_ord = 0;
+    int *ord_to_pos = NULL;
+    int pos;
 
     if (!se_initialized || !out || max_count <= 0)
         return -1;
     if (web.representation != SOAPFILM)
         return -1;
+
+    /* Build ordinal→position map so indices match se_get_vertices() order.
+     * Ordinals can have gaps after vertex deletions. */
+    FOR_ALL_VERTICES(v_id) {
+        int ord = ordinal(v_id);
+        if (ord > max_ord) max_ord = ord;
+    }
+    ord_to_pos = (int *)calloc(max_ord + 1, sizeof(int));
+    if (!ord_to_pos)
+        return -1;
+    pos = 0;
+    FOR_ALL_VERTICES(v_id) {
+        ord_to_pos[ordinal(v_id)] = pos++;
+    }
 
     FOR_ALL_FACETS(f_id) {
         facetedge_id fe;
@@ -288,14 +332,16 @@ int se_get_facets(int *out, int max_count)
             continue;
 
         for (k = 0; k < 3; k++) {
-            verts[k] = ordinal(get_fe_tailv(fe));  /* 0-based vertex index */
-            fe = get_next_facet(fe);
+            int ord = ordinal(get_fe_tailv(fe));
+            verts[k] = ord_to_pos[ord];  /* sequential position in vertex buf */
+            fe = get_next_edge(fe);      /* next edge around this facet */
         }
         out[n * 3 + 0] = verts[0];
         out[n * 3 + 1] = verts[1];
         out[n * 3 + 2] = verts[2];
         n++;
     }
+    free(ord_to_pos);
     return n;
 }
 
