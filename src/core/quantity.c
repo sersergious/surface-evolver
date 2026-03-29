@@ -1642,8 +1642,9 @@ REAL calc_quants(int mode  /* energy, constraint, and/or info flag bits */)
   for ( k = 0 ; k < gen_quant_count ; k++ )
   { q = GEN_QUANT(k);
     if ( q->flags & Q_DELETED ) continue;
-    if ( q->flags & mode ) 
-    { 
+    if ( q->flags & mode )
+    {
+      q->value = q->volconst;
       q->abstotal = 0.0;
       q->timestamp = global_timestamp;
     }

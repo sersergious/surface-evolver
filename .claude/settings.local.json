@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python3 -c \":*)",
+      "Bash(python3 -m pytest tests/python/test_backend_api.py -q)",
+      "Bash(grep \"^void local_\\\\|^REAL local_\\\\|^int local_\\\\|^static void local_\" backup/src/*.c)",
+      "Bash(grep \"local_calc_content\\\\|local_calc_force\\\\|local_calc_energy\\\\|local_calc_volgrads\\\\|local_calc_leftside\\\\|local_calc_rightside\\\\|local_lagrange_adjust\\\\|local_volume_restore\\\\|local_move_vertices\\\\|local_save_coords\\\\|local_restore_coords\\\\|local_unsave_coords\\\\|local_convert_forms\\\\|local_refine\\\\|local_update_display\" src/surface/*.c src/core/*.c src/graphics/*.c)",
+      "Read(//Users/sersergious/dev-projects/surface-evolver/**)",
+      "Bash(bash /tmp/check_gaps.sh)",
+      "Bash(for f:*)",
+      "Bash(do echo:*)",
+      "Bash(git diff:*)",
+      "Bash(grep -v \"^-$\\\\|^- $\")",
+      "Bash(grep -n \"case ''H''\" /Users/sersergious/dev-projects/surface-evolver/src/core/command.c)",
+      "Bash(wc -l /Users/sersergious/dev-projects/surface-evolver/src/surface/hessian*.c)",
+      "Bash(echo \"load ''''fe/cube.fe'''':*)",
+      "Bash(./build/surface_evolver)",
+      "Bash(head -5 grep -n \"longjmp\\\\|fclose.*outfd\\\\|erroutfd = \" /Users/sersergious/dev-projects/surface-evolver/src/core/tmain.c)",
+      "Bash(python3 -m json.tool)",
+      "Bash(node -e \"const p=require\\(''./package.json''\\); console.log\\(JSON.stringify\\({...p.dependencies,...p.devDependencies}, null, 2\\)\\)\")"
+    ]
+  }
+}

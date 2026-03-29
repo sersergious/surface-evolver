@@ -762,6 +762,7 @@ void calc_lagrange()
   rightside = (REAL*)temp_calloc(maxquants,sizeof(REAL));
   vpressures = (REAL*)temp_calloc(maxquants,sizeof(REAL));
 
+  local_calc_rightside();
 
   /* optimizing_parameter contributions */
   if ( optparamcount )
@@ -1174,9 +1175,10 @@ void volume_restore (
        }
      }
 
+  local_volume_restore(stepsize,mode);
 
   partner_move();  /* in case doing partners */
-  
+
   if ( vol_deficit ) temp_free((char *)vol_deficit);  vol_deficit = NULL;
   if ( vol_restore ) temp_free((char *)vol_restore);  vol_restore = NULL;
 

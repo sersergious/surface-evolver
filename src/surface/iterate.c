@@ -987,6 +987,7 @@ void unsave_coords(
   int mode
 )
 {
+  local_unsave_coords(saver,mode);
 } // end unsave_coords()
 
 /********************************************************************
@@ -1206,9 +1207,10 @@ REAL estimate_decrease()
 { int i;
   REAL change = 0.0;
 
-  for ( i = 0 ; i < optparamcount ; i++ ) 
+  for ( i = 0 ; i < optparamcount ; i++ )
     change += web.scale*optparam[i].grad*optparam[i].velocity;
 
+  change += v_estimate();
 
   estimated_change = -change;  /* for estimated_change internal variable */
   return -change;  /* negative since forces are opposite gradients */
@@ -1305,16 +1307,16 @@ void cg_calc_gamma()
   int i;
 
   if ( ribiere_flag )
-  { 
-
-    for ( i = 0 ; i < optparamcount ; i++ ) 
+  {
+    rsum = ribiere_calc();
+    for ( i = 0 ; i < optparamcount ; i++ )
     { rsum += optparam[i].grad*optparam[i].oldgrad;
       optparam[i].oldgrad = optparam[i].grad;
     }
   }
 
-
-  for ( i = 0 ; i < optparamcount ; i++ ) 
+  sum = cg_sum_calc();
+  for ( i = 0 ; i < optparamcount ; i++ )
       sum += optparam[i].velocity*optparam[i].grad;
 
   if ( cg_oldsum >= 1e-15 )
@@ -1387,8 +1389,9 @@ void cg_direction()
 {
   int i;
 
+  cg_direction_local();
 
-  for ( i = 0 ; i < optparamcount ; i++ ) 
+  for ( i = 0 ; i < optparamcount ; i++ )
   { optparam[i].grad += cg_gamma*optparam[i].cg;
     optparam[i].cg = optparam[i].grad;
   }
