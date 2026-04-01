@@ -34,7 +34,11 @@ const useStore = create<StoreState>((set) => ({
   setSession: (id, file) => set({ sessionId: id, activeFile: file }),
   clearSession: () => set({ sessionId: null, activeFile: null, energy: null, area: null }),
   setStats: (energy, area) => set({ energy, area }),
-  appendLog: (line) => set((s) => ({ outputLog: [...s.outputLog, line] })),
+  appendLog: (line) =>
+    set((s) => {
+      const next = [...s.outputLog, line]
+      return { outputLog: next.length > 1000 ? next.slice(next.length - 1000) : next }
+    }),
   clearLog: () => set({ outputLog: [] }),
   bumpMeshVersion: () => set((s) => ({ meshVersion: s.meshVersion + 1 })),
   setJob: (id) => set({ jobId: id, jobProgress: null }),

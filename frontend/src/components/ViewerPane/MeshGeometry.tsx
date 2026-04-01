@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo } from 'react'
 import * as THREE from 'three'
 import { Edges } from '@react-three/drei'
 import type { MeshData } from '../../api/simulation'
@@ -20,20 +20,26 @@ export default function MeshGeometry({ mesh }: Props) {
     return geo
   }, [mesh])
 
+  useEffect(() => {
+    return () => { geometry.dispose() }
+  }, [geometry])
+
   return (
     <mesh geometry={geometry}>
       {/* Phong shading — closer to SE's original OpenGL look */}
       <meshPhongMaterial
-        color="#2a6fa8"
-        specular="#88ccff"
+        color="#2d9a5e"
+        specular="#80e0aa"
         shininess={40}
         side={THREE.DoubleSide}
         polygonOffset
         polygonOffsetFactor={1}
         polygonOffsetUnits={1}
       />
-      {/* Crisp edge wireframe overlay, like SE's default display */}
-      <Edges threshold={1} color="#a8d4f0" lineWidth={0.8} />
+      {/* Edge overlay hidden above 200k facets — it dominates render time at that scale */}
+      {mesh.facets.length <= 200000 && (
+        <Edges threshold={1} color="#94d4b0" lineWidth={0.8} />
+      )}
     </mesh>
   )
 }

@@ -15,16 +15,13 @@ export interface RunCommandResponse {
 }
 
 export async function iterateSession(id: string, steps: number): Promise<JobResult> {
-  const res = await client.post<JobResult>(`/sessions/${id}/iterate`, { steps })
-  return res.data
+  return client.post<JobResult>(`/sessions/${id}/iterate`, { steps })
 }
 
 export async function runCommand(id: string, command: string): Promise<RunCommandResponse> {
-  const res = await client.post<RunCommandResponse>(`/sessions/${id}/run`, { command })
-  return res.data
+  return client.post<RunCommandResponse>(`/sessions/${id}/run`, { command })
 }
 
 export async function getMesh(id: string): Promise<MeshData> {
-  const res = await client.get<MeshData>(`/sessions/${id}/mesh`)
-  return res.data
+  return client.get<MeshData>(`/sessions/${id}/mesh`)
 }

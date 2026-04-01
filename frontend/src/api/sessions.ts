@@ -12,20 +12,17 @@ export interface SessionState {
 }
 
 export async function createSession(feFile: string): Promise<SessionState> {
-  const res = await client.post<SessionState>('/sessions', { fe_file: feFile })
-  return res.data
+  return client.post<SessionState>('/sessions', { fe_file: feFile })
 }
 
 export async function listSessions(): Promise<SessionState[]> {
-  const res = await client.get<SessionState[]>('/sessions')
-  return res.data
+  return client.get<SessionState[]>('/sessions')
 }
 
 export async function getSession(id: string): Promise<SessionState> {
-  const res = await client.get<SessionState>(`/sessions/${id}`)
-  return res.data
+  return client.get<SessionState>(`/sessions/${id}`)
 }
 
 export async function deleteSession(id: string): Promise<void> {
-  await client.delete(`/sessions/${id}`)
+  return client.delete(`/sessions/${id}`)
 }
