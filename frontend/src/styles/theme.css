@@ -1,0 +1,45 @@
+/* GitHub Light theme (default) */
+:root {
+  --gh-bg-base:        #ffffff;
+  --gh-bg-surface:     #f6f8fa;
+  --gh-bg-elevated:    #eaeef2;
+  --gh-bg-input:       #ffffff;
+  --gh-border:         #d0d7de;
+  --gh-border-muted:   #eaeef2;
+  --gh-text-primary:   #1f2328;
+  --gh-text-secondary: #656d76;
+  --gh-text-muted:     #9198a1;
+  --gh-accent:         #0969da;
+  --gh-accent-hover:   #0550ae;
+  --gh-success:        #1a7f37;
+  --gh-error:          #d1242f;
+  --gh-warning:        #9a6700;
+  --gh-btn-bg:         #f6f8fa;
+  --gh-btn-border:     #d0d7de;
+  --gh-btn-text:       #1f2328;
+  --gh-btn-hover-bg:   #eaeef2;
+}
+
+/* GitHub Dark theme — activated automatically by OS preference */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --gh-bg-base:        #0d1117;
+    --gh-bg-surface:     #161b22;
+    --gh-bg-elevated:    #21262d;
+    --gh-bg-input:       #010409;
+    --gh-border:         #30363d;
+    --gh-border-muted:   #21262d;
+    --gh-text-primary:   #c9d1d9;
+    --gh-text-secondary: #8b949e;
+    --gh-text-muted:     #484f58;
+    --gh-accent:         #58a6ff;
+    --gh-accent-hover:   #79c0ff;
+    --gh-success:        #3fb950;
+    --gh-error:          #f85149;
+    --gh-warning:        #e3b341;
+    --gh-btn-bg:         #21262d;
+    --gh-btn-border:     #30363d;
+    --gh-btn-text:       #c9d1d9;
+    --gh-btn-hover-bg:   #30363d;
+  }
+}

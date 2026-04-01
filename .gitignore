@@ -1,8 +1,45 @@
-/.cache
-/backup
-/build
-/.pytest_cache
-/.claude 
-/.github
-/__pycache__
-/.vscode
+# ── OS ──────────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ── Editor / IDE ─────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ── Python ───────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+venv/
+.venv/
+*.egg-info/
+.pytest_cache/
+
+# ── C / CMake build ──────────────────────────────────────────────────────────
+build/
+*.o
+*.a
+*.so
+*.dylib
+*.dSYM/
+compile_commands.json
+
+# ── Node / Frontend ──────────────────────────────────────────────────────────
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+
+# ── Surface Evolver runtime files ────────────────────────────────────────────
+fe/*.dmp
+fe/*.tmp
+
+# ── Tool / editor caches ─────────────────────────────────────────────────────
+.cache/
+
+# ── Claude Code (machine-local settings) ─────────────────────────────────────
+.claude/
+
+# ── Backup directory ─────────────────────────────────────────────────────────
+backup/

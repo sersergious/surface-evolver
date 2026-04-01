@@ -14,10 +14,9 @@ export interface JobResult {
 }
 
 export async function getJob(jobId: string): Promise<JobResult> {
-  const res = await client.get<JobResult>(`/jobs/${jobId}`)
-  return res.data
+  return client.get<JobResult>(`/jobs/${jobId}`)
 }
 
 export async function cancelJob(jobId: string): Promise<void> {
-  await client.delete(`/jobs/${jobId}`)
+  return client.delete(`/jobs/${jobId}`)
 }

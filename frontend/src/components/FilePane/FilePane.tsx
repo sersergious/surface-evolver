@@ -2,7 +2,6 @@ import { useQuery } from '@tanstack/react-query'
 import { listFiles } from '../../api/files'
 import { createSession } from '../../api/sessions'
 import useStore from '../../store/useStore'
-import { gh } from '../../theme'
 
 export default function FilePane() {
   const { sessionId, activeFile, setSession, setStats, appendLog } = useStore()
@@ -27,24 +26,26 @@ export default function FilePane() {
   }
 
   return (
-    <div style={styles.pane}>
-      <div style={styles.header}>Explorer</div>
-      {isLoading && <div style={styles.hint}>Loading...</div>}
-      {!isLoading && files.length === 0 && (
-        <div style={styles.hint}>No .fe files found</div>
+    <div className="flex flex-col h-full bg-gh-bg-surface min-w-0">
+      <div className="px-3 py-2.5 text-[11px] font-semibold tracking-[0.08em] uppercase text-gh-text-secondary border-b border-gh-border">
+        Explorer
+      </div>
+      {isLoading && (
+        <div className="px-3 py-2 text-xs text-gh-text-muted">Loading...</div>
       )}
-      <ul style={styles.list}>
+      {!isLoading && files.length === 0 && (
+        <div className="px-3 py-2 text-xs text-gh-text-muted">No .fe files found</div>
+      )}
+      <ul className="list-none m-0 py-1 overflow-y-auto flex-1">
         {files.map((f) => (
           <li
             key={f}
-            style={{
-              ...styles.item,
-              background: activeFile === f ? gh.bgElevated : 'transparent',
-              borderLeft: activeFile === f
-                ? `2px solid ${gh.accent}`
-                : `2px solid transparent`,
-              color: activeFile === f ? gh.textPrimary : gh.textSecondary,
-            }}
+            className={[
+              'px-3 py-1.5 text-[13px] cursor-pointer select-none whitespace-nowrap overflow-hidden text-ellipsis transition-colors duration-100 border-l-2',
+              activeFile === f
+                ? 'bg-gh-bg-elevated border-gh-accent text-gh-text-primary'
+                : 'border-transparent text-gh-text-secondary hover:bg-gh-bg-elevated hover:text-gh-text-primary',
+            ].join(' ')}
             onClick={() => handleSelect(f)}
           >
             {f}
@@ -52,48 +53,11 @@ export default function FilePane() {
         ))}
       </ul>
       {sessionId && (
-        <div style={styles.sessionInfo}>
-          <span style={{ color: gh.textMuted }}>session</span>{' '}
-          <span style={{ color: gh.accent }}>{sessionId.slice(0, 8)}</span>
+        <div className="px-3 py-2 text-[11px] border-t border-gh-border font-mono">
+          <span className="text-gh-text-muted">session</span>{' '}
+          <span className="text-gh-accent">{sessionId.slice(0, 8)}</span>
         </div>
       )}
     </div>
   )
-}
-
-const styles: Record<string, React.CSSProperties> = {
-  pane: {
-    display: 'flex',
-    flexDirection: 'column',
-    height: '100%',
-    background: gh.bgSurface,
-    minWidth: 0,
-  },
-  header: {
-    padding: '10px 12px',
-    fontSize: 11,
-    fontWeight: 600,
-    letterSpacing: '0.08em',
-    textTransform: 'uppercase',
-    color: gh.textSecondary,
-    borderBottom: `1px solid ${gh.border}`,
-  },
-  hint: { padding: '8px 12px', fontSize: 12, color: gh.textMuted },
-  list: { listStyle: 'none', margin: 0, padding: '4px 0', overflowY: 'auto', flex: 1 },
-  item: {
-    padding: '6px 12px',
-    fontSize: 13,
-    cursor: 'pointer',
-    userSelect: 'none',
-    whiteSpace: 'nowrap',
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    transition: 'background 0.1s, color 0.1s',
-  },
-  sessionInfo: {
-    padding: '8px 12px',
-    fontSize: 11,
-    borderTop: `1px solid ${gh.border}`,
-    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-  },
 }
