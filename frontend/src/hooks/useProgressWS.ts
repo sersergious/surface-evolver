@@ -15,7 +15,7 @@ export function useProgressWS(sessionId: string | null) {
     function connect() {
       const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws'
       const ws = new WebSocket(
-        `${protocol}://${window.location.host}/api/v1/ws/sessions/${sessionId}/progress`
+        `${protocol}://${window.location.host}/api/ws/sessions/${sessionId}/progress`
       )
       wsRef.current = ws
 

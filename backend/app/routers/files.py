@@ -4,7 +4,7 @@ from fastapi import APIRouter
 
 from app.config import settings
 
-router = APIRouter(prefix="/api/v1/files", tags=["files"])
+router = APIRouter(prefix="/api/files", tags=["files"])
 
 
 @router.get("")

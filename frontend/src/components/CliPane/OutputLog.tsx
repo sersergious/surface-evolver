@@ -20,7 +20,7 @@ export default function OutputLog({ lines }: Props) {
           ? 'text-gh-accent'
           : line.startsWith('[job') || line.startsWith('[ws]')
           ? 'text-gh-text-muted'
-          : 'text-gh-text-secondary'
+          : 'text-gh-text-primary'
         return (
           <div key={i} className={`whitespace-pre-wrap break-all ${colorClass}`}>
             {line}

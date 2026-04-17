@@ -3,7 +3,7 @@ from fastapi import APIRouter, HTTPException
 from app.core import job_runner
 from app.models.job import JobResult
 
-router = APIRouter(prefix="/api/v1/jobs", tags=["jobs"])
+router = APIRouter(prefix="/api/jobs", tags=["jobs"])
 
 
 @router.get("/{job_id}", response_model=JobResult)

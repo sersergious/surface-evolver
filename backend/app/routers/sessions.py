@@ -7,7 +7,7 @@ from app.config import settings
 from app.core import session_store, se_manager
 from app.models.session import SessionCreate, SessionResponse, SessionState
 
-router = APIRouter(prefix="/api/v1/sessions", tags=["sessions"])
+router = APIRouter(prefix="/api/sessions", tags=["sessions"])
 
 
 @router.post("", response_model=SessionResponse, status_code=201)
