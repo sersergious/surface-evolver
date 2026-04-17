@@ -49,7 +49,7 @@ export default function CliPane() {
 
   return (
     <div className="flex flex-col h-full bg-gh-bg-surface min-w-0">
-      <div className="flex flex-wrap gap-4 items-center px-3 py-1.5 bg-gh-bg-elevated border-b border-gh-border">
+      <div className="flex flex-wrap gap-4 items-center px-3 py-2 bg-gh-bg-elevated border-b border-gh-border/60">
         <StatChip label="Energy" value={energy !== null ? energy.toFixed(6) : '—'} />
         <StatChip label="Area"   value={area   !== null ? area.toFixed(6)          : '—'} />
         {progressPct !== null && (
@@ -61,19 +61,21 @@ export default function CliPane() {
 
       <OutputLog lines={outputLog} />
 
-      <div className="flex items-center gap-1.5 px-2.5 py-1.5 border-t border-gh-border bg-gh-bg-elevated">
-        <span className="text-gh-success text-[13px] font-mono select-none">$</span>
-        <input
-          ref={inputRef}
-          className="flex-1 bg-transparent border-none outline-none text-gh-text-primary text-[13px] font-mono caret-gh-accent placeholder:text-gh-text-muted disabled:cursor-not-allowed"
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && handleRun()}
-          placeholder={sessionId ? 'SE command…' : 'Load a file first'}
-          disabled={!sessionId || busy}
-          spellCheck={false}
-          autoComplete="off"
-        />
+      <div className="flex items-center gap-2 px-2.5 py-2 border-t border-gh-border/60 bg-gh-bg-elevated">
+        <div className="flex items-center gap-1.5 flex-1 bg-gh-bg-input border border-gh-border/60 rounded-md px-2.5 py-1">
+          <span className="text-gh-success text-[13px] font-mono select-none">$</span>
+          <input
+            ref={inputRef}
+            className="flex-1 bg-transparent border-none outline-none text-gh-text-primary text-[13px] font-mono caret-gh-accent placeholder:text-gh-text-muted disabled:cursor-not-allowed"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleRun()}
+            placeholder={sessionId ? 'SE command…' : 'Load a file first'}
+            disabled={!sessionId || busy}
+            spellCheck={false}
+            autoComplete="off"
+          />
+        </div>
         {jobId !== null && (
           <button className={btnClass(false)} onClick={handleCancel}>
             Cancel
@@ -94,7 +96,7 @@ export default function CliPane() {
 function StatChip({ label, value }: { label: string; value: string }) {
   return (
     <span className="flex gap-1.5 items-baseline">
-      <span className="text-[10px] uppercase tracking-[0.06em] text-gh-text-muted">{label}</span>
+      <span className="text-[10px] uppercase tracking-[0.06em] text-gh-text-secondary">{label}</span>
       <span className="text-[12px] font-mono text-gh-text-primary">{value}</span>
     </span>
   )

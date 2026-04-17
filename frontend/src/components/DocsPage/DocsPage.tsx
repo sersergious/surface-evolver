@@ -184,13 +184,26 @@ export default function DocsPage() {
         </div>
 
         {/* Iframe */}
-        <main className="flex-1 overflow-hidden">
-          <iframe
-            key={activeFile}
-            src={`/docs/${activeFile}`}
-            className="w-full h-full border-none"
-            title={activeLabel}
-          />
+        <main className="flex-1 overflow-hidden flex justify-center">
+          <div className="w-full max-w-4xl h-full">
+            <iframe
+              key={activeFile}
+              src={`/docs/${activeFile}`}
+              className="w-full h-full border-none"
+              title={activeLabel}
+              onLoad={(e) => {
+                try {
+                  const pathname = e.currentTarget.contentWindow?.location.pathname ?? ''
+                  const file = pathname.split('/').pop()
+                  if (file && ALL_SECTIONS.some((s) => s.file === file)) {
+                    setActiveFile(file)
+                  }
+                } catch {
+                  // cross-origin — can't read location
+                }
+              }}
+            />
+          </div>
         </main>
       </div>
     </div>

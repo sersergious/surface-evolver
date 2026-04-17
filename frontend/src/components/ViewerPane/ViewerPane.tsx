@@ -1,9 +1,13 @@
-import { useRef } from 'react'
+import { useRef, useEffect, useState } from 'react'
+import * as THREE from 'three'
 import { Canvas } from '@react-three/fiber'
 import { OrbitControls } from '@react-three/drei'
 import { useMesh } from '../../hooks/useMesh'
 import useStore from '../../store/useStore'
-import MeshGeometry from './MeshGeometry'
+import MeshGeometry, { type RenderMode } from './MeshGeometry'
+
+const MODES: RenderMode[] = ['solid', 'wireframe', 'xray']
+const MODE_LABEL: Record<RenderMode, string> = { solid: 'Solid', wireframe: 'Wire', xray: 'X-Ray' }
 
 export default function ViewerPane() {
   const sessionId = useStore((s) => s.sessionId)
@@ -11,6 +15,34 @@ export default function ViewerPane() {
   const { data: mesh, isFetching } = useMesh()
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const controlsRef = useRef<any>(null)
+  const [mode, setMode] = useState<RenderMode>('solid')
+  const cycleMode = () => setMode((m) => MODES[(MODES.indexOf(m) + 1) % MODES.length])
+
+  useEffect(() => {
+    if (!controlsRef.current || !mesh) return
+    const positions = new Float32Array(mesh.vertices.flat())
+    const geo = new THREE.BufferGeometry()
+    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3))
+    geo.computeBoundingBox()
+    geo.computeBoundingSphere()
+    const center = new THREE.Vector3()
+    geo.boundingBox!.getCenter(center)
+    const radius = geo.boundingSphere!.radius || 1
+    geo.dispose()
+
+    // Frame the mesh: pull camera back along a fixed direction from center
+    const distance = radius * 3.5
+    const camera = controlsRef.current.object as THREE.Camera
+    camera.position.set(
+      center.x + distance * 0.7,
+      center.y + distance * 0.6,
+      center.z + distance * 0.7,
+    )
+    controlsRef.current.target.copy(center)
+    controlsRef.current.update()
+    // Save so reset() returns to this mesh-centered home view
+    controlsRef.current.saveState()
+  }, [mesh]);
 
   const progressPct = jobProgress
     ? Math.round((jobProgress.step / jobProgress.total) * 100)
@@ -39,14 +71,23 @@ export default function ViewerPane() {
         </div>
       )}
 
-      {/* Camera reset — top-left */}
-      <button
-        className="absolute top-2.5 left-3 z-20 text-[13px] leading-none text-gh-text-muted bg-gh-bg-elevated hover:text-gh-text-primary border border-gh-border rounded px-1.5 py-0.5 transition-colors duration-100 cursor-pointer"
-        onClick={() => controlsRef.current?.reset()}
-        title="Reset camera"
-      >
-        ↺
-      </button>
+      {/* Top-left controls */}
+      <div className="absolute top-2.5 left-3 z-20 flex items-center gap-1.5">
+        <button
+          className="text-[13px] leading-none text-gh-text-muted bg-gh-bg-elevated hover:text-gh-text-primary border border-gh-border rounded px-1.5 py-0.5 transition-colors duration-100 cursor-pointer"
+          onClick={() => controlsRef.current?.reset()}
+          title="Reset camera"
+        >
+          ↺
+        </button>
+        <button
+          className="text-[11px] leading-none text-gh-text-muted bg-gh-bg-elevated hover:text-gh-text-primary border border-gh-border rounded px-1.5 py-0.5 transition-colors duration-100 cursor-pointer"
+          onClick={cycleMode}
+          title="Cycle render mode"
+        >
+          {MODE_LABEL[mode]}
+        </button>
+      </div>
 
       {/* Mesh stats — bottom-right */}
       {mesh && (
@@ -64,10 +105,10 @@ export default function ViewerPane() {
       >
         {/* Lighting tuned to match SE's classic OpenGL look */}
         <ambientLight intensity={0.35} />
-        <directionalLight position={[4, 8, 4]}  intensity={0.9} />
+        <directionalLight position={[4, 8, 4]} intensity={0.9} />
         <directionalLight position={[-4, -2, -4]} intensity={0.2} color="#4488cc" />
 
-        {mesh && <MeshGeometry mesh={mesh} />}
+        {mesh && <MeshGeometry mesh={mesh} mode={mode} />}
         <OrbitControls ref={controlsRef} makeDefault />
       </Canvas>
     </div>

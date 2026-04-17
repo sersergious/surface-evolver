@@ -1,19 +1,17 @@
 """
-WebSocket endpoint: WS /api/v1/ws/sessions/{session_id}/progress
+WebSocket endpoint: WS /api/ws/sessions/{session_id}/progress
 
 Clients connect and receive JSON messages:
   { "type": "progress", "step": int, "total": int, "energy": float }
   { "type": "completed", "energy": float }
   { "type": "error", "message": str }
-
-TODO: integrate with job_runner / se_manager to push real events.
 """
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from app.core import session_store
 
-router = APIRouter(prefix="/api/v1/ws", tags=["ws"])
+router = APIRouter(prefix="/api/ws", tags=["ws"])
 
 # Simple per-session connection registry
 _connections: dict[str, list[WebSocket]] = {}

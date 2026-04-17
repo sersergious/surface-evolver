@@ -7,7 +7,7 @@ from app.models.mesh import MeshData
 from app.models.simulation import IterateRequest, RunCommandRequest, RunCommandResponse
 from app.ws.progress import broadcast
 
-router = APIRouter(prefix="/api/v1/sessions", tags=["simulation"])
+router = APIRouter(prefix="/api/sessions", tags=["simulation"])
 
 
 def _require_session(session_id: str):

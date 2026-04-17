@@ -4,7 +4,7 @@ import { createSession } from '../../api/sessions'
 import useStore from '../../store/useStore'
 
 export default function FilePane() {
-  const { sessionId, activeFile, setSession, setStats, appendLog } = useStore()
+  const { activeFile, setSession, setStats, appendLog } = useStore()
 
   const { data: files = [], isLoading } = useQuery({
     queryKey: ['files'],
@@ -27,7 +27,7 @@ export default function FilePane() {
 
   return (
     <div className="flex flex-col h-full bg-gh-bg-surface min-w-0">
-      <div className="px-3 py-2.5 text-[11px] font-semibold tracking-[0.08em] uppercase text-gh-text-secondary border-b border-gh-border">
+      <div className="px-3 py-2.5 text-[11px] font-semibold tracking-[0.08em] uppercase text-gh-text-secondary border-b border-gh-border/60">
         Explorer
       </div>
       {isLoading && (
@@ -52,12 +52,6 @@ export default function FilePane() {
           </li>
         ))}
       </ul>
-      {sessionId && (
-        <div className="px-3 py-2 text-[11px] border-t border-gh-border font-mono">
-          <span className="text-gh-text-muted">session</span>{' '}
-          <span className="text-gh-accent">{sessionId.slice(0, 8)}</span>
-        </div>
-      )}
     </div>
   )
 }

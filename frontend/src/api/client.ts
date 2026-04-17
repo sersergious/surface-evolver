@@ -1,4 +1,4 @@
-const BASE_URL = '/api/v1'
+const BASE_URL = '/api'
 const TIMEOUT_MS = 30_000
 
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {

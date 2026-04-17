@@ -3,12 +3,14 @@ import * as THREE from 'three'
 import { Edges } from '@react-three/drei'
 import type { MeshData } from '../../api/simulation'
 
+export type RenderMode = 'solid' | 'wireframe' | 'xray'
+
 interface Props {
   mesh: MeshData
+  mode: RenderMode
 }
 
-/** SE-style rendering: Phong-shaded faces + hard-edge wireframe overlay */
-export default function MeshGeometry({ mesh }: Props) {
+export default function MeshGeometry({ mesh, mode }: Props) {
   const geometry = useMemo(() => {
     const geo = new THREE.BufferGeometry()
     geo.setAttribute(
@@ -24,9 +26,43 @@ export default function MeshGeometry({ mesh }: Props) {
     return () => { geometry.dispose() }
   }, [geometry])
 
+  const showEdges = mesh.facets.length <= 200000
+
+  if (mode === 'wireframe') {
+    return (
+      <mesh geometry={geometry}>
+        <meshBasicMaterial
+          color="#94d4b0"
+          wireframe
+          side={THREE.DoubleSide}
+        />
+      </mesh>
+    )
+  }
+
+  if (mode === 'xray') {
+    return (
+      <mesh geometry={geometry}>
+        <meshPhongMaterial
+          color="#2d9a5e"
+          specular="#80e0aa"
+          shininess={40}
+          side={THREE.DoubleSide}
+          transparent
+          opacity={0.22}
+          depthWrite={false}
+          polygonOffset
+          polygonOffsetFactor={1}
+          polygonOffsetUnits={1}
+        />
+        {showEdges && <Edges threshold={1} color="#94d4b0" lineWidth={0.8} />}
+      </mesh>
+    )
+  }
+
+  // solid (default)
   return (
     <mesh geometry={geometry}>
-      {/* Phong shading — closer to SE's original OpenGL look */}
       <meshPhongMaterial
         color="#2d9a5e"
         specular="#80e0aa"
@@ -36,10 +72,7 @@ export default function MeshGeometry({ mesh }: Props) {
         polygonOffsetFactor={1}
         polygonOffsetUnits={1}
       />
-      {/* Edge overlay hidden above 200k facets — it dominates render time at that scale */}
-      {mesh.facets.length <= 200000 && (
-        <Edges threshold={1} color="#94d4b0" lineWidth={0.8} />
-      )}
+      {showEdges && <Edges threshold={1} color="#94d4b0" lineWidth={0.8} />}
     </mesh>
   )
 }
