@@ -84,6 +84,7 @@ def test_create_session_file_not_found(client, fe_dir):
     with patch("app.routers.sessions.settings") as mock_settings, \
          patch("app.routers.sessions.se_manager") as mock_se:
         mock_settings.se_fe_dir = str(fe_dir)
+        mock_settings.max_sessions = 10
         mock_se.is_busy.return_value = False
         r = client.post("/api/sessions", json={"fe_file": "missing.fe"})
     assert r.status_code == 404
@@ -93,6 +94,7 @@ def test_create_session_busy(client, fe_dir):
     with patch("app.routers.sessions.settings") as mock_settings, \
          patch("app.routers.sessions.se_manager") as mock_se:
         mock_settings.se_fe_dir = str(fe_dir)
+        mock_settings.max_sessions = 10
         mock_se.is_busy.return_value = True
         r = client.post("/api/sessions", json={"fe_file": "cube.fe"})
     assert r.status_code == 409
@@ -103,6 +105,7 @@ def test_create_session_success(client, fe_dir):
     with patch("app.routers.sessions.settings") as mock_settings, \
          patch("app.routers.sessions.se_manager") as mock_se:
         mock_settings.se_fe_dir = str(fe_dir)
+        mock_settings.max_sessions = 10
         mock_se.is_busy.return_value = False
         mock_se.load_session = AsyncMock(return_value=_LOAD_STATS)
 
@@ -122,6 +125,7 @@ def _seed_session(fe_dir, client) -> str:
     with patch("app.routers.sessions.settings") as mock_settings, \
          patch("app.routers.sessions.se_manager") as mock_se:
         mock_settings.se_fe_dir = str(fe_dir)
+        mock_settings.max_sessions = 10
         mock_se.is_busy.return_value = False
         mock_se.load_session = AsyncMock(return_value=_LOAD_STATS)
         r = client.post("/api/sessions", json={"fe_file": "cube.fe"})
