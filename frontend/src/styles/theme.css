@@ -1,45 +1,46 @@
-/* GitHub Light theme (default) */
+/* GitHub Light theme (default) — colors stored as R G B channels so that
+   Tailwind's opacity modifier (e.g. bg-gh-border/60) works correctly. */
 :root {
-  --gh-bg-base:        #ffffff;
-  --gh-bg-surface:     #f6f8fa;
-  --gh-bg-elevated:    #eaeef2;
-  --gh-bg-input:       #ffffff;
-  --gh-border:         #d0d7de;
-  --gh-border-muted:   #eaeef2;
-  --gh-text-primary:   #1f2328;
-  --gh-text-secondary: #656d76;
-  --gh-text-muted:     #9198a1;
-  --gh-accent:         #0969da;
-  --gh-accent-hover:   #0550ae;
-  --gh-success:        #1a7f37;
-  --gh-error:          #d1242f;
-  --gh-warning:        #9a6700;
-  --gh-btn-bg:         #f6f8fa;
-  --gh-btn-border:     #d0d7de;
-  --gh-btn-text:       #1f2328;
-  --gh-btn-hover-bg:   #eaeef2;
+  --gh-bg-base:        255 255 255;
+  --gh-bg-surface:     246 248 250;
+  --gh-bg-elevated:    234 238 242;
+  --gh-bg-input:       255 255 255;
+  --gh-border:         208 215 222;
+  --gh-border-muted:   234 238 242;
+  --gh-text-primary:   31 35 40;
+  --gh-text-secondary: 101 109 118;
+  --gh-text-muted:     145 152 161;
+  --gh-accent:         9 105 218;
+  --gh-accent-hover:   5 80 174;
+  --gh-success:        26 127 55;
+  --gh-error:          209 36 47;
+  --gh-warning:        154 103 0;
+  --gh-btn-bg:         246 248 250;
+  --gh-btn-border:     208 215 222;
+  --gh-btn-text:       31 35 40;
+  --gh-btn-hover-bg:   234 238 242;
 }
 
 /* GitHub Dark theme — activated automatically by OS preference */
 @media (prefers-color-scheme: dark) {
   :root {
-    --gh-bg-base:        #0d1117;
-    --gh-bg-surface:     #161b22;
-    --gh-bg-elevated:    #21262d;
-    --gh-bg-input:       #010409;
-    --gh-border:         #30363d;
-    --gh-border-muted:   #21262d;
-    --gh-text-primary:   #c9d1d9;
-    --gh-text-secondary: #8b949e;
-    --gh-text-muted:     #484f58;
-    --gh-accent:         #58a6ff;
-    --gh-accent-hover:   #79c0ff;
-    --gh-success:        #3fb950;
-    --gh-error:          #f85149;
-    --gh-warning:        #e3b341;
-    --gh-btn-bg:         #21262d;
-    --gh-btn-border:     #30363d;
-    --gh-btn-text:       #c9d1d9;
-    --gh-btn-hover-bg:   #30363d;
+    --gh-bg-base:        13 17 23;
+    --gh-bg-surface:     22 27 34;
+    --gh-bg-elevated:    33 38 45;
+    --gh-bg-input:       1 4 9;
+    --gh-border:         48 54 61;
+    --gh-border-muted:   33 38 45;
+    --gh-text-primary:   201 209 217;
+    --gh-text-secondary: 139 148 158;
+    --gh-text-muted:     72 79 88;
+    --gh-accent:         88 166 255;
+    --gh-accent-hover:   121 192 255;
+    --gh-success:        63 185 80;
+    --gh-error:          248 81 73;
+    --gh-warning:        227 179 65;
+    --gh-btn-bg:         33 38 45;
+    --gh-btn-border:     48 54 61;
+    --gh-btn-text:       201 209 217;
+    --gh-btn-hover-bg:   48 54 61;
   }
 }

@@ -193,7 +193,21 @@ export default function DocsPage() {
               title={activeLabel}
               onLoad={(e) => {
                 try {
-                  const pathname = e.currentTarget.contentWindow?.location.pathname ?? ''
+                  const iframe = e.currentTarget
+                  const doc = iframe.contentDocument
+                  if (doc?.head) {
+                    const style = doc.createElement('style')
+                    style.textContent = `
+                      @media (prefers-color-scheme: dark) {
+                        ::-webkit-scrollbar { width: 6px; height: 6px; }
+                        ::-webkit-scrollbar-track { background: #0d1117; }
+                        ::-webkit-scrollbar-thumb { background: #30363d; border-radius: 3px; }
+                        ::-webkit-scrollbar-thumb:hover { background: #484f58; }
+                      }
+                    `
+                    doc.head.appendChild(style)
+                  }
+                  const pathname = iframe.contentWindow?.location.pathname ?? ''
                   const file = pathname.split('/').pop()
                   if (file && ALL_SECTIONS.some((s) => s.file === file)) {
                     setActiveFile(file)

@@ -57,6 +57,13 @@ export default function ViewerPane() {
           </span>
         </div>
       )}
+      {sessionId && mesh && mesh.facets.length === 0 && (
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
+          <span className="text-[13px] text-gh-text-muted bg-gh-bg-elevated px-3.5 py-1.5 rounded-md border border-gh-border">
+            No surface — this model uses a non-triangulated representation
+          </span>
+        </div>
+      )}
       {isFetching && (
         <div className="absolute top-2.5 right-3 text-[11px] text-gh-accent bg-gh-bg-elevated px-2 py-[3px] rounded border border-gh-border z-20 pointer-events-none">
           Loading mesh…
@@ -108,7 +115,7 @@ export default function ViewerPane() {
         <directionalLight position={[4, 8, 4]} intensity={0.9} />
         <directionalLight position={[-4, -2, -4]} intensity={0.2} color="#4488cc" />
 
-        {mesh && <MeshGeometry mesh={mesh} mode={mode} />}
+        {mesh && mesh.facets.length > 0 && <MeshGeometry mesh={mesh} mode={mode} />}
         <OrbitControls ref={controlsRef} makeDefault />
       </Canvas>
     </div>

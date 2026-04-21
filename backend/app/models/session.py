@@ -1,4 +1,5 @@
-from pydantic import BaseModel
+from datetime import datetime
+from pydantic import BaseModel, Field
 
 
 class SessionCreate(BaseModel):
@@ -14,6 +15,7 @@ class SessionState(BaseModel):
     vertex_count: int | None = None
     facet_count: int | None = None
     edge_count: int | None = None
+    last_accessed: datetime = Field(default_factory=datetime.utcnow)
 
 
 class SessionResponse(SessionState):

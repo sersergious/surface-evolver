@@ -21,6 +21,7 @@ WORKDIR /app
 
 COPY --from=se-builder /app/build/libse.so /app/libse.so
 COPY --from=se-builder /app/fe             /app/fe
+RUN ln -sf /app/fe/OCTA.WLF /app/fe/octa.wlf
 
 COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
@@ -30,6 +31,7 @@ COPY backend/app     /app/app
 
 ENV SE_LIB_PATH=/app/libse.so \
     SE_FE_DIR=/app/fe \
+    EVOLVERPATH=/app/fe \
     PYTHONPATH=/app
 
 EXPOSE 8000

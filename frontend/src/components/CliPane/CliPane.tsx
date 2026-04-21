@@ -1,11 +1,10 @@
 import { useState, useRef } from 'react'
 import { runCommand } from '../../api/simulation'
-import { cancelJob } from '../../api/jobs'
 import useStore from '../../store/useStore'
 import OutputLog from './OutputLog'
 
 export default function CliPane() {
-  const { sessionId, energy, area, outputLog, appendLog, setStats, bumpMeshVersion, jobProgress, jobId, clearJob } = useStore()
+  const { sessionId, energy, area, outputLog, appendLog, setStats, bumpMeshVersion, jobProgress } = useStore()
   const [input, setInput] = useState('')
   const [busy, setBusy] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -32,24 +31,13 @@ export default function CliPane() {
     }
   }
 
-  async function handleCancel() {
-    if (!jobId) return
-    try {
-      await cancelJob(jobId)
-      appendLog('[job] cancelled')
-      clearJob()
-    } catch (err: unknown) {
-      appendLog(`[error] cancel failed: ${err instanceof Error ? err.message : String(err)}`)
-    }
-  }
-
   const progressPct = jobProgress
     ? Math.round((jobProgress.step / jobProgress.total) * 100)
     : null
 
   return (
     <div className="flex flex-col h-full bg-gh-bg-surface min-w-0">
-      <div className="flex flex-wrap gap-4 items-center px-3 py-2 bg-gh-bg-elevated border-b border-gh-border/60">
+      <div className="flex flex-wrap gap-4 items-center px-3 py-2.5 bg-gh-bg-elevated border-b border-gh-border/60">
         <StatChip label="Energy" value={energy !== null ? energy.toFixed(6) : '—'} />
         <StatChip label="Area"   value={area   !== null ? area.toFixed(6)          : '—'} />
         {progressPct !== null && (
@@ -61,8 +49,8 @@ export default function CliPane() {
 
       <OutputLog lines={outputLog} />
 
-      <div className="flex items-center gap-2 px-2.5 py-2 border-t border-gh-border/60 bg-gh-bg-elevated">
-        <div className="flex items-center gap-1.5 flex-1 bg-gh-bg-input border border-gh-border/60 rounded-md px-2.5 py-1">
+      <div className="flex items-center gap-2 px-2.5 py-2.5 border-t border-gh-border/60 bg-gh-bg-elevated">
+        <div className="flex items-center gap-1.5 flex-1 bg-gh-bg-input border border-gh-border/60 rounded-md px-2.5 py-1.5">
           <span className="text-gh-success text-[13px] font-mono select-none">$</span>
           <input
             ref={inputRef}
@@ -76,11 +64,6 @@ export default function CliPane() {
             autoComplete="off"
           />
         </div>
-        {jobId !== null && (
-          <button className={btnClass(false)} onClick={handleCancel}>
-            Cancel
-          </button>
-        )}
         <button
           className={btnClass(!sessionId || !input.trim() || busy)}
           onClick={handleRun}
@@ -104,7 +87,7 @@ function StatChip({ label, value }: { label: string; value: string }) {
 
 function btnClass(disabled: boolean) {
   return [
-    'px-3 py-1 text-xs rounded-md border border-gh-btn-border transition-colors duration-100',
+    'px-3 py-1.5 text-xs rounded-md border border-gh-btn-border transition-colors duration-100',
     disabled
       ? 'bg-transparent text-gh-text-muted cursor-not-allowed opacity-50'
       : 'bg-gh-btn-bg text-gh-btn-text cursor-pointer hover:bg-gh-btn-hover-bg',

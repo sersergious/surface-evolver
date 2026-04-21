@@ -20,7 +20,7 @@ function HelpButton() {
   return (
     <button
       onClick={() => navigate('/docs')}
-      className="px-3 py-1.5 text-[12px] font-medium rounded border border-gh-btn-border bg-gh-btn-bg text-gh-btn-text hover:bg-gh-btn-hover-bg transition-colors duration-100 select-none"
+      className="px-3 py-1.5 text-[12px] font-medium rounded border border-gh-btn-border bg-gh-bg-surface text-gh-btn-text hover:bg-gh-bg-elevated transition-colors duration-100 select-none"
     >
       Help
     </button>
@@ -78,7 +78,7 @@ function Inner() {
             <div className="flex-1 min-h-0 overflow-hidden">
               <FilePane />
             </div>
-            <div className="flex-none px-3 py-2.5 border-t border-gh-border/60 bg-gh-bg-elevated flex items-center justify-between">
+            <div className="flex-none px-3 py-2.5 border-t border-gh-border/60 bg-gh-bg-surface flex items-center justify-between">
               <HelpButton />
               {sessionId && (
                 <div className="text-[11px] font-mono">

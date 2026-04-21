@@ -12,8 +12,8 @@
   }
 
   body {
-    background: var(--gh-bg-base);
-    color: var(--gh-text-primary);
+    background: rgb(var(--gh-bg-base));
+    color: rgb(var(--gh-text-primary));
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial,
       sans-serif;
   }
@@ -24,13 +24,13 @@
     height: 6px;
   }
   ::-webkit-scrollbar-track {
-    background: var(--gh-bg-base);
+    background: rgb(var(--gh-bg-base));
   }
   ::-webkit-scrollbar-thumb {
-    background: var(--gh-border);
+    background: rgb(var(--gh-border));
     border-radius: 3px;
   }
   ::-webkit-scrollbar-thumb:hover {
-    background: var(--gh-text-muted);
+    background: rgb(var(--gh-text-muted));
   }
 }

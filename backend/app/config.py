@@ -7,6 +7,9 @@ class Settings(BaseSettings):
     backend_host: str = "0.0.0.0"
     backend_port: int = 8000
     cors_origins: list[str] = ["http://localhost:3000", "http://localhost:5173"]
+    demo_username: str = "demo"
+    demo_password: str = ""
+    max_sessions: int = 10
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 

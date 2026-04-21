@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from app.models.session import SessionState
 
 # In-memory store: session_id -> SessionState
@@ -5,7 +7,14 @@ _store: dict[str, SessionState] = {}
 
 
 def get(session_id: str) -> SessionState | None:
-    return _store.get(session_id)
+    session = _store.get(session_id)
+    if session:
+        session.last_accessed = datetime.utcnow()
+    return session
+
+
+def count() -> int:
+    return len(_store)
 
 
 def all_sessions() -> list[SessionState]:

@@ -1,7 +1,8 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 
 from bindings.python.se import SEError
 from app.core import session_store, job_runner, se_manager
+from app.core.rate_limit import limiter
 from app.models.job import JobResult
 from app.models.mesh import MeshData
 from app.models.simulation import IterateRequest, RunCommandRequest, RunCommandResponse
@@ -27,7 +28,8 @@ def _check_busy():
 
 
 @router.post("/{session_id}/iterate", response_model=JobResult, status_code=202)
-async def iterate(session_id: str, body: IterateRequest) -> JobResult:
+@limiter.limit("10/minute")
+async def iterate(request: Request, session_id: str, body: IterateRequest) -> JobResult:
     _require_session(session_id)
     _check_busy()
 
@@ -42,7 +44,8 @@ async def iterate(session_id: str, body: IterateRequest) -> JobResult:
 
 
 @router.post("/{session_id}/run", response_model=RunCommandResponse)
-async def run_command(session_id: str, body: RunCommandRequest) -> RunCommandResponse:
+@limiter.limit("30/minute")
+async def run_command(request: Request, session_id: str, body: RunCommandRequest) -> RunCommandResponse:
     _require_session(session_id)
     _check_busy()
 

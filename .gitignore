@@ -44,5 +44,7 @@ fe/*.tmp
 # ── Backup directory ─────────────────────────────────────────────────────────
 backup/
 
+docs/
+
 system-design.md
 test-design.md
