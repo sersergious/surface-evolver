@@ -1,18 +1,28 @@
 import uuid
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 
 from app.config import settings
 from app.core import session_store, se_manager
+from app.core.rate_limit import limiter
 from app.models.session import SessionCreate, SessionResponse, SessionState
 
 router = APIRouter(prefix="/api/sessions", tags=["sessions"])
 
 
 @router.post("", response_model=SessionResponse, status_code=201)
-async def create_session(body: SessionCreate) -> SessionResponse:
-    fe_path = Path(settings.se_fe_dir) / body.fe_file
+@limiter.limit("5/minute")
+async def create_session(request: Request, body: SessionCreate) -> SessionResponse:
+    if session_store.count() >= settings.max_sessions:
+        raise HTTPException(status_code=429, detail="Maximum concurrent sessions reached")
+
+    fe_dir = Path(settings.se_fe_dir).resolve()
+    try:
+        fe_path = fe_dir.joinpath(body.fe_file).resolve()
+        fe_path.relative_to(fe_dir)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid file path")
     if not fe_path.exists():
         raise HTTPException(status_code=404, detail=f"File not found: {body.fe_file}")
 
@@ -60,3 +70,4 @@ async def get_session(session_id: str) -> SessionResponse:
 async def delete_session(session_id: str) -> None:
     if not session_store.delete(session_id):
         raise HTTPException(status_code=404, detail="Session not found")
+    se_manager.clear_session(session_id)

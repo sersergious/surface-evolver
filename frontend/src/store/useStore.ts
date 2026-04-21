@@ -7,7 +7,6 @@ interface StoreState {
   area: number | null
   outputLog: string[]
   meshVersion: number
-  jobId: string | null
   jobProgress: { step: number; total: number } | null
 
   setSession: (id: string, file: string) => void
@@ -16,7 +15,6 @@ interface StoreState {
   appendLog: (line: string) => void
   clearLog: () => void
   bumpMeshVersion: () => void
-  setJob: (id: string) => void
   clearJob: () => void
   setJobProgress: (step: number, total: number) => void
 }
@@ -28,7 +26,6 @@ const useStore = create<StoreState>((set) => ({
   area: null,
   outputLog: [],
   meshVersion: 0,
-  jobId: null,
   jobProgress: null,
 
   setSession: (id, file) => set({ sessionId: id, activeFile: file }),
@@ -41,8 +38,7 @@ const useStore = create<StoreState>((set) => ({
     }),
   clearLog: () => set({ outputLog: [] }),
   bumpMeshVersion: () => set((s) => ({ meshVersion: s.meshVersion + 1 })),
-  setJob: (id) => set({ jobId: id, jobProgress: null }),
-  clearJob: () => set({ jobId: null, jobProgress: null }),
+  clearJob: () => set({ jobProgress: null }),
   setJobProgress: (step, total) => set({ jobProgress: { step, total } }),
 }))
 

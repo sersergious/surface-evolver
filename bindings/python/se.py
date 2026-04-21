@@ -18,7 +18,6 @@ Set SE_LIB_PATH env var to override the default library search path.
 """
 
 import os
-import sys
 
 import cffi
 
@@ -182,6 +181,8 @@ class SurfaceEvolver:
     def get_vertices(self) -> list[tuple[float, ...]]:
         """Return vertex coordinates as a list of (x, y, z) tuples."""
         n = self.vertex_count()
+        if n == 0:
+            return []
         dim = self.sdim
         buf = _ffi.new("double[]", n * dim)
         written = self._lib.se_get_vertices(buf, n)
@@ -195,6 +196,8 @@ class SurfaceEvolver:
     def get_vertex_ids(self) -> list[int]:
         """Return the 1-based SE ordinal for each vertex (same order as get_vertices)."""
         n = self.vertex_count()
+        if n == 0:
+            return []
         buf = _ffi.new("int[]", n)
         written = self._lib.se_get_vertex_ids(buf, n)
         if written < 0:
@@ -202,12 +205,16 @@ class SurfaceEvolver:
         return list(buf[0:written])
 
     def get_facets(self) -> list[tuple[int, int, int]]:
-        """Return triangle connectivity as a list of (v0, v1, v2) index tuples (0-based)."""
+        """Return triangle connectivity as a list of (v0, v1, v2) index tuples (0-based).
+        Returns [] for non-SOAPFILM representations (STRING, simplex, etc.)."""
         n = self.facet_count()
+        if n == 0:
+            return []
         buf = _ffi.new("int[]", n * 3)
         written = self._lib.se_get_facets(buf, n)
         if written < 0:
-            raise SEError(f"se_get_facets() failed: {self.last_error()}")
+            # non-SOAPFILM representation (STRING, simplex, etc.) — no triangles
+            return []
         return [
             (buf[i * 3], buf[i * 3 + 1], buf[i * 3 + 2])
             for i in range(written)
@@ -218,6 +225,8 @@ class SurfaceEvolver:
     def get_body_volumes(self) -> list[dict[str, float]]:
         """Return [{"volume": …, "pressure": …}, …] for each body."""
         n = self.body_count()
+        if n == 0:
+            return []
         vols = _ffi.new("double[]", n)
         pres = _ffi.new("double[]", n)
         written = self._lib.se_get_body_volumes(vols, pres, n)
