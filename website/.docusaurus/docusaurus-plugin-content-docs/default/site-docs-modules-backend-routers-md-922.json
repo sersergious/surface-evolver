@@ -1,0 +1,24 @@
+{
+  "id": "modules/backend-routers",
+  "title": "Backend Routers",
+  "description": "The FastAPI application registers four HTTP routers and one WebSocket router. All routers are mounted in backend/app/main.py with no common prefix (each router declares its own prefix).",
+  "source": "@site/../docs/modules/backend-routers.md",
+  "sourceDirName": "modules",
+  "slug": "/modules/backend-routers",
+  "permalink": "/surface-evolver/modules/backend-routers",
+  "draft": false,
+  "unlisted": false,
+  "editUrl": "https://github.com/sersergious/surface-evolver/edit/main/../docs/modules/backend-routers.md",
+  "tags": [],
+  "version": "current",
+  "frontMatter": {},
+  "sidebar": "docs",
+  "previous": {
+    "title": "Backend Core",
+    "permalink": "/surface-evolver/modules/backend-core"
+  },
+  "next": {
+    "title": ".fe Simulation Datafiles",
+    "permalink": "/surface-evolver/modules/fe-datafiles"
+  }
+}

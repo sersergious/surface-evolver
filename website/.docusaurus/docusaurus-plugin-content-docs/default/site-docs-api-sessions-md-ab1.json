@@ -1,0 +1,24 @@
+{
+  "id": "api/sessions",
+  "title": "Sessions API",
+  "description": "Sessions represent a loaded .fe file in the Surface Evolver engine. Because the engine is a global singleton, only one session's surface data can be active at a time (tracked by activesessionid in semanager). However, multiple SessionState records can coexist in the in-memory store.",
+  "source": "@site/../docs/api/sessions.md",
+  "sourceDirName": "api",
+  "slug": "/api/sessions",
+  "permalink": "/surface-evolver/api/sessions",
+  "draft": false,
+  "unlisted": false,
+  "editUrl": "https://github.com/sersergious/surface-evolver/edit/main/../docs/api/sessions.md",
+  "tags": [],
+  "version": "current",
+  "frontMatter": {},
+  "sidebar": "docs",
+  "previous": {
+    "title": ".fe Simulation Datafiles",
+    "permalink": "/surface-evolver/modules/fe-datafiles"
+  },
+  "next": {
+    "title": "Simulation API",
+    "permalink": "/surface-evolver/api/simulation"
+  }
+}

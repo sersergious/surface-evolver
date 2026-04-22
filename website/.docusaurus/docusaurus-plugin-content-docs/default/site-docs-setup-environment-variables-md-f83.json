@@ -1,0 +1,24 @@
+{
+  "id": "setup/environment-variables",
+  "title": "Environment Variables",
+  "description": "All backend configuration is managed through backend/app/config.py using pydantic-settings. Variables can be set via the shell environment or a .env file in the backend working directory.",
+  "source": "@site/../docs/setup/environment-variables.md",
+  "sourceDirName": "setup",
+  "slug": "/setup/environment-variables",
+  "permalink": "/surface-evolver/setup/environment-variables",
+  "draft": false,
+  "unlisted": false,
+  "editUrl": "https://github.com/sersergious/surface-evolver/edit/main/../docs/setup/environment-variables.md",
+  "tags": [],
+  "version": "current",
+  "frontMatter": {},
+  "sidebar": "docs",
+  "previous": {
+    "title": "Installation",
+    "permalink": "/surface-evolver/setup/installation"
+  },
+  "next": {
+    "title": "Running Locally",
+    "permalink": "/surface-evolver/setup/running-locally"
+  }
+}

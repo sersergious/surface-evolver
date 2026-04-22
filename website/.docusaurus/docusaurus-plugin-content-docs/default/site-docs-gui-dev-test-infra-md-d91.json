@@ -1,0 +1,24 @@
+{
+  "id": "gui-dev/test-infra",
+  "title": "Surface Evolver GUI — Testing Infrastructure",
+  "description": "End-to-end testing strategy covering all layers of the stack. Every sprint in implementation.md ships with tests that meet the coverage targets below.",
+  "source": "@site/../docs/gui-dev/test-infra.md",
+  "sourceDirName": "gui-dev",
+  "slug": "/gui-dev/test-infra",
+  "permalink": "/surface-evolver/gui-dev/test-infra",
+  "draft": false,
+  "unlisted": false,
+  "editUrl": "https://github.com/sersergious/surface-evolver/edit/main/../docs/gui-dev/test-infra.md",
+  "tags": [],
+  "version": "current",
+  "frontMatter": {},
+  "sidebar": "docs",
+  "previous": {
+    "title": "Surface Evolver GUI — Implementation Roadmap",
+    "permalink": "/surface-evolver/gui-dev/implementation"
+  },
+  "next": {
+    "title": "Code Style",
+    "permalink": "/surface-evolver/contributing/code-style"
+  }
+}

@@ -1,0 +1,163 @@
+{
+  "docusaurus-plugin-content-docs": {
+    "default": {
+      "path": "/surface-evolver/",
+      "versions": [
+        {
+          "name": "current",
+          "label": "Next",
+          "isLast": true,
+          "path": "/surface-evolver/",
+          "mainDocId": "README",
+          "docs": [
+            {
+              "id": "api/files",
+              "path": "/surface-evolver/api/files",
+              "sidebar": "docs"
+            },
+            {
+              "id": "api/jobs",
+              "path": "/surface-evolver/api/jobs",
+              "sidebar": "docs"
+            },
+            {
+              "id": "api/sessions",
+              "path": "/surface-evolver/api/sessions",
+              "sidebar": "docs"
+            },
+            {
+              "id": "api/simulation",
+              "path": "/surface-evolver/api/simulation",
+              "sidebar": "docs"
+            },
+            {
+              "id": "api/websocket",
+              "path": "/surface-evolver/api/websocket",
+              "sidebar": "docs"
+            },
+            {
+              "id": "architecture/data-flow",
+              "path": "/surface-evolver/architecture/data-flow",
+              "sidebar": "docs"
+            },
+            {
+              "id": "architecture/dependencies",
+              "path": "/surface-evolver/architecture/dependencies",
+              "sidebar": "docs"
+            },
+            {
+              "id": "architecture/overview",
+              "path": "/surface-evolver/architecture/overview",
+              "sidebar": "docs"
+            },
+            {
+              "id": "components/CliPane",
+              "path": "/surface-evolver/components/CliPane",
+              "sidebar": "docs"
+            },
+            {
+              "id": "components/FilePane",
+              "path": "/surface-evolver/components/FilePane",
+              "sidebar": "docs"
+            },
+            {
+              "id": "components/store-and-hooks",
+              "path": "/surface-evolver/components/store-and-hooks",
+              "sidebar": "docs"
+            },
+            {
+              "id": "components/ViewerPane",
+              "path": "/surface-evolver/components/ViewerPane",
+              "sidebar": "docs"
+            },
+            {
+              "id": "contributing/code-style",
+              "path": "/surface-evolver/contributing/code-style",
+              "sidebar": "docs"
+            },
+            {
+              "id": "contributing/workflow",
+              "path": "/surface-evolver/contributing/workflow",
+              "sidebar": "docs"
+            },
+            {
+              "id": "gui-dev/implementation",
+              "path": "/surface-evolver/gui-dev/implementation",
+              "sidebar": "docs"
+            },
+            {
+              "id": "gui-dev/test-infra",
+              "path": "/surface-evolver/gui-dev/test-infra",
+              "sidebar": "docs"
+            },
+            {
+              "id": "modules/backend-core",
+              "path": "/surface-evolver/modules/backend-core",
+              "sidebar": "docs"
+            },
+            {
+              "id": "modules/backend-routers",
+              "path": "/surface-evolver/modules/backend-routers",
+              "sidebar": "docs"
+            },
+            {
+              "id": "modules/c-api",
+              "path": "/surface-evolver/modules/c-api",
+              "sidebar": "docs"
+            },
+            {
+              "id": "modules/c-engine",
+              "path": "/surface-evolver/modules/c-engine",
+              "sidebar": "docs"
+            },
+            {
+              "id": "modules/fe-datafiles",
+              "path": "/surface-evolver/modules/fe-datafiles",
+              "sidebar": "docs"
+            },
+            {
+              "id": "modules/python-binding",
+              "path": "/surface-evolver/modules/python-binding",
+              "sidebar": "docs"
+            },
+            {
+              "id": "README",
+              "path": "/surface-evolver/",
+              "sidebar": "docs"
+            },
+            {
+              "id": "setup/deploy-railway",
+              "path": "/surface-evolver/setup/deploy-railway",
+              "sidebar": "docs"
+            },
+            {
+              "id": "setup/environment-variables",
+              "path": "/surface-evolver/setup/environment-variables",
+              "sidebar": "docs"
+            },
+            {
+              "id": "setup/installation",
+              "path": "/surface-evolver/setup/installation",
+              "sidebar": "docs"
+            },
+            {
+              "id": "setup/running-locally",
+              "path": "/surface-evolver/setup/running-locally",
+              "sidebar": "docs"
+            }
+          ],
+          "draftIds": [],
+          "sidebars": {
+            "docs": {
+              "link": {
+                "path": "/surface-evolver/",
+                "label": "README"
+              }
+            }
+          }
+        }
+      ],
+      "breadcrumbs": true
+    }
+  }
+}

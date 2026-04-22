@@ -1,0 +1,24 @@
+{
+  "id": "modules/fe-datafiles",
+  "title": ".fe Simulation Datafiles",
+  "description": "The fe/ directory contains the bundled Surface Evolver datafiles (.fe extension) that ship with the project. These files define the initial mesh geometry, constraints, energy functionals, and simulation parameters for various classic surface-energy problems.",
+  "source": "@site/../docs/modules/fe-datafiles.md",
+  "sourceDirName": "modules",
+  "slug": "/modules/fe-datafiles",
+  "permalink": "/surface-evolver/modules/fe-datafiles",
+  "draft": false,
+  "unlisted": false,
+  "editUrl": "https://github.com/sersergious/surface-evolver/edit/main/../docs/modules/fe-datafiles.md",
+  "tags": [],
+  "version": "current",
+  "frontMatter": {},
+  "sidebar": "docs",
+  "previous": {
+    "title": "Backend Routers",
+    "permalink": "/surface-evolver/modules/backend-routers"
+  },
+  "next": {
+    "title": "Sessions API",
+    "permalink": "/surface-evolver/api/sessions"
+  }
+}

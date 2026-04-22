@@ -1,0 +1,24 @@
+{
+  "id": "modules/c-api",
+  "title": "C API Facade",
+  "description": "The C API facade (bindings/c/seapi.h and seapi.c) provides a minimal, stable ABI boundary between the Surface Evolver C engine and external callers (Python via CFFI, or any other FFI). It exposes exactly 17 functions covering the full lifecycle from initialization through mesh geometry extraction.",
+  "source": "@site/../docs/modules/c-api.md",
+  "sourceDirName": "modules",
+  "slug": "/modules/c-api",
+  "permalink": "/surface-evolver/modules/c-api",
+  "draft": false,
+  "unlisted": false,
+  "editUrl": "https://github.com/sersergious/surface-evolver/edit/main/../docs/modules/c-api.md",
+  "tags": [],
+  "version": "current",
+  "frontMatter": {},
+  "sidebar": "docs",
+  "previous": {
+    "title": "C Engine",
+    "permalink": "/surface-evolver/modules/c-engine"
+  },
+  "next": {
+    "title": "Python Binding",
+    "permalink": "/surface-evolver/modules/python-binding"
+  }
+}

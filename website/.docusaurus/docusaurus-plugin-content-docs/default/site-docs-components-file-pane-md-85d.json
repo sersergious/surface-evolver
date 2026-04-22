@@ -1,0 +1,24 @@
+{
+  "id": "components/FilePane",
+  "title": "FilePane Component",
+  "description": "FilePane is the file explorer panel on the left side of the main layout. It lists available .fe simulation datafiles fetched from the backend, and creates a session when the user selects a file.",
+  "source": "@site/../docs/components/FilePane.md",
+  "sourceDirName": "components",
+  "slug": "/components/FilePane",
+  "permalink": "/surface-evolver/components/FilePane",
+  "draft": false,
+  "unlisted": false,
+  "editUrl": "https://github.com/sersergious/surface-evolver/edit/main/../docs/components/FilePane.md",
+  "tags": [],
+  "version": "current",
+  "frontMatter": {},
+  "sidebar": "docs",
+  "previous": {
+    "title": "WebSocket API",
+    "permalink": "/surface-evolver/api/websocket"
+  },
+  "next": {
+    "title": "CliPane Component",
+    "permalink": "/surface-evolver/components/CliPane"
+  }
+}

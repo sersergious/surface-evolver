@@ -1,0 +1,24 @@
+{
+  "id": "modules/c-engine",
+  "title": "C Engine",
+  "description": "The Surface Evolver C engine (src/) is the numerical core of the system. It implements a mesh-based variational method for minimizing surface energy functionals with constraints. This document gives an overview of the source organization, key subsystems, and how they connect to the C API facade.",
+  "source": "@site/../docs/modules/c-engine.md",
+  "sourceDirName": "modules",
+  "slug": "/modules/c-engine",
+  "permalink": "/surface-evolver/modules/c-engine",
+  "draft": false,
+  "unlisted": false,
+  "editUrl": "https://github.com/sersergious/surface-evolver/edit/main/../docs/modules/c-engine.md",
+  "tags": [],
+  "version": "current",
+  "frontMatter": {},
+  "sidebar": "docs",
+  "previous": {
+    "title": "Deploying on Railway",
+    "permalink": "/surface-evolver/setup/deploy-railway"
+  },
+  "next": {
+    "title": "C API Facade",
+    "permalink": "/surface-evolver/modules/c-api"
+  }
+}

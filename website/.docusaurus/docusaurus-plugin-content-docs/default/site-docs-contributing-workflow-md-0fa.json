@@ -1,0 +1,20 @@
+{
+  "id": "contributing/workflow",
+  "title": "Development Workflow",
+  "description": "This document describes the recommended workflow for contributing to the Surface Evolver project, including branch strategy, testing requirements, and deployment steps.",
+  "source": "@site/../docs/contributing/workflow.md",
+  "sourceDirName": "contributing",
+  "slug": "/contributing/workflow",
+  "permalink": "/surface-evolver/contributing/workflow",
+  "draft": false,
+  "unlisted": false,
+  "editUrl": "https://github.com/sersergious/surface-evolver/edit/main/../docs/contributing/workflow.md",
+  "tags": [],
+  "version": "current",
+  "frontMatter": {},
+  "sidebar": "docs",
+  "previous": {
+    "title": "Code Style",
+    "permalink": "/surface-evolver/contributing/code-style"
+  }
+}

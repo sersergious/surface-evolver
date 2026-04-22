@@ -1,0 +1,24 @@
+{
+  "id": "components/store-and-hooks",
+  "title": "Zustand Store and Custom Hooks",
+  "description": "The frontend uses two state management mechanisms in parallel: Zustand for client-side UI state and TanStack React Query for server-side cached data. This document covers both the Zustand store and the two custom hooks that connect the store to the backend.",
+  "source": "@site/../docs/components/store-and-hooks.md",
+  "sourceDirName": "components",
+  "slug": "/components/store-and-hooks",
+  "permalink": "/surface-evolver/components/store-and-hooks",
+  "draft": false,
+  "unlisted": false,
+  "editUrl": "https://github.com/sersergious/surface-evolver/edit/main/../docs/components/store-and-hooks.md",
+  "tags": [],
+  "version": "current",
+  "frontMatter": {},
+  "sidebar": "docs",
+  "previous": {
+    "title": "ViewerPane Component",
+    "permalink": "/surface-evolver/components/ViewerPane"
+  },
+  "next": {
+    "title": "Surface Evolver GUI — Implementation Roadmap",
+    "permalink": "/surface-evolver/gui-dev/implementation"
+  }
+}

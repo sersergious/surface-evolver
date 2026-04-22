@@ -1,0 +1,24 @@
+{
+  "id": "setup/running-locally",
+  "title": "Running Locally",
+  "description": "This document covers how to run and debug the project in a local development environment. It assumes you have already completed the Installation steps.",
+  "source": "@site/../docs/setup/running-locally.md",
+  "sourceDirName": "setup",
+  "slug": "/setup/running-locally",
+  "permalink": "/surface-evolver/setup/running-locally",
+  "draft": false,
+  "unlisted": false,
+  "editUrl": "https://github.com/sersergious/surface-evolver/edit/main/../docs/setup/running-locally.md",
+  "tags": [],
+  "version": "current",
+  "frontMatter": {},
+  "sidebar": "docs",
+  "previous": {
+    "title": "Environment Variables",
+    "permalink": "/surface-evolver/setup/environment-variables"
+  },
+  "next": {
+    "title": "Deploying on Railway",
+    "permalink": "/surface-evolver/setup/deploy-railway"
+  }
+}

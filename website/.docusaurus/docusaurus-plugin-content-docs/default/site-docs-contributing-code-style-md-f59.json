@@ -1,0 +1,24 @@
+{
+  "id": "contributing/code-style",
+  "title": "Code Style",
+  "description": "This document describes the coding conventions used in each layer of the project. Following these conventions ensures consistency and makes code review easier.",
+  "source": "@site/../docs/contributing/code-style.md",
+  "sourceDirName": "contributing",
+  "slug": "/contributing/code-style",
+  "permalink": "/surface-evolver/contributing/code-style",
+  "draft": false,
+  "unlisted": false,
+  "editUrl": "https://github.com/sersergious/surface-evolver/edit/main/../docs/contributing/code-style.md",
+  "tags": [],
+  "version": "current",
+  "frontMatter": {},
+  "sidebar": "docs",
+  "previous": {
+    "title": "Surface Evolver GUI — Testing Infrastructure",
+    "permalink": "/surface-evolver/gui-dev/test-infra"
+  },
+  "next": {
+    "title": "Development Workflow",
+    "permalink": "/surface-evolver/contributing/workflow"
+  }
+}

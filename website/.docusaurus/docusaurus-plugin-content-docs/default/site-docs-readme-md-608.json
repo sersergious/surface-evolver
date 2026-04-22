@@ -1,0 +1,20 @@
+{
+  "id": "README",
+  "title": "Surface Evolver — Project Overview",
+  "description": "Surface Evolver is a web-based interactive interface for Ken Brakke's Surface Evolver C simulation engine. It wraps the original C binary in a REST API and a modern browser UI so that surface-energy minimization simulations can be run, visualized, and controlled interactively — without requiring any local C toolchain or display server.",
+  "source": "@site/../docs/README.md",
+  "sourceDirName": ".",
+  "slug": "/",
+  "permalink": "/surface-evolver/",
+  "draft": false,
+  "unlisted": false,
+  "editUrl": "https://github.com/sersergious/surface-evolver/edit/main/../docs/README.md",
+  "tags": [],
+  "version": "current",
+  "frontMatter": {},
+  "sidebar": "docs",
+  "next": {
+    "title": "Architecture Overview",
+    "permalink": "/surface-evolver/architecture/overview"
+  }
+}

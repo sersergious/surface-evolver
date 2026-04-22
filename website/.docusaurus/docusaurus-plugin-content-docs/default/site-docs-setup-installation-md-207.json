@@ -1,0 +1,24 @@
+{
+  "id": "setup/installation",
+  "title": "Installation",
+  "description": "This document covers how to get the project building from source. Two paths are supported: Docker (recommended for the full stack) and native (required for C development or debugging the engine).",
+  "source": "@site/../docs/setup/installation.md",
+  "sourceDirName": "setup",
+  "slug": "/setup/installation",
+  "permalink": "/surface-evolver/setup/installation",
+  "draft": false,
+  "unlisted": false,
+  "editUrl": "https://github.com/sersergious/surface-evolver/edit/main/../docs/setup/installation.md",
+  "tags": [],
+  "version": "current",
+  "frontMatter": {},
+  "sidebar": "docs",
+  "previous": {
+    "title": "External Dependencies",
+    "permalink": "/surface-evolver/architecture/dependencies"
+  },
+  "next": {
+    "title": "Environment Variables",
+    "permalink": "/surface-evolver/setup/environment-variables"
+  }
+}

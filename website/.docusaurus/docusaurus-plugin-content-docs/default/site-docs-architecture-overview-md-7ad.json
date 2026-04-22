@@ -1,0 +1,24 @@
+{
+  "id": "architecture/overview",
+  "title": "Architecture Overview",
+  "description": "This document describes the high-level system design of the Surface Evolver web interface. The system translates HTTP requests from a browser into calls to the original Surface Evolver C engine and streams the resulting mesh data back to the frontend for 3D visualization.",
+  "source": "@site/../docs/architecture/overview.md",
+  "sourceDirName": "architecture",
+  "slug": "/architecture/overview",
+  "permalink": "/surface-evolver/architecture/overview",
+  "draft": false,
+  "unlisted": false,
+  "editUrl": "https://github.com/sersergious/surface-evolver/edit/main/../docs/architecture/overview.md",
+  "tags": [],
+  "version": "current",
+  "frontMatter": {},
+  "sidebar": "docs",
+  "previous": {
+    "title": "Surface Evolver — Project Overview",
+    "permalink": "/surface-evolver/"
+  },
+  "next": {
+    "title": "Data Flow",
+    "permalink": "/surface-evolver/architecture/data-flow"
+  }
+}
