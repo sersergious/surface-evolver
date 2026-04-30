@@ -1,0 +1,17 @@
+services:
+  backend:
+    volumes:
+      - ../app/backend/app:/app/app
+      - ../app/bindings:/app/bindings
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  frontend:
+    build:
+      context: ..
+      dockerfile: docker/frontend/Dockerfile.dev
+    ports:
+      - "5173:5173"
+    volumes:
+      - ../app/frontend/src:/app/src
+    environment:
+      VITE_API_BASE: http://localhost:8000

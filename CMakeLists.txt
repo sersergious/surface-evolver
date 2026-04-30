@@ -11,118 +11,118 @@ add_compile_options(-O3)
 add_compile_definitions(GENERIC)
 
 # ── Include paths ───────────────────────────────────────────────────────────
-include_directories(src src/core)
+include_directories(app/src app/src/core)
 
 # ── Source lists ────────────────────────────────────────────────────────────
 set(SE_CORE_SOURCES
-    src/core/alloca.c
-    src/core/check.c
-    src/core/command.c
-    src/core/dump.c
-    src/core/eval_all.c
-    src/core/eval_sec.c
-    src/core/evalmore.c
-    src/core/evaltree.c
-    src/core/exprint.c
-    src/core/help.c
-    src/core/lexinit.c
-    src/core/lexinit2.c
-    src/core/lexyy.c
-    src/core/machine.c
-    src/core/modify.c
-    src/core/odrv.c
-    src/core/quantity.c
-    src/core/query.c
-    src/core/registry.c
-    src/core/sdrv.c
-    src/core/stringl.c
-    src/core/stringq.c
-    src/core/symtable.c
-    src/core/tmain.c
-    src/core/userfunc.c
-    src/core/userio.c
-    src/core/utility.c
-    src/core/variable.c
-    src/core/yexparse.c
-    src/core/ytab.c
+    app/src/core/alloca.c
+    app/src/core/check.c
+    app/src/core/command.c
+    app/src/core/dump.c
+    app/src/core/eval_all.c
+    app/src/core/eval_sec.c
+    app/src/core/evalmore.c
+    app/src/core/evaltree.c
+    app/src/core/exprint.c
+    app/src/core/help.c
+    app/src/core/lexinit.c
+    app/src/core/lexinit2.c
+    app/src/core/lexyy.c
+    app/src/core/machine.c
+    app/src/core/modify.c
+    app/src/core/odrv.c
+    app/src/core/quantity.c
+    app/src/core/query.c
+    app/src/core/registry.c
+    app/src/core/sdrv.c
+    app/src/core/stringl.c
+    app/src/core/stringq.c
+    app/src/core/symtable.c
+    app/src/core/tmain.c
+    app/src/core/userfunc.c
+    app/src/core/userio.c
+    app/src/core/utility.c
+    app/src/core/variable.c
+    app/src/core/yexparse.c
+    app/src/core/ytab.c
 )
 
 set(SE_SURFACE_SOURCES
-    src/surface/alice.c
-    src/surface/bk.c
-    src/surface/boundary.c
-    src/surface/calcforc.c
-    src/surface/cnstrnt.c
-    src/surface/curtest.c
-    src/surface/diffuse.c
-    src/surface/dodecGroup.c
-    src/surface/filml.c
-    src/surface/filmq.c
-    src/surface/fixvol.c
-    src/surface/gauss.c
-    src/surface/hessian.c
-    src/surface/hessian2.c
-    src/surface/hessian3.c
-    src/surface/hidim.c
-    src/surface/iterate.c
-    src/surface/khyp.c
-    src/surface/klein.c
-    src/surface/knot1.c
-    src/surface/knot2.c
-    src/surface/knot3.c
-    src/surface/kusner.c
-    src/surface/lagrange.c
-    src/surface/matrix.c
-    src/surface/meanint.c
-    src/surface/method1.c
-    src/surface/method2.c
-    src/surface/method3.c
-    src/surface/method4.c
-    src/surface/method5.c
-    src/surface/metis.c
-    src/surface/metric.c
-    src/surface/mindeg.c
-    src/surface/model.c
-    src/surface/popfilm.c
-    src/surface/quotient.c
-    src/surface/simequi2.c
-    src/surface/simplex.c
-    src/surface/skeleton.c
-    src/surface/sqcurve.c
-    src/surface/sqcurve2.c
-    src/surface/sqcurve3.c
-    src/surface/storage.c
-    src/surface/teix.c
-    src/surface/tordup.c
-    src/surface/torus.c
-    src/surface/torvol.c
-    src/surface/trirevis.c
-    src/surface/veravg.c
-    src/surface/verpopst.c
-    src/surface/wulff.c
+    app/src/surface/alice.c
+    app/src/surface/bk.c
+    app/src/surface/boundary.c
+    app/src/surface/calcforc.c
+    app/src/surface/cnstrnt.c
+    app/src/surface/curtest.c
+    app/src/surface/diffuse.c
+    app/src/surface/dodecGroup.c
+    app/src/surface/filml.c
+    app/src/surface/filmq.c
+    app/src/surface/fixvol.c
+    app/src/surface/gauss.c
+    app/src/surface/hessian.c
+    app/src/surface/hessian2.c
+    app/src/surface/hessian3.c
+    app/src/surface/hidim.c
+    app/src/surface/iterate.c
+    app/src/surface/khyp.c
+    app/src/surface/klein.c
+    app/src/surface/knot1.c
+    app/src/surface/knot2.c
+    app/src/surface/knot3.c
+    app/src/surface/kusner.c
+    app/src/surface/lagrange.c
+    app/src/surface/matrix.c
+    app/src/surface/meanint.c
+    app/src/surface/method1.c
+    app/src/surface/method2.c
+    app/src/surface/method3.c
+    app/src/surface/method4.c
+    app/src/surface/method5.c
+    app/src/surface/metis.c
+    app/src/surface/metric.c
+    app/src/surface/mindeg.c
+    app/src/surface/model.c
+    app/src/surface/popfilm.c
+    app/src/surface/quotient.c
+    app/src/surface/simequi2.c
+    app/src/surface/simplex.c
+    app/src/surface/skeleton.c
+    app/src/surface/sqcurve.c
+    app/src/surface/sqcurve2.c
+    app/src/surface/sqcurve3.c
+    app/src/surface/storage.c
+    app/src/surface/teix.c
+    app/src/surface/tordup.c
+    app/src/surface/torus.c
+    app/src/surface/torvol.c
+    app/src/surface/trirevis.c
+    app/src/surface/veravg.c
+    app/src/surface/verpopst.c
+    app/src/surface/wulff.c
 )
 
 set(SE_GRAPHICS_COMMON
-    src/graphics/display.c
-    src/graphics/filgraph.c
-    src/graphics/geomgraph.c
-    src/graphics/grapher.c
-    src/graphics/graphgen.c
-    src/graphics/mvgraph.c
-    src/graphics/painter.c
-    src/graphics/pixgraph.c
-    src/graphics/psgraph.c
-    src/graphics/softimag.c
-    src/graphics/zoom.c
+    app/src/graphics/display.c
+    app/src/graphics/filgraph.c
+    app/src/graphics/geomgraph.c
+    app/src/graphics/grapher.c
+    app/src/graphics/graphgen.c
+    app/src/graphics/mvgraph.c
+    app/src/graphics/painter.c
+    app/src/graphics/pixgraph.c
+    app/src/graphics/psgraph.c
+    app/src/graphics/softimag.c
+    app/src/graphics/zoom.c
 )
 
 # ── Graphics backend ────────────────────────────────────────────────────────
 if(SE_HEADLESS)
-    set(SE_GRAPH_SOURCE src/graphics/nulgraph.c)
+    set(SE_GRAPH_SOURCE app/src/graphics/nulgraph.c)
     set(SE_GRAPH_LIBS "")
 else()
     find_package(X11 REQUIRED)
-    set(SE_GRAPH_SOURCE src/graphics/xgraph.c)
+    set(SE_GRAPH_SOURCE app/src/graphics/xgraph.c)
     set(SE_GRAPH_LIBS X11::X11)
 endif()
 
@@ -141,10 +141,10 @@ add_library(se SHARED
     ${SE_CORE_SOURCES}
     ${SE_SURFACE_SOURCES}
     ${SE_GRAPHICS_COMMON}
-    src/graphics/nulgraph.c
-    bindings/c/se_api.c
+    app/src/graphics/nulgraph.c
+    app/bindings/c/se_api.c
 )
-target_include_directories(se PRIVATE src src/core bindings/c)
+target_include_directories(se PRIVATE app/src app/src/core app/bindings/c)
 target_link_libraries(se PRIVATE m)
 
 # ── Tests ────────────────────────────────────────────────────────────────────

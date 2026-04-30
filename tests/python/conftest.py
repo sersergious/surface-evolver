@@ -10,18 +10,23 @@ Set SE_FE_DIR   to override the directory containing .fe datafiles.
 import os
 import sys
 
-# Allow `from app.xxx import ...` to resolve against backend/
-_BACKEND_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "backend")
+_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+
+# app/backend/ → resolves `from app.*` imports (FastAPI app package)
+_BACKEND_DIR = os.path.join(_ROOT, "app", "backend")
 if _BACKEND_DIR not in sys.path:
-    sys.path.insert(0, os.path.abspath(_BACKEND_DIR))
+    sys.path.insert(0, _BACKEND_DIR)
+
+# app/ → resolves `from bindings.python.*` imports
+_APP_DIR = os.path.join(_ROOT, "app")
+if _APP_DIR not in sys.path:
+    sys.path.insert(0, _APP_DIR)
 
 import pytest
 
 from bindings.python.se import SurfaceEvolver
 
-_DEFAULT_FE_DIR = os.path.join(
-    os.path.dirname(__file__), "..", "..", "fe"
-)
+_DEFAULT_FE_DIR = os.path.join(_ROOT, "fe")
 
 FE_DIR = os.environ.get("SE_FE_DIR", _DEFAULT_FE_DIR)
 
