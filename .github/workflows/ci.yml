@@ -62,7 +62,7 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-          cache-dependency-path: backend/requirements.txt
+          cache-dependency-path: app/backend/requirements.txt
 
       - name: Download libse.so
         uses: actions/download-artifact@v4
@@ -106,7 +106,7 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-          cache-dependency-path: backend/requirements-dev.txt
+          cache-dependency-path: app/backend/requirements-dev.txt
 
       - name: Download libse.so
         uses: actions/download-artifact@v4
@@ -118,15 +118,15 @@ jobs:
         run: chmod +x build/libse.so
 
       - name: Install backend dependencies
-        run: pip install -r backend/requirements-dev.txt
+        run: pip install -r app/backend/requirements-dev.txt
 
       - name: Run backend API tests
-        # backend/ is added for `from app.*` imports;
-        # repo root is added for `from bindings.python.*` imports.
+        # app/backend/ is added for `from app.*` imports;
+        # app/ is added for `from bindings.python.*` imports.
         env:
           SE_LIB_PATH: ${{ github.workspace }}/build/libse.so
           SE_FE_DIR:   ${{ github.workspace }}/fe
-          PYTHONPATH:  ${{ github.workspace }}/backend:${{ github.workspace }}
+          PYTHONPATH:  ${{ github.workspace }}/app/backend:${{ github.workspace }}/app
         run: |
           pytest tests/python/test_backend_api.py \
             -v --tb=short \
@@ -148,28 +148,26 @@ jobs:
 
     defaults:
       run:
-        working-directory: frontend
+        working-directory: app/frontend
 
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
+      - uses: oven-sh/setup-bun@v2
         with:
-          node-version: "20"
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
+          bun-version: latest
 
       - name: Install dependencies
-        run: npm ci
+        run: bun install --frozen-lockfile
 
       - name: TypeScript type-check
-        run: npx tsc --noEmit
+        run: bunx tsc --noEmit
 
       - name: Run Vitest unit tests
-        run: npm test -- --reporter=verbose --reporter=junit --outputFile=../reports/frontend-tests.xml --passWithNoTests
+        run: bun run test -- --reporter=verbose --reporter=junit --outputFile=../../reports/frontend-tests.xml --passWithNoTests
 
       - name: Build production bundle
-        run: npm run build
+        run: bun run build
 
       - name: Upload test report
         if: always()

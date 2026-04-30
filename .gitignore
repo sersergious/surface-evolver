@@ -27,9 +27,9 @@ build/
 compile_commands.json
 
 # ── Node / Frontend ──────────────────────────────────────────────────────────
-frontend/node_modules/
-frontend/dist/
-frontend/.vite/
+app/frontend/node_modules/
+app/frontend/dist/
+app/frontend/.vite/
 
 # ── Surface Evolver runtime files ────────────────────────────────────────────
 fe/*.dmp
