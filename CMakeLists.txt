@@ -142,6 +142,9 @@ add_library(se SHARED
     ${SE_SURFACE_SOURCES}
     ${SE_GRAPHICS_COMMON}
     app/src/graphics/nulgraph.c
+    app/src/graphics/psgraph.c
+    app/src/graphics/painter.c
+    app/src/graphics/geomgraph.c
     app/bindings/c/se_api.c
 )
 target_include_directories(se PRIVATE app/src app/src/core app/bindings/c)

@@ -70,7 +70,7 @@ int replace_load_flag; /* if doing REPLACE_LOAD */
 
 jmp_buf loadjumpbuf;  /* for LOAD command */
 int exit_flag;  /* whether to end this command interpreter */
-int hessian_subshell_flag; /* whether in hessian subshell, so can't menu  */
+int     hessian_subshell_flag; /* whether in hessian subshell, so can't menu  */
 int subshell_depth; /* nesting depth of subshells */
 
 int file_no; /* number of current source file */
