@@ -2,7 +2,7 @@
 *  This file is part of the Surface Evolver source code.     *
 *  Programmer:  Ken Brakke, brakke@susqu.edu                 *
 *************************************************************/
-
+    
 /******************************************************************
 *
 *  File:  extern.h
