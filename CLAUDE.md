@@ -4,138 +4,138 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Project Is
 
-A web UI wrapping the [Surface Evolver](https://facstaff.susqu.edu/brakke/evolver/evolver.html) C engine as a three-pane browser application: file selector → CLI interface → 3D WebGL visualization. The engine minimizes surface energy subject to constraints (volumes, pressures, boundaries) via gradient descent.
+A desktop application that wraps the Surface Evolver C engine in an interactive three-pane UI (file picker → CLI → 3D viewer). The app runs as a native desktop window via **Electrobun** (a Bun-based Electron alternative).
 
-## Architecture
+## Build Commands
 
-```
-React Frontend (port 3000 / 5173 dev)
-        ↕ HTTP/REST + WebSocket
-FastAPI Backend (port 8000)
-        ↕ subprocess JSON protocol
-SE Worker subprocess (se_worker.py)
-        ↕ CFFI ABI mode
-Python Wrapper (app/bindings/python/se.py)
-        ↕ dlopen
-C API Facade (app/bindings/c/se_api.h — 17 functions)
-        ↕ direct calls
-Surface Evolver C Engine (app/src/)
-```
-
-**Critical constraint:** `libse.so` has a single global C state. Calling `se_init()` / `startup()` more than once in the same process causes heap corruption. The backend works around this by spawning a **fresh subprocess** (`se_worker.py`) for each session load, killing the previous one first. `se_manager.py` owns this lifecycle.
-
-The asyncio lock + `ThreadPoolExecutor(1)` in `se_manager.py` serializes all SE operations while keeping the event loop free for status-check requests. A `threading.Event` cancel flag is polled between iteration batches. A locked SE returns `409 Conflict` with `Retry-After`.
-
-Sessions are in-memory only — state is lost on process restart. Idle sessions are evicted after 30 minutes by a background task in `main.py`.
-
-Only bundled `.fe` files from `SE_FE_DIR` (`/app/fe` in container) are served — no user upload.
-
-## Repository Layout
-
-```
-app/
-  backend/        FastAPI application
-  bindings/c/     se_api.h / se_api.c — C API facade (17 functions)
-  bindings/python/ se.py — Python CFFI wrapper
-  frontend/       React + Vite + Bun application
-  src/            Surface Evolver C engine (~100 files)
-  tools/          Developer utilities
-docker/
-  Dockerfile      C builder (produces libse.so + surface_evolver CLI)
-  backend/        Backend service Dockerfile
-  frontend/       Frontend service Dockerfile + nginx config + entrypoint
-  docker-compose.yml
-  docker-compose.dev.yml
-fe/               Bundled .fe datafiles (cube, sphere, octa, ...)
-tests/
-  c/              CTest integration tests
-  python/         pytest suite (23+ tests)
-```
-
-## Build
-
+### C Engine (libse)
 ```bash
-# C library only (headless, for testing)
-cmake -B build -DSE_HEADLESS=ON
+# Headless shared library (required for the app to work)
+cmake -B cmake-build-debug -DSE_HEADLESS=ON
+cmake --build cmake-build-debug
+
+# With X11 graphics (for the standalone CLI binary)
+cmake -B build
 cmake --build build
-# Produces: build/libse.so  build/surface_evolver
+```
 
-# Full stack via Docker (production, run from repo root)
-docker compose -f docker/docker-compose.yml up
+### Desktop App
+```bash
+bun install          # from repo root — installs workspaces
+bun run dev          # launch Electrobun dev mode (compiles Tailwind CSS then hot-reloads)
+bun run build        # production app bundle
+```
 
-# Dev mode (hot reload)
-docker compose -f docker/docker-compose.yml -f docker/docker-compose.dev.yml up
-# Backend: uvicorn --reload, bind-mount app/backend/app and app/bindings
-# Frontend: Vite dev server on port 5173, bind-mount app/frontend/src
+### Frontend only (Vite dev server, useful for UI work)
+```bash
+cd src/views
+bun install
+bun run dev          # http://localhost:5173 (proxies /api to localhost:8000)
 ```
 
 ## Tests
 
 ```bash
-# C API tests (requires built libse.so)
-ctest --test-dir build --output-on-failure
+# C API tests (requires built libse)
+ctest --test-dir cmake-build-debug --output-on-failure
 
-# Python wrapper tests
-SE_LIB_PATH=build/libse.so SE_FE_DIR=fe pytest tests/python/test_se_api.py -v
+# Frontend unit tests (Vitest)
+cd src/views && bun run test
 
-# Backend integration tests (FastAPI + httpx)
-SE_LIB_PATH=build/libse.so SE_FE_DIR=fe pytest tests/python/test_backend_api.py -v
-
-# Run a single test
-pytest tests/python/test_se_api.py::test_name -v
-
-# Frontend tests (from app/frontend/)
-cd app/frontend && bun test
-cd app/frontend && bunx tsc --noEmit   # type-check only
-cd app/frontend && bun run build       # production build
+# Type-check frontend
+cd src/views && bunx tsc --noEmit
 ```
 
-Both `SE_LIB_PATH` and `SE_FE_DIR` env vars must be set for Python/backend tests.
-
-**Python path setup for backend tests:** `PYTHONPATH` must include both `app/backend/` (for `from app.*` FastAPI imports) and `app/` (for `from bindings.python.*` CFFI imports). The `tests/python/conftest.py` handles this automatically for local `pytest` runs.
-
-## Key Files
-
-| File | Role |
-|---|---|
-| `app/bindings/c/se_api.h` | The 17-function C facade — do not change signatures |
-| `app/bindings/python/se.py` | `SurfaceEvolver` CFFI class — primary Python interface |
-| `app/backend/app/core/se_manager.py` | SE subprocess lifecycle + asyncio lock + cancel |
-| `app/backend/app/core/se_worker.py` | The subprocess that owns one `libse.so` instance |
-| `app/backend/app/core/session_store.py` | In-memory dict: `sessionId → SessionState` |
-| `app/backend/app/core/job_runner.py` | Runs `iterate()` in batches, emits progress events |
-| `app/backend/app/main.py` | FastAPI app, CORS, auth (optional HTTP Basic), idle eviction |
-| `app/backend/app/config.py` | Pydantic-settings: `SE_LIB_PATH`, `SE_FE_DIR`, `DEMO_PASSWORD`, `MAX_SESSIONS`, CORS |
-| `app/frontend/src/store/useStore.ts` | Zustand: `sessionId`, `activeFile`, `energy`, `area`, `outputLog`, `meshVersion`, `jobId`, `jobProgress` |
-| `app/frontend/src/App.tsx` | Single-page three-pane layout (no routing) |
-
-## REST API Summary
+## Architecture
 
 ```
-POST/GET/DELETE /api/v1/sessions
-GET             /api/v1/files
-POST            /api/v1/sessions/{id}/iterate   → { job_id }
-POST            /api/v1/sessions/{id}/run        → { output, energy, area }
-GET             /api/v1/sessions/{id}/mesh       → { vertices, vertex_ids, facets, body_volumes }
-GET/DELETE      /api/v1/jobs/{job_id}
-WS              /api/v1/ws/sessions/{id}/progress
-GET             /health
+Electrobun desktop app
+       ↕ native IPC (Electrobun RPC)
+src/main/src/index.ts          ← Electrobun main process entry
+       ↕ stdin/stdout JSON
+src/main/src/se-worker.ts      ← subprocess, owns one libse instance
+       ↕ bun:ffi dlopen
+cmake-build-debug/libse.dylib  ← C engine compiled as shared library
+       ↕ direct calls
+engine/bindings/c/se_api.c     ← C API facade
+       ↕ internal calls
+engine/src/                    ← Surface Evolver C source (~100 files)
 ```
 
-## CI Pipeline
+### Key design constraint: one worker per session
 
-GitHub Actions: `c-tests → python-tests → backend-tests → frontend-tests`
+`libse.so` cannot be initialized twice in the same process — calling `se_init()` a second time causes heap corruption. `se-manager.ts` works around this by spawning a fresh `se-worker.ts` subprocess per session (via `Bun.spawn`). Each subprocess owns exactly one `libse` instance. Loading a new `.fe` file kills the previous worker and spawns a new one.
 
-`libse.so` is built once in `c-tests` and passed as an artifact to all downstream jobs. Frontend job uses `oven-sh/setup-bun@v2` and runs `bun install --frozen-lockfile`.
+### IPC protocol (se-worker)
 
-## Frontend Stack Notes
+The worker speaks line-delimited JSON on stdin/stdout:
+- **stdin** ← `{"cmd":"load"|"run"|"mesh"|"iterate", ...}`
+- **stdout** → `{"type":"result","ok":true|false, ...}` or `{"type":"progress","step":N,"total":M,"energy":E}` (iterate only)
 
-- **Runtime:** Bun ≥ 1.0 (`engines.bun` in `package.json`); lockfile is `bun.lock`
-- **State:** Zustand for client state; TanStack React Query for server state / API caching
-- **3D:** react-three-fiber + drei over Three.js; mesh re-fetched when `meshVersion` bumps in the store
-- **Build:** Vite + TypeScript; `bun run build` = `tsc && vite build`
-- **Tests:** Vitest (`bun test` = `vitest run`)
+Cancellation is done by killing the worker process (SIGTERM); no in-band cancel command.
 
-## Graphics Backend
+### Dual-mode backend
 
-`SE_HEADLESS=ON` (required for `libse.so`) compiles `app/src/graphics/nulgraph.c` instead of `app/src/graphics/xgraph.c`. Always use headless for library builds — X11 is only for the standalone CLI.
+`src/main/src/server.ts` exists as an alternative HTTP/WebSocket server (same API surface) for web/Docker deployment. The Electrobun desktop path (`index.ts`) uses native IPC RPC handlers instead of HTTP routes, but both call the same `se-manager`, `session-store`, and `job-runner` modules.
+
+### Frontend (src/views)
+
+React + Vite app. Four routes rendered in `App.tsx`:
+- `/` — three-pane layout: **FilePane** (file picker) + **CliPane** (commands) + **ViewerPane** (Three.js mesh)
+- `/docs` — **DocsPage** serving bundled HTML documentation from `src/views/docs/`
+
+State management: `useStore.ts` (**Zustand**) is the single source of truth. `AppContext.tsx` is now a thin re-export shim — it re-exports `useStore` as `useAppState` (so existing component imports keep working) and exposes a no-op `AppProvider` (no Provider is actually needed). Progress updates arrive via `CustomEvent('se-progress')` dispatched by the Electrobun main process (or WebSocket in server mode).
+
+**API client** (`src/views/src/api/client.ts`): in Electrobun mode the client maps HTTP-style calls to Electrobun RPC (`Electroview.rpc.request`). When running against the HTTP server (Vite dev with proxy), the same API paths hit `localhost:8000`.
+
+CSS is compiled from Tailwind source (`src/styles/global.css`) to `src/styles/compiled.css` via `bun run css` before dev/build.
+
+## Repository Layout
+
+```
+surface-evolver/
+├── engine/
+│   ├── src/                    # Surface Evolver C engine (~100 files)
+│   │   ├── core/               # Parser, expression evaluator, command loop
+│   │   ├── surface/            # Gradient descent, topology operations
+│   │   └── graphics/           # Display backends
+│   └── bindings/c/             # se_api.h / se_api.c — C API facade
+├── src/
+│   ├── main/src/               # Electrobun main process (Bun)
+│   │   ├── index.ts            # App entry, IPC RPC handlers
+│   │   ├── server.ts           # Alternative HTTP/WS server (web mode)
+│   │   ├── se-manager.ts       # Worker lifecycle + mutex
+│   │   ├── se-worker.ts        # Subprocess: owns libse via bun:ffi
+│   │   ├── job-runner.ts       # Async iteration job queue
+│   │   ├── session-store.ts    # In-memory session state
+│   │   ├── ws-hub.ts           # WebSocket broadcast (server mode)
+│   │   └── config.ts           # Reads env vars
+│   └── views/src/              # React + Vite frontend
+│       ├── components/         # FilePane, CliPane, ViewerPane, DocsPage, ...
+│       ├── store/
+│       │   ├── useStore.ts     # Zustand store — single source of truth
+│       │   └── AppContext.tsx   # Re-export shim (useAppState → useStore) + no-op AppProvider
+│       ├── api/                # client.ts + per-resource modules
+│       ├── hooks/              # useProgressWS, useMesh
+│       └── styles/             # global.css (Tailwind source) → compiled.css
+├── src/views/docs/             # Bundled SE HTML documentation
+├── fe/                         # Bundled .fe datafiles (cube, sphere, ...)
+├── tests/c/                    # CTest integration tests for C API
+├── electrobun.config.ts        # App bundle config
+├── CMakeLists.txt              # Builds surface_evolver CLI + libse shared lib
+└── package.json                # Root workspace (src/main + src/views)
+```
+
+## Environment / Config
+
+`src/main/src/config.ts` reads these env vars:
+
+| Var | Default | Purpose |
+|---|---|---|
+| `SE_LIB_PATH` | `cmake-build-debug/libse.dylib` | Path to compiled shared library |
+| `SE_FE_DIR` | `fe/` | Directory of `.fe` datafiles |
+| `SE_WORKER_PATH` | `src/main/src/se-worker.ts` | Path to the worker script |
+| `BACKEND_HOST` / `BACKEND_PORT` | `0.0.0.0:8000` | HTTP server mode only |
+| `CORS_ORIGINS` | `http://localhost:3000,http://localhost:5173` | Comma-separated allowed origins |
+| `DEMO_USERNAME` / `DEMO_PASSWORD` | `demo` / *(empty = auth disabled)* | Basic auth for web demo mode |
+| `MAX_SESSIONS` | `10` | Max concurrent sessions |

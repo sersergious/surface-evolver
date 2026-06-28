@@ -1,0 +1,15 @@
+{
+  "name": "surface-evolver-backend",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "start": "bun run src/server.ts",
+    "dev": "bun --hot run src/server.ts"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.0.0"
+  },
+  "dependencies": {
+    "electrobun": "^1.18.1"
+  }
+}

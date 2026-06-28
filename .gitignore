@@ -8,15 +8,6 @@ Thumbs.db
 *.swp
 *.swo
 
-# ── Python ───────────────────────────────────────────────────────────────────
-__pycache__/
-*.py[cod]
-*.pyo
-venv/
-.venv/
-*.egg-info/
-.pytest_cache/
-
 # ── C / CMake build ──────────────────────────────────────────────────────────
 build/
 *.o
@@ -26,10 +17,15 @@ build/
 *.dSYM/
 compile_commands.json
 
-# ── Node / Frontend ──────────────────────────────────────────────────────────
-app/frontend/node_modules/
-app/frontend/dist/
-app/frontend/.vite/
+# ── Node / Bun ───────────────────────────────────────────────────────────────
+node_modules/
+src/views/dist/
+src/views/.vite/
+src/views/src/styles/compiled.css
+
+# ── Electrobun ───────────────────────────────────────────────────────────────
+dist-electrobun/
+out/
 
 # ── Surface Evolver runtime files ────────────────────────────────────────────
 fe/*.dmp

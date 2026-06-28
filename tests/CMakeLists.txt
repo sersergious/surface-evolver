@@ -8,9 +8,9 @@
 add_executable(test_se_api c/test_se_api.c)
 
 target_include_directories(test_se_api PRIVATE
-    ${CMAKE_SOURCE_DIR}/app/src
-    ${CMAKE_SOURCE_DIR}/app/src/core
-    ${CMAKE_SOURCE_DIR}/app/bindings/c
+    ${CMAKE_SOURCE_DIR}/engine/src
+    ${CMAKE_SOURCE_DIR}/engine/src/core
+    ${CMAKE_SOURCE_DIR}/engine/bindings/c
 )
 
 target_link_libraries(test_se_api PRIVATE se m)

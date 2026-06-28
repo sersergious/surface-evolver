@@ -1,0 +1,20 @@
+{
+  "name": "surface-evolver",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun run --cwd src/views css && concurrently \"bun run --cwd src/views css:watch\" \"SE_FE_DIR=$PWD/fe SE_LIB_PATH=$PWD/cmake-build-debug/libse.dylib SE_WORKER_PATH=$PWD/src/main/src/se-worker.ts electrobun dev\"",
+    "build": "bun run --cwd src/views css && electrobun build"
+  },
+  "workspaces": [
+    "src/main",
+    "src/views"
+  ],
+  "dependencies": {
+    "electrobun": "^1.18.1"
+  },
+  "devDependencies": {
+    "concurrently": "^10.0.3"
+  }
+}
