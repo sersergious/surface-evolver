@@ -236,6 +236,27 @@ static void test_run_error(void)
     CHECK(rc != 0 || strlen(err) > 0);
 }
 
+static void test_mean_curvatures(void)
+{
+    SECTION("se_get_vertex_mean_curvatures — basic sanity");
+    int n = se_get_vertex_count();
+    CHECK(n > 0);
+
+    double *H = malloc((size_t)n * sizeof(double));
+    int written = se_get_vertex_mean_curvatures(H, n);
+    CHECK(written == n);
+
+    int all_finite = 1, all_nonneg = 1;
+    for (int i = 0; i < written; i++) {
+        if (!isfinite(H[i])) { all_finite  = 0; break; }
+        if (H[i] < 0.0)      { all_nonneg  = 0; break; }
+    }
+    CHECK(all_finite);
+    CHECK(all_nonneg);
+
+    free(H);
+}
+
 /* ── main ───────────────────────────────────────────────────────────────── */
 
 int main(void)
@@ -256,6 +277,7 @@ int main(void)
     test_body_data();
     test_output_capture();
     test_run_error();
+    test_mean_curvatures();
 
     printf("\n=================================\n");
     printf("Results: %d/%d passed\n", g_run - g_failed, g_run);

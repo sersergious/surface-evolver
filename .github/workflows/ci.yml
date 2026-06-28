@@ -72,19 +72,19 @@ jobs:
         run: chmod +x build/libse.so
 
       - name: Install backend dev dependencies
-        working-directory: app/backend-bun
+        working-directory: src/main
         run: bun install
 
       - name: Type-check backend
-        working-directory: app/backend-bun
-        run: bunx tsc --noEmit --strict --target ESNext --moduleResolution bundler --allowImportingTsExtensions src/server.ts 2>/dev/null || true
+        working-directory: src/main
+        run: bunx tsc --noEmit -p .
 
       - name: Start backend and run smoke tests
         env:
           SE_LIB_PATH: ${{ github.workspace }}/build/libse.so
           SE_FE_DIR:   ${{ github.workspace }}/fe
         run: |
-          bun run app/backend-bun/src/server.ts &
+          bun run src/main/src/server.ts &
           SERVER_PID=$!
           sleep 3
           curl -sf http://localhost:8000/health
@@ -99,7 +99,7 @@ jobs:
 
     defaults:
       run:
-        working-directory: app/frontend
+        working-directory: src/views
 
     steps:
       - uses: actions/checkout@v4
