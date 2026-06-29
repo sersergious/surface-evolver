@@ -168,6 +168,7 @@ const VERTEX_SCALARS: Record<string, { fn: () => ScalarFn; int?: boolean }> = {
 function readVertexScalar(name: string, vcount: number): number[] | null {
   const spec = VERTEX_SCALARS[name];
   if (!spec) return null;
+  if (vcount <= 0) return [];                 // empty surface — ptr() rejects 0-length
   const buf = spec.int ? new Int32Array(vcount) : new Float64Array(vcount);
   const n   = spec.fn()(ptr(buf), vcount);
   return n >= 0 ? Array.from(buf.subarray(0, n)) : null;
@@ -175,10 +176,12 @@ function readVertexScalar(name: string, vcount: number): number[] | null {
 
 function handleMesh(req?: { scalars?: string }): object {
   const vcount = lib.se_get_vertex_count() as number;
+  // bun:ffi ptr() rejects zero-length buffers, so every fill is guarded on a
+  // positive count (a STRING model has 0 facets; an empty surface 0 of all).
   const vbuf   = new Float64Array(vcount * 3);
   const idbuf  = new Int32Array(vcount);
-  const vn     = lib.se_get_vertices(ptr(vbuf), vcount) as number;
-  lib.se_get_vertex_ids(ptr(idbuf), vcount);
+  const vn     = vcount > 0 ? lib.se_get_vertices(ptr(vbuf), vcount) as number : 0;
+  if (vcount > 0) lib.se_get_vertex_ids(ptr(idbuf), vcount);
 
   const vertices:   number[][] = [];
   const vertex_ids: number[]   = [];
@@ -189,7 +192,7 @@ function handleMesh(req?: { scalars?: string }): object {
 
   const fcount = lib.se_get_facet_count() as number;
   const fbuf   = new Int32Array(fcount * 3);
-  const fn_    = lib.se_get_facets(ptr(fbuf), fcount) as number;
+  const fn_    = fcount > 0 ? lib.se_get_facets(ptr(fbuf), fcount) as number : 0;
   const facets: number[][] = [];
   for (let i = 0; i < fn_; i++) {
     facets.push([fbuf[i * 3], fbuf[i * 3 + 1], fbuf[i * 3 + 2]]);
@@ -197,7 +200,7 @@ function handleMesh(req?: { scalars?: string }): object {
 
   const ecount = lib.se_get_edge_count() as number;
   const ebuf   = new Int32Array(ecount * 2);
-  const en     = lib.se_get_edges(ptr(ebuf), ecount) as number;
+  const en     = ecount > 0 ? lib.se_get_edges(ptr(ebuf), ecount) as number : 0;
   const edges: number[][] = [];
   for (let i = 0; i < en; i++) {
     edges.push([ebuf[i * 2], ebuf[i * 2 + 1]]);
@@ -206,7 +209,7 @@ function handleMesh(req?: { scalars?: string }): object {
   const bcount = lib.se_get_body_count() as number;
   const volbuf = new Float64Array(bcount);
   const prebuf = new Float64Array(bcount);
-  lib.se_get_body_volumes(ptr(volbuf), ptr(prebuf), bcount);
+  if (bcount > 0) lib.se_get_body_volumes(ptr(volbuf), ptr(prebuf), bcount);
   const cmbuf = new Float64Array(3);
   const body_volumes:   Record<string, number> = {};
   const body_pressures: Record<string, number> = {};
