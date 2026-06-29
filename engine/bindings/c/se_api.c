@@ -380,6 +380,103 @@ int se_get_edges(int *out, int max_count)
     return n;
 }
 
+/* ── se_get_facet_colors ──────────────────────────────────────────────── */
+/* SE colour-table index for each facet's front and back, in the same row order
+ * as se_get_facets (non-inverted facets only).  Either array may be NULL.
+ * Returns facet count written, or -1.  Colour CLEAR is -1. */
+int se_get_facet_colors(int *front, int *back, int max_count)
+{
+    facet_id f_id;
+    int n = 0;
+    if (!se_initialized || max_count <= 0 || web.representation != SOAPFILM)
+        return -1;
+    FOR_ALL_FACETS(f_id) {
+        facetedge_id fe;
+        if (inverted(f_id)) continue;
+        fe = get_facet_fe(f_id);
+        if (!valid_id(fe)) continue;
+        if (n >= max_count) break;
+        if (front) front[n] = get_facet_frontcolor(f_id);
+        if (back)  back[n]  = get_facet_backcolor(f_id);
+        n++;
+    }
+    return n;
+}
+
+/* ── se_get_facet_normals ─────────────────────────────────────────────── */
+/* Engine outward normal per facet (handles inverted facets / lagrange order),
+ * packed [nx,ny,nz, ...] in se_get_facets row order.  SOAPFILM + sdim 3.
+ * Returns facet count written, or -1. */
+int se_get_facet_normals(double *out, int max_count)
+{
+    facet_id f_id;
+    int n = 0, j;
+    if (!se_initialized || !out || max_count <= 0 ||
+        web.representation != SOAPFILM || web.sdim != 3)
+        return -1;
+    FOR_ALL_FACETS(f_id) {
+        facetedge_id fe;
+        REAL nrm[MAXCOORD];
+        if (inverted(f_id)) continue;
+        fe = get_facet_fe(f_id);
+        if (!valid_id(fe)) continue;
+        if (n >= max_count) break;
+        get_facet_normal(f_id, nrm);   /* engine normal is not unit-length */
+        {
+            double mag = sqrt((double)(nrm[0]*nrm[0] + nrm[1]*nrm[1] + nrm[2]*nrm[2]));
+            if (mag < 1e-30) mag = 1.0;
+            for (j = 0; j < 3; j++)
+                out[n * 3 + j] = (double)nrm[j] / mag;
+        }
+        n++;
+    }
+    return n;
+}
+
+/* ── se_get_edge_colors / lengths / densities ─────────────────────────── */
+/* All three iterate edges in se_get_edges row order (valid endpoints only). */
+int se_get_edge_colors(int *out, int max_count)
+{
+    edge_id e_id;
+    int n = 0;
+    if (!se_initialized || !out || max_count <= 0)
+        return -1;
+    FOR_ALL_EDGES(e_id) {
+        if (!valid_id(get_edge_tailv(e_id)) || !valid_id(get_edge_headv(e_id))) continue;
+        if (n >= max_count) break;
+        out[n++] = get_edge_color(e_id);
+    }
+    return n;
+}
+
+int se_get_edge_lengths(double *out, int max_count)
+{
+    edge_id e_id;
+    int n = 0;
+    if (!se_initialized || !out || max_count <= 0)
+        return -1;
+    FOR_ALL_EDGES(e_id) {
+        if (!valid_id(get_edge_tailv(e_id)) || !valid_id(get_edge_headv(e_id))) continue;
+        if (n >= max_count) break;
+        out[n++] = (double)get_edge_length(e_id);
+    }
+    return n;
+}
+
+int se_get_edge_densities(double *out, int max_count)
+{
+    edge_id e_id;
+    int n = 0;
+    if (!se_initialized || !out || max_count <= 0)
+        return -1;
+    FOR_ALL_EDGES(e_id) {
+        if (!valid_id(get_edge_tailv(e_id)) || !valid_id(get_edge_headv(e_id))) continue;
+        if (n >= max_count) break;
+        out[n++] = (double)get_edge_density(e_id);
+    }
+    return n;
+}
+
 /* ── se_get_bounding_box ──────────────────────────────────────────────── */
 /*
  * Axis-aligned bounds of the current surface, min[] and max[] over sdim
@@ -1076,6 +1173,89 @@ int se_get_constraint_name(int con_idx, char *buf, int size)
     strncpy(buf, GETCONSTR(con_idx)->name, (size_t)size - 1);
     buf[size - 1] = '\0';
     return 0;
+}
+
+/* ── generic user-defined attributes ──────────────────────────────────── */
+/* elem_type: VERTEX=0 EDGE=1 FACET=2 BODY=3. */
+
+/* A readable user attribute: DUMP_ATTR (set only on user-defined, persistent
+ * attributes — built-in computed fields like density/__x/force lack it), a
+ * plain numeric scalar, not dimensioned/function/internal. This is what
+ * distinguishes `define vertex attribute foo real` from the engine's own
+ * EXTRAS bookkeeping (which is registered the same way but reads garbage at
+ * a naive offset). */
+static int is_user_scalar(struct extra *ex)
+{
+    return (ex->flags & DUMP_ATTR)
+        && !(ex->flags & (INTERNAL_ATTR | DIMENSIONED_ATTR | FUNCTION_ATTR))
+        && ex->type >= REAL_TYPE && ex->type < MAX_NUMERIC_TYPE
+        && ex->array_spec.datacount <= 1;
+}
+
+int se_get_attribute_count(int elem_type)
+{
+    if (!se_initialized || elem_type < 0 || elem_type > BODY)
+        return -1;
+    return (int)web.skel[elem_type].extra_count;
+}
+
+/* Fill name/type for attribute `idx`.  Returns 0 for a readable numeric-scalar
+ * attribute, 1 to skip it (internal built-in, array, function, or non-numeric),
+ * -1 on error / out-of-range. */
+int se_get_attribute_info(int elem_type, int idx, char *name, int name_size, int *type_out)
+{
+    struct extra *ex;
+    if (!se_initialized || elem_type < 0 || elem_type > BODY)
+        return -1;
+    if (idx < 0 || idx >= (int)web.skel[elem_type].extra_count)
+        return -1;
+    ex = &EXTRAS(elem_type)[idx];
+    if (name && name_size > 0) {
+        strncpy(name, ex->name, (size_t)name_size - 1);
+        name[name_size - 1] = '\0';
+    }
+    if (type_out) *type_out = ex->type;
+    return is_user_scalar(ex) ? 0 : 1;
+}
+
+/* Per-element value of scalar numeric attribute `idx`, cast to double, in the
+ * same row order as se_get_vertices/_edges/etc.  Returns count, or -1 if the
+ * attribute is not a readable numeric scalar. */
+int se_get_attribute_values(int elem_type, int idx, double *out, int max_count)
+{
+    element_id id;
+    struct extra *ex;
+    int n = 0, offset, type;
+
+    if (!se_initialized || !out || max_count <= 0 || elem_type < 0 || elem_type > BODY)
+        return -1;
+    if (idx < 0 || idx >= (int)web.skel[elem_type].extra_count)
+        return -1;
+    ex = &EXTRAS(elem_type)[idx];
+    if (!is_user_scalar(ex))
+        return -1;
+    offset = ex->offset;
+    type   = ex->type;
+
+    FOR_ALL_ELEMENTS(elem_type, id) {
+        char *p;
+        if (n >= max_count) break;
+        p = (char *)elptr(id) + offset;
+        switch (type) {
+            case REAL_TYPE:    out[n] = (double)*(REAL *)p;            break;
+            case INTEGER_TYPE: out[n] = (double)*(int *)p;             break;
+            case UINT_TYPE:    out[n] = (double)*(unsigned int *)p;    break;
+            case ULONG_TYPE:   out[n] = (double)*(unsigned long *)p;   break;
+            case LONG_TYPE:    out[n] = (double)*(long *)p;            break;
+            case USHORT_TYPE:  out[n] = (double)*(unsigned short *)p;  break;
+            case SHORT_TYPE:   out[n] = (double)*(short *)p;           break;
+            case UCHAR_TYPE:   out[n] = (double)*(unsigned char *)p;   break;
+            case CHAR_TYPE:    out[n] = (double)*(char *)p;            break;
+            default:           out[n] = 0.0;
+        }
+        n++;
+    }
+    return n;
 }
 
 /* ── output capture helpers ───────────────────────────────────────────── */

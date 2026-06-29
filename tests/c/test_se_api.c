@@ -476,6 +476,60 @@ static void test_physics_and_params(void)
     CHECK(fabs(mp[1] - 0.2) < 1e-9 && fabs(mp[2] - 0.9) < 1e-9 && fabs(mp[3] - 0.1) < 1e-9);
 }
 
+static void test_colors_normals_attrs(void)
+{
+    SECTION("element colours / normals / edge metrics / attributes");
+
+    /* phelanc.fe assigns facet colours. */
+    if (se_load(FE_DIR "/phelanc.fe") == 0) {
+        drain();
+        int nf = se_get_facet_count(), ne = se_get_edge_count();
+        int *fc = malloc((size_t)nf * sizeof(int));
+        CHECK(se_get_facet_colors(fc, NULL, nf) == nf);
+
+        double *nrm = malloc((size_t)nf * 3 * sizeof(double));
+        int nn = se_get_facet_normals(nrm, nf);
+        CHECK(nn == nf);
+        int unit_ok = nn > 0;
+        for (int i = 0; i < nn; i++) {
+            double m = sqrt(nrm[i*3]*nrm[i*3] + nrm[i*3+1]*nrm[i*3+1] + nrm[i*3+2]*nrm[i*3+2]);
+            if (fabs(m - 1.0) > 1e-6) { unit_ok = 0; break; }
+        }
+        CHECK(unit_ok);   /* normals must be unit length */
+
+        double *el = malloc((size_t)ne * sizeof(double));
+        int en = se_get_edge_lengths(el, ne);
+        CHECK(en == ne);
+        int len_ok = en > 0;
+        for (int i = 0; i < en; i++) if (!isfinite(el[i]) || el[i] <= 0) { len_ok = 0; break; }
+        CHECK(len_ok);
+        free(fc); free(nrm); free(el);
+    }
+
+    /* addload_example.fe: user `define edge attribute angle real`; built-in
+     * `density` must be filtered out (it reads garbage at a naive offset). */
+    if (se_load(FE_DIR "/addload_example.fe") == 0) {
+        drain();
+        int ne = se_get_edge_count();
+        int ac = se_get_attribute_count(1);     /* EDGE = 1 */
+        CHECK(ac > 0);
+        int found_angle = 0, found_density_readable = 0;
+        for (int i = 0; i < ac; i++) {
+            char nm[128] = {0}; int ty = 0;
+            int r = se_get_attribute_info(1, i, nm, sizeof(nm), &ty);
+            if (strcmp(nm, "angle") == 0 && r == 0) {
+                found_angle = 1;
+                double *v = malloc((size_t)(ne + 1) * sizeof(double));
+                CHECK(se_get_attribute_values(1, i, v, ne) == ne);   /* count matches */
+                free(v);
+            }
+            if (strcmp(nm, "density") == 0 && r == 0) found_density_readable = 1;
+        }
+        CHECK(found_angle);                 /* user attr exposed */
+        CHECK(!found_density_readable);     /* built-in filtered */
+    }
+}
+
 /* ── main ───────────────────────────────────────────────────────────────── */
 
 int main(void)
@@ -505,6 +559,7 @@ int main(void)
     test_topo_and_params();   /* mutates the mesh (refine) */
     test_quantities();        /* loads a different datafile */
     test_physics_and_params();
+    test_colors_normals_attrs();
 
     printf("\n=================================\n");
     printf("Results: %d/%d passed\n", g_run - g_failed, g_run);
