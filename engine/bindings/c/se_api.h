@@ -75,6 +75,36 @@ int se_get_facets(int *out, int max_count);
  * Caller must allocate: int out[max_count * 2]. */
 int se_get_edges(int *out, int max_count);
 
+/* ── per-element colour / normals / edge metrics ──────────────────────── */
+
+/* SE colour-table index per facet (front/back), in se_get_facets row order.
+ * Either array may be NULL. Returns count, or -1. CLEAR = -1. */
+int se_get_facet_colors(int *front, int *back, int max_count);
+
+/* Engine outward normal per facet, packed [nx,ny,nz,...] in se_get_facets row
+ * order (SOAPFILM + sdim 3). Returns count, or -1. */
+int se_get_facet_normals(double *out, int max_count);
+
+/* Per-edge colour index / length / line-density, in se_get_edges row order.
+ * Returns count, or -1. */
+int se_get_edge_colors(int *out, int max_count);
+int se_get_edge_lengths(double *out, int max_count);
+int se_get_edge_densities(double *out, int max_count);
+
+/* ── generic user-defined attributes ──────────────────────────────────── */
+/* elem_type: VERTEX=0 EDGE=1 FACET=2 BODY=3. */
+
+/* Number of attribute slots for an element type, or -1. */
+int se_get_attribute_count(int elem_type);
+
+/* name/type of attribute `idx`. Returns 0 if a readable numeric scalar, 1 to
+ * skip (internal/array/function/non-numeric), -1 on error. */
+int se_get_attribute_info(int elem_type, int idx, char *name, int name_size, int *type_out);
+
+/* Per-element scalar value (cast to double) in element row order. Returns
+ * count, or -1 if not a readable numeric scalar. */
+int se_get_attribute_values(int elem_type, int idx, double *out, int max_count);
+
 /* Axis-aligned bounds over sdim coords, computed from vertex positions.
  * out_min[] / out_max[] must hold se_get_sdim() doubles each.
  * Returns sdim on success, 0 if no vertices, -1 on error. */
