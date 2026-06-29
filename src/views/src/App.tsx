@@ -11,22 +11,16 @@ import { useAppState } from './store/AppContext'
 
 // ── Theme ─────────────────────────────────────────────────────────────────────
 
-const THEMES = ['dim', 'night', 'corporate', 'light'] as const
-type Theme = typeof THEMES[number]
-
-function useTheme() {
-  const [theme, setThemeState] = useState<Theme>(() =>
-    (localStorage.getItem('se-theme') as Theme) ?? 'dim'
-  )
-  const applyTheme = useCallback((t: Theme) => {
-    setThemeState(t)
-    localStorage.setItem('se-theme', t)
-    document.documentElement.setAttribute('data-theme', t)
-  }, [])
+// Follow the OS light/dark appearance — native desktop behaviour, no toggle.
+function useSystemTheme() {
   useEffect(() => {
-    document.documentElement.setAttribute('data-theme', theme)
-  }, [theme])
-  return [theme, applyTheme] as const
+    const mq = window.matchMedia('(prefers-color-scheme: dark)')
+    const apply = () =>
+      document.documentElement.setAttribute('data-theme', mq.matches ? 'dark' : 'light')
+    apply()
+    mq.addEventListener('change', apply)
+    return () => mq.removeEventListener('change', apply)
+  }, [])
 }
 
 // ── Resize ────────────────────────────────────────────────────────────────────
@@ -54,11 +48,9 @@ function useDrag(direction: 'h' | 'v', onDelta: (d: number) => void) {
 
 // ── Navbar ────────────────────────────────────────────────────────────────────
 
-function Navbar({ sidebarOpen, onToggleSidebar, theme, onTheme }: {
+function Navbar({ sidebarOpen, onToggleSidebar }: {
   sidebarOpen: boolean
   onToggleSidebar: () => void
-  theme: Theme
-  onTheme: (t: Theme) => void
 }) {
   const { sessionId, activeFile, energy, area, totalTime } = useAppState()
   const navigate = useNavigate()
@@ -107,26 +99,6 @@ function Navbar({ sidebarOpen, onToggleSidebar, theme, onTheme }: {
 
         <div className="w-px h-5 bg-base-300 hidden sm:block" />
 
-        {/* Theme picker */}
-        <div className="dropdown dropdown-end">
-          <label tabIndex={0} className="btn btn-ghost btn-xs gap-1 normal-case">
-            <PaletteIcon />
-            <span className="hidden lg:inline capitalize">{theme}</span>
-          </label>
-          <ul tabIndex={0} className="dropdown-content menu menu-sm bg-base-200 border border-base-300 rounded-box shadow-xl z-50 w-32 p-1 mt-1">
-            {THEMES.map(t => (
-              <li key={t}>
-                <button
-                  className={`capitalize ${t === theme ? 'active' : ''}`}
-                  onClick={() => onTheme(t)}
-                >
-                  {t}
-                </button>
-              </li>
-            ))}
-          </ul>
-        </div>
-
         {/* Help */}
         <button className="btn btn-ghost btn-xs" onClick={() => navigate('/docs')}>
           Docs
@@ -154,17 +126,6 @@ function SidebarIcon() {
   )
 }
 
-function PaletteIcon() {
-  return (
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/>
-      <circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/>
-      <circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/>
-      <circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/>
-      <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/>
-    </svg>
-  )
-}
 
 // ── Main layout ───────────────────────────────────────────────────────────────
 
@@ -179,7 +140,7 @@ function Inner() {
   const { sessionId } = useAppState()
   useProgressWS(sessionId)
 
-  const [theme, applyTheme] = useTheme()
+  useSystemTheme()
   const [sidebarOpen,  setSidebarOpen]  = useState(true)
   const [sidebarWidth, setSidebarWidth] = useState(SIDEBAR_W)
   const [editorWidth,  setEditorWidth]  = useState(EDITOR_W)
@@ -206,8 +167,6 @@ function Inner() {
         <Navbar
           sidebarOpen={sidebarOpen}
           onToggleSidebar={() => setSidebarOpen(o => !o)}
-          theme={theme}
-          onTheme={applyTheme}
         />
 
         <div ref={bodyRef} className="flex flex-1 min-h-0 overflow-hidden">

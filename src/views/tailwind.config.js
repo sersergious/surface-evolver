@@ -3,8 +3,9 @@ module.exports = {
   content: ['./index.html', './src/**/*.{ts,tsx}'],
   plugins: [require('daisyui')],
   daisyui: {
-    themes: ['dim', 'night', 'corporate', 'light'],
-    defaultTheme: 'dim',
+    // Only the two built-in daisyUI themes; the app follows the OS appearance.
+    themes: ['light', 'dark'],
+    darkTheme: 'dark',
     logs: false,
   },
   theme: {
