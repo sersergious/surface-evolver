@@ -1,6 +1,7 @@
 import { useEffect, useMemo } from 'react'
 import * as THREE from 'three'
 import { Edges } from '@react-three/drei'
+import { useThree, type ThreeEvent } from '@react-three/fiber'
 import type { MeshData } from '../../api/simulation'
 import type { ColorScalars } from '../../hooks/useMesh'
 
@@ -23,26 +24,108 @@ function coolwarm(t: number): [number, number, number] {
   return [0.96 - s * 0.25, 0.96 - s * 0.94, 0.96 - s * 0.81]    // white → red
 }
 
+function applyVertexColors(geo: THREE.BufferGeometry, colorScalars: ColorScalars | null): void {
+  if (!colorScalars) return
+  const { values, min, max } = colorScalars
+  const range = max > min ? max - min : 1
+  const colors = new Float32Array(values.length * 3)
+  for (let i = 0; i < values.length; i++) {
+    const [r, g, b] = coolwarm((values[i] - min) / range)
+    colors[i * 3]     = r
+    colors[i * 3 + 1] = g
+    colors[i * 3 + 2] = b
+  }
+  geo.setAttribute('color', new THREE.BufferAttribute(colors, 3))
+}
+
 function buildGeometry(mesh: MeshData, colorScalars: ColorScalars | null): THREE.BufferGeometry {
   const geo = new THREE.BufferGeometry()
   geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(mesh.vertices.flat()), 3))
   geo.setIndex(new THREE.BufferAttribute(new Uint32Array(mesh.facets.flat()), 1))
-
-  if (colorScalars) {
-    const { values, min, max } = colorScalars
-    const range = max > min ? max - min : 1
-    const colors = new Float32Array(values.length * 3)
-    for (let i = 0; i < values.length; i++) {
-      const [r, g, b] = coolwarm((values[i] - min) / range)
-      colors[i * 3]     = r
-      colors[i * 3 + 1] = g
-      colors[i * 3 + 2] = b
-    }
-    geo.setAttribute('color', new THREE.BufferAttribute(colors, 3))
-  }
-
+  applyVertexColors(geo, colorScalars)
   geo.computeVertexNormals()
   return geo
+}
+
+/**
+ * Line rendering for edge geometry — the only geometry the STRING (1-D) model
+ * produces, so curve/filament .fe files render here instead of MeshGeometry.
+ */
+export function EdgeLines({ mesh, colorScalars }: { mesh: MeshData; colorScalars: ColorScalars | null }) {
+  const geometry = useMemo(() => {
+    const geo = new THREE.BufferGeometry()
+    geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(mesh.vertices.flat()), 3))
+    geo.setIndex(new THREE.BufferAttribute(new Uint32Array(mesh.edges.flat()), 1))
+    applyVertexColors(geo, colorScalars)
+    return geo
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mesh, colorScalars])
+
+  useEffect(() => () => { geometry.dispose() }, [geometry])
+
+  const useVColors = colorScalars !== null
+  return (
+    <lineSegments geometry={geometry}>
+      <lineBasicMaterial color={useVColors ? '#ffffff' : '#94d4b0'} vertexColors={useVColors} />
+    </lineSegments>
+  )
+}
+
+// Sets the raycaster's Points threshold so vertex picking scales with the mesh
+// (default threshold of 1 world-unit makes every point a hit on small meshes).
+export function RaycasterConfig({ threshold }: { threshold: number }) {
+  const raycaster = useThree(s => s.raycaster)
+  useEffect(() => {
+    raycaster.params.Points = { threshold }
+  }, [raycaster, threshold])
+  return null
+}
+
+// Clickable cloud of every vertex; e.index is the vertex's buffer position (vpos).
+export function PickPoints({ mesh, onPick }: { mesh: MeshData; onPick: (vpos: number) => void }) {
+  const geometry = useMemo(() => {
+    const geo = new THREE.BufferGeometry()
+    geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(mesh.vertices.flat()), 3))
+    return geo
+  }, [mesh])
+  useEffect(() => () => { geometry.dispose() }, [geometry])
+
+  return (
+    <points
+      geometry={geometry}
+      onClick={(e: ThreeEvent<MouseEvent>) => {
+        if (e.index == null) return
+        e.stopPropagation()
+        onPick(e.index)
+      }}
+    >
+      <pointsMaterial size={0.01} transparent opacity={0.0} depthWrite={false} />
+    </points>
+  )
+}
+
+// Highlight sphere at a single position (the picked vertex).
+export function VertexMarker({ position, radius }: { position: number[]; radius: number }) {
+  return (
+    <mesh position={position as [number, number, number]}>
+      <sphereGeometry args={[radius, 16, 16]} />
+      <meshBasicMaterial color="#ffcc33" depthTest={false} transparent opacity={0.9} />
+    </mesh>
+  )
+}
+
+// Body centre-of-mass markers.
+export function BodyMarkers({ cms, radius }: { cms: (number[] | null)[]; radius: number }) {
+  return (
+    <>
+      {cms.map((cm, i) => cm && (
+        <mesh key={i} position={cm as [number, number, number]}>
+          <sphereGeometry args={[radius, 12, 12]} />
+          <meshBasicMaterial color="#33ddff" depthTest={false} transparent opacity={0.85} />
+        </mesh>
+      ))}
+    </>
+  )
 }
 
 export default function MeshGeometry({ mesh, mode, colorScalars }: Props) {

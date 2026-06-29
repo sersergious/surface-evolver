@@ -2,7 +2,16 @@ import { useState, useEffect, useMemo } from 'react'
 import { getMesh, type MeshData } from '../api/simulation'
 import { useAppState } from '../store/AppContext'
 
-export type ColorMode = 'none' | 'height' | 'mean_curvature'
+export type ColorMode =
+  | 'none' | 'height'
+  | 'mean_curvature' | 'gaussian_curvature' | 'valence'
+  | 'star_area' | 'force' | 'energy_density'
+
+// Modes computed server-side: the value doubles as the `scalars` query param
+// (must match the C dispatch keys in se-worker.ts). 'height' is derived locally.
+const SERVER_SCALARS: ReadonlySet<ColorMode> = new Set([
+  'mean_curvature', 'gaussian_curvature', 'valence', 'star_area', 'force', 'energy_density',
+])
 
 export interface ColorScalars {
   values: number[]
@@ -15,8 +24,8 @@ export function useMesh(colorMode: ColorMode = 'none') {
   const [data, setData]           = useState<MeshData | null>(null)
   const [isFetching, setIsFetching] = useState(false)
 
-  // Only mean_curvature requires a server round-trip; height is derived locally.
-  const apiScalars = colorMode === 'mean_curvature' ? 'mean_curvature' : undefined
+  // Server-computed modes round-trip; 'none'/'height' need no scalar fetch.
+  const apiScalars = SERVER_SCALARS.has(colorMode) ? colorMode : undefined
 
   useEffect(() => {
     if (!sessionId) { setData(null); return }
@@ -35,7 +44,7 @@ export function useMesh(colorMode: ColorMode = 'none') {
     let values: number[]
     if (colorMode === 'height') {
       values = data.vertices.map(v => v[2])
-    } else if (colorMode === 'mean_curvature' && data.scalar_values?.length) {
+    } else if (SERVER_SCALARS.has(colorMode) && data.scalar_values?.length) {
       values = data.scalar_values
     } else {
       return null

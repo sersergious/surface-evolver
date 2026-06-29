@@ -1,18 +1,30 @@
-import { useRef, useEffect, useState } from 'react'
+import { useRef, useEffect, useState, useMemo } from 'react'
 import * as THREE from 'three'
 import { Canvas } from '@react-three/fiber'
 import { OrbitControls } from '@react-three/drei'
 import { useMesh, type ColorMode, type ColorScalars } from '../../hooks/useMesh'
+import { useQuantities } from '../../hooks/useQuantities'
 import { useAppState } from '../../store/AppContext'
-import MeshGeometry, { type RenderMode } from './MeshGeometry'
+import { getVertexInfo, type VertexInfo } from '../../api/simulation'
+import MeshGeometry, {
+  EdgeLines, PickPoints, VertexMarker, BodyMarkers, RaycasterConfig, type RenderMode,
+} from './MeshGeometry'
+import QuantitiesPanel from './QuantitiesPanel'
+import VertexInspector from './VertexInspector'
+import SettingsPanel from './SettingsPanel'
 
 const MODES: RenderMode[] = ['solid', 'wireframe', 'xray']
 const MODE_LABEL: Record<RenderMode, string> = { solid: 'Solid', wireframe: 'Wire', xray: 'X-Ray' }
 
 const COLOR_MODES: { value: ColorMode; label: string }[] = [
-  { value: 'none',           label: 'Color: Off'      },
-  { value: 'height',         label: 'Height Z'        },
-  { value: 'mean_curvature', label: 'Mean Curv. |H|'  },
+  { value: 'none',               label: 'Color: Off'      },
+  { value: 'height',             label: 'Height Z'        },
+  { value: 'mean_curvature',     label: 'Mean Curv. |H|'  },
+  { value: 'gaussian_curvature', label: 'Gauss Curv. K'   },
+  { value: 'energy_density',     label: 'Energy Density'  },
+  { value: 'star_area',          label: 'Star Area'       },
+  { value: 'valence',            label: 'Valence'         },
+  { value: 'force',              label: 'Force |∇E|'      },
 ]
 
 const LEGEND_GRADIENT = 'linear-gradient(to right, rgb(64,104,224), rgb(245,245,245), rgb(183,6,38))'
@@ -37,13 +49,36 @@ function Legend({ scalars, label }: { scalars: ColorScalars; label: string }) {
 }
 
 export default function ViewerPane() {
-  const { sessionId, jobProgress } = useAppState()
+  const { sessionId, jobProgress, setStats, setTotalTime, bumpMeshVersion } = useAppState()
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const controlsRef = useRef<any>(null)
   const [mode,      setMode]      = useState<RenderMode>('solid')
   const [colorMode, setColorMode] = useState<ColorMode>('none')
+  const [showQuants, setShowQuants] = useState(false)
+  const [showSettings, setShowSettings] = useState(false)
+  const [inspect,    setInspect]    = useState(false)
+  const [picked,     setPicked]     = useState<VertexInfo | null>(null)
+  const [pickedPos,  setPickedPos]  = useState<number[] | null>(null)
 
   const { data: mesh, isFetching, colorScalars } = useMesh(colorMode)
+  const quantities = useQuantities(showQuants)
+
+  // Characteristic mesh size → raycaster threshold + marker radii (scale-aware).
+  const meshRadius = useMemo(() => {
+    if (!mesh || mesh.vertices.length === 0) return 1
+    let lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity]
+    for (const v of mesh.vertices) for (let k = 0; k < 3; k++) {
+      if (v[k] < lo[k]) lo[k] = v[k]; if (v[k] > hi[k]) hi[k] = v[k]
+    }
+    return Math.max(hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]) || 1
+  }, [mesh])
+
+  async function handlePick(vpos: number) {
+    if (!sessionId || !mesh) return
+    setPickedPos(mesh.vertices[vpos] ?? null)
+    try { setPicked(await getVertexInfo(sessionId, vpos)) }
+    catch { setPicked(null) }
+  }
 
   useEffect(() => {
     if (!controlsRef.current || !mesh) return
@@ -63,7 +98,13 @@ export default function ViewerPane() {
     geo.dispose()
   }, [mesh])
 
-  useEffect(() => { if (!sessionId) setColorMode('none') }, [sessionId])
+  useEffect(() => {
+    if (!sessionId) { setColorMode('none'); setShowQuants(false); setShowSettings(false); setInspect(false) }
+  }, [sessionId])
+
+  // A picked vertex's position index goes stale when the mesh changes (refine,
+  // iterate, etc.) — clear the selection so we never highlight the wrong vertex.
+  useEffect(() => { setPicked(null); setPickedPos(null) }, [mesh])
 
   const progressPct = jobProgress
     ? Math.round((jobProgress.step / jobProgress.total) * 100)
@@ -80,9 +121,9 @@ export default function ViewerPane() {
           <div className="badge badge-ghost badge-lg text-base-content/40">Select a .fe file to begin</div>
         </div>
       )}
-      {sessionId && mesh && mesh.facets.length === 0 && (
+      {sessionId && mesh && mesh.facets.length === 0 && mesh.edges.length === 0 && (
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
-          <div className="badge badge-ghost badge-lg text-base-content/40">No surface — non-triangulated model</div>
+          <div className="badge badge-ghost badge-lg text-base-content/40">No geometry in this model</div>
         </div>
       )}
 
@@ -120,7 +161,46 @@ export default function ViewerPane() {
         >
           {COLOR_MODES.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
         </select>
+        <button
+          className={`btn btn-xs border-base-300 text-base-content ${showQuants ? 'bg-base-300' : 'bg-base-300/80 hover:bg-base-300'}`}
+          onClick={() => { setShowQuants(s => !s); setShowSettings(false) }}
+          disabled={!sessionId}
+          title="Quantities & energy breakdown"
+        >Σ</button>
+        <button
+          className={`btn btn-xs border-base-300 text-base-content ${inspect ? 'bg-base-300' : 'bg-base-300/80 hover:bg-base-300'}`}
+          onClick={() => { setInspect(i => !i); setPicked(null); setPickedPos(null) }}
+          disabled={!sessionId}
+          title="Inspect: click a vertex; show body centroids"
+        >⊙</button>
+        <button
+          className={`btn btn-xs border-base-300 text-base-content ${showSettings ? 'bg-base-300' : 'bg-base-300/80 hover:bg-base-300'}`}
+          onClick={() => { setShowSettings(s => !s); setShowQuants(false) }}
+          disabled={!sessionId}
+          title="Mesh & physics settings"
+        >⚙</button>
       </div>
+
+      {showQuants && quantities && (
+        <QuantitiesPanel data={quantities} onClose={() => setShowQuants(false)} />
+      )}
+
+      {showSettings && sessionId && (
+        <SettingsPanel
+          sessionId={sessionId}
+          onClose={() => setShowSettings(false)}
+          onApplied={(energy, area, totalTime) => { setStats(energy, area); setTotalTime(totalTime); bumpMeshVersion() }}
+        />
+      )}
+
+      {inspect && picked && (
+        <VertexInspector info={picked} onClose={() => { setPicked(null); setPickedPos(null) }} />
+      )}
+      {inspect && !picked && mesh && (
+        <div className="absolute bottom-3 right-3 z-30 badge badge-neutral text-[10px] pointer-events-none">
+          Click a vertex to inspect
+        </div>
+      )}
 
       {/* Colour legend */}
       {colorScalars && colorMode !== 'none' && <Legend scalars={colorScalars} label={colorLabel} />}
@@ -128,7 +208,7 @@ export default function ViewerPane() {
       {/* Mesh stats (bottom-right) */}
       {mesh && (
         <div className="absolute bottom-2 right-2 z-20 badge badge-neutral font-mono text-[10px] pointer-events-none">
-          {mesh.vertices.length.toLocaleString()} v · {mesh.facets.length.toLocaleString()} f
+          {mesh.vertices.length.toLocaleString()} v · {mesh.edges.length.toLocaleString()} e · {mesh.facets.length.toLocaleString()} f
         </div>
       )}
 
@@ -138,6 +218,18 @@ export default function ViewerPane() {
         <directionalLight position={[-4, -2, -4]} intensity={0.2} color="#4488cc" />
         {mesh && mesh.facets.length > 0 && (
           <MeshGeometry mesh={mesh} mode={mode} colorScalars={colorScalars} />
+        )}
+        {mesh && mesh.facets.length === 0 && mesh.edges.length > 0 && (
+          <EdgeLines mesh={mesh} colorScalars={colorScalars} />
+        )}
+        {inspect && mesh && (
+          <>
+            <RaycasterConfig threshold={meshRadius * 0.02} />
+            <PickPoints mesh={mesh} onPick={handlePick} />
+            {mesh.body_cms && mesh.body_cms.some(Boolean) &&
+              <BodyMarkers cms={mesh.body_cms} radius={meshRadius * 0.02} />}
+            {pickedPos && <VertexMarker position={pickedPos} radius={meshRadius * 0.025} />}
+          </>
         )}
         <OrbitControls ref={controlsRef} makeDefault />
       </Canvas>
