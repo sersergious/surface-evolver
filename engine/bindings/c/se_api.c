@@ -218,17 +218,6 @@ int se_run(const char *cmd)
     return (retval == 1) ? 0 : -1;
 }
 
-/* ── se_iterate ───────────────────────────────────────────────────────── */
-
-void se_iterate(int steps)
-{
-    char buf[64];
-    if (!se_initialized || steps <= 0)
-        return;
-    snprintf(buf, sizeof(buf), "g %d", steps);
-    se_run(buf);
-}
-
 /* ── scalar state accessors ───────────────────────────────────────────── */
 
 double se_get_energy(void) { return (double)web.total_energy; }
@@ -300,8 +289,10 @@ int se_get_facets(int *out, int max_count)
 
     if (!se_initialized || !out || max_count <= 0)
         return -1;
+    /* STRING/SIMPLEX models carry no triangulated facets — report zero
+     * (not an error) so curve files render via se_get_edges() instead. */
     if (web.representation != SOAPFILM)
-        return -1;
+        return 0;
 
     /* Build ordinal→position map so indices match se_get_vertices() order.
      * Ordinals can have gaps after vertex deletions. */
@@ -343,6 +334,98 @@ int se_get_facets(int *out, int max_count)
     }
     free(ord_to_pos);
     return n;
+}
+
+/* ── se_get_edges ─────────────────────────────────────────────────────── */
+/*
+ * Two vertex positions per edge, packed [t0,h0, t1,h1, ...].  Positions are
+ * sequential indices matching se_get_vertices() row order (same ordinal→pos
+ * map se_get_facets uses).  Works for every representation — this is the only
+ * geometry the STRING (1-D) model produces, so no SOAPFILM guard here.
+ */
+int se_get_edges(int *out, int max_count)
+{
+    edge_id   e_id;
+    vertex_id v_id;
+    int n = 0, max_ord = 0, pos;
+    int *ord_to_pos = NULL;
+
+    if (!se_initialized || !out || max_count <= 0)
+        return -1;
+
+    FOR_ALL_VERTICES(v_id) {
+        int ord = ordinal(v_id);
+        if (ord > max_ord) max_ord = ord;
+    }
+    ord_to_pos = (int *)calloc((size_t)(max_ord + 1), sizeof(int));
+    if (!ord_to_pos)
+        return -1;
+    pos = 0;
+    FOR_ALL_VERTICES(v_id)
+        ord_to_pos[ordinal(v_id)] = pos++;
+
+    FOR_ALL_EDGES(e_id) {
+        vertex_id tv, hv;
+        if (n >= max_count)
+            break;
+        tv = get_edge_tailv(e_id);
+        hv = get_edge_headv(e_id);
+        if (!valid_id(tv) || !valid_id(hv))
+            continue;
+        out[n * 2 + 0] = ord_to_pos[ordinal(tv)];
+        out[n * 2 + 1] = ord_to_pos[ordinal(hv)];
+        n++;
+    }
+    free(ord_to_pos);
+    return n;
+}
+
+/* ── se_get_bounding_box ──────────────────────────────────────────────── */
+/*
+ * Axis-aligned bounds of the current surface, min[] and max[] over sdim
+ * coordinates.  Computed directly from vertex positions (the engine's own
+ * bounding_box global lives in the graphics pipeline, which is absent in the
+ * headless build).  Returns sdim on success, -1 on error, 0 if no vertices.
+ */
+int se_get_bounding_box(double *out_min, double *out_max)
+{
+    vertex_id v_id;
+    int sdim = web.sdim;
+    int j, any = 0;
+
+    if (!se_initialized || !out_min || !out_max)
+        return -1;
+
+    for (j = 0; j < sdim; j++) {
+        out_min[j] =  1e30;
+        out_max[j] = -1e30;
+    }
+
+    FOR_ALL_VERTICES(v_id) {
+        REAL *x = get_coord(v_id);
+        any = 1;
+        for (j = 0; j < sdim; j++) {
+            double c = (double)x[j];
+            if (c < out_min[j]) out_min[j] = c;
+            if (c > out_max[j]) out_max[j] = c;
+        }
+    }
+    if (!any) {
+        for (j = 0; j < sdim; j++) { out_min[j] = 0.0; out_max[j] = 0.0; }
+        return 0;
+    }
+    return sdim;
+}
+
+/* ── se_get_lagrange_order ────────────────────────────────────────────── */
+/* Polynomial order of elements.  >1 means edge-midpoint control vertices are
+ * present and the linear-triangle render is geometrically wrong — UI should
+ * warn.  Returns web.lagrange_order, or -1 if uninitialised. */
+int se_get_lagrange_order(void)
+{
+    if (!se_initialized)
+        return -1;
+    return web.lagrange_order;
 }
 
 /* ── se_get_vertex_mean_curvatures ────────────────────────────────────── */
@@ -481,6 +564,220 @@ int se_get_vertex_mean_curvatures(double *out, int max_count)
     return n;
 }
 
+/* Allocate + fill an ordinal→sequential-position map for vertices (matching
+ * se_get_vertices row order).  Caller frees.  Returns NULL on OOM. */
+static int *build_vertex_pos_map(void)
+{
+    vertex_id v_id;
+    int max_ord = 0, pos = 0;
+    int *m;
+    FOR_ALL_VERTICES(v_id) { int o = ordinal(v_id); if (o > max_ord) max_ord = o; }
+    m = (int *)calloc((size_t)(max_ord + 1), sizeof(int));
+    if (!m) return NULL;
+    FOR_ALL_VERTICES(v_id) m[ordinal(v_id)] = pos++;
+    return m;
+}
+
+/* ── se_get_vertex_valences ───────────────────────────────────────────── */
+/* Incident-edge count per vertex (regular triangular meshes are 6).  Counted
+ * directly from the edge list — the engine's cached vptr->valence field is not
+ * populated on a freshly loaded surface. */
+int se_get_vertex_valences(int *out, int max_count)
+{
+    edge_id   e_id;
+    vertex_id v_id;
+    int nv, n = 0;
+    int *pos_map, *cnt;
+
+    if (!se_initialized || !out || max_count <= 0)
+        return -1;
+    nv = (int)web.skel[VERTEX].count;
+    if (nv == 0) return 0;
+
+    pos_map = build_vertex_pos_map();
+    if (!pos_map) return -1;
+    cnt = (int *)calloc((size_t)nv, sizeof(int));
+    if (!cnt) { free(pos_map); return -1; }
+
+    FOR_ALL_EDGES(e_id) {
+        vertex_id tv = get_edge_tailv(e_id), hv = get_edge_headv(e_id);
+        if (valid_id(tv)) cnt[pos_map[ordinal(tv)]]++;
+        if (valid_id(hv)) cnt[pos_map[ordinal(hv)]]++;
+    }
+
+    FOR_ALL_VERTICES(v_id) {
+        if (n >= max_count) break;
+        out[n] = cnt[pos_map[ordinal(v_id)]];
+        n++;
+    }
+    free(pos_map); free(cnt);
+    return n;
+}
+
+/* ── se_get_vertex_star_areas ─────────────────────────────────────────── */
+/* Mixed (barycentric) area of the facet star around each vertex. */
+int se_get_vertex_star_areas(double *out, int max_count)
+{
+    vertex_id v_id;
+    int n = 0;
+    if (!se_initialized || !out || max_count <= 0)
+        return -1;
+    FOR_ALL_VERTICES(v_id) {
+        if (n >= max_count) break;
+        out[n++] = (double)get_vertex_area_star(v_id);
+    }
+    return n;
+}
+
+/* ── se_get_vertex_force_mags ─────────────────────────────────────────── */
+/* Magnitude of the per-vertex force / descent direction (populated after an
+ * iteration; zero on a freshly loaded surface).  Highlights high-tension
+ * regions. */
+int se_get_vertex_force_mags(double *out, int max_count)
+{
+    vertex_id v_id;
+    int sdim = web.sdim, n = 0, j;
+    if (!se_initialized || !out || max_count <= 0)
+        return -1;
+    FOR_ALL_VERTICES(v_id) {
+        REAL *f = get_force(v_id);
+        double s = 0.0;
+        if (n >= max_count) break;
+        for (j = 0; j < sdim; j++) s += (double)f[j] * (double)f[j];
+        out[n++] = sqrt(s);
+    }
+    return n;
+}
+
+/* ── se_get_vertex_energy_density ─────────────────────────────────────── */
+/* Vertex-averaged surface energy: each facet contributes area×density, split
+ * evenly (÷3) among its three corner vertices.  A direct energy-density proxy.
+ * SOAPFILM only (needs triangulated facets). */
+int se_get_vertex_energy_density(double *out, int max_count)
+{
+    vertex_id v_id;
+    facet_id  f_id;
+    int nv, n;
+    int *pos_map;
+    double *acc;
+
+    if (!se_initialized || !out || max_count <= 0)
+        return -1;
+    if (web.representation != SOAPFILM)
+        return 0;
+
+    nv = (int)web.skel[VERTEX].count;
+    if (nv == 0) return 0;
+
+    pos_map = build_vertex_pos_map();
+    if (!pos_map) return -1;
+    acc = (double *)calloc((size_t)nv, sizeof(double));
+    if (!acc) { free(pos_map); return -1; }
+
+    FOR_ALL_FACETS(f_id) {
+        facetedge_id fe;
+        double e;
+        int k;
+        if (inverted(f_id)) continue;
+        fe = get_facet_fe(f_id);
+        if (!valid_id(fe)) continue;
+        e = (double)get_facet_area(f_id) * (double)get_facet_density(f_id) / 3.0;
+        for (k = 0; k < 3; k++) {
+            acc[pos_map[ordinal(get_fe_tailv(fe))]] += e;
+            fe = get_next_edge(fe);
+        }
+    }
+
+    n = 0;
+    FOR_ALL_VERTICES(v_id) {
+        if (n >= max_count) break;
+        out[n] = acc[pos_map[ordinal(v_id)]];
+        n++;
+    }
+    free(pos_map); free(acc);
+    return n;
+}
+
+/* ── se_get_vertex_gaussian_curvatures ────────────────────────────────── */
+/* Discrete Gaussian curvature K = (2π − Σ incident face angles) / star_area.
+ * Positive at convex peaks, negative at saddles.  SOAPFILM + sdim 3. */
+int se_get_vertex_gaussian_curvatures(double *out, int max_count)
+{
+    vertex_id v_id;
+    facet_id  f_id;
+    int nv, n, k;
+    int *pos_map;
+    double *ang, *area;
+
+    if (!se_initialized || !out || max_count <= 0)
+        return -1;
+    if (web.representation != SOAPFILM || web.sdim != 3)
+        return -1;
+
+    nv = (int)web.skel[VERTEX].count;
+    if (nv == 0) return 0;
+
+    pos_map = build_vertex_pos_map();
+    if (!pos_map) return -1;
+    ang  = (double *)calloc((size_t)nv, sizeof(double));
+    area = (double *)calloc((size_t)nv, sizeof(double));
+    if (!ang || !area) { free(pos_map); free(ang); free(area); return -1; }
+
+    FOR_ALL_FACETS(f_id) {
+        facetedge_id fe0, fe1, fe2;
+        vertex_id vv[3];
+        REAL *p[3];
+        double cross_len;
+        int pos[3];
+        if (inverted(f_id)) continue;
+        fe0 = get_facet_fe(f_id);
+        if (!valid_id(fe0)) continue;
+        fe1 = get_next_edge(fe0);
+        fe2 = get_next_edge(fe1);
+        vv[0] = get_fe_tailv(fe0);
+        vv[1] = get_fe_tailv(fe1);
+        vv[2] = get_fe_tailv(fe2);
+        for (k = 0; k < 3; k++) { p[k] = get_coord(vv[k]); pos[k] = pos_map[ordinal(vv[k])]; }
+
+        /* triangle area (for the star) and the interior angle at each corner */
+        {
+            double e01[3], e02[3], cx, cy, cz;
+            for (k = 0; k < 3; k++) { e01[k] = (double)(p[1][k]-p[0][k]); e02[k] = (double)(p[2][k]-p[0][k]); }
+            cx = e01[1]*e02[2]-e01[2]*e02[1];
+            cy = e01[2]*e02[0]-e01[0]*e02[2];
+            cz = e01[0]*e02[1]-e01[1]*e02[0];
+            cross_len = sqrt(cx*cx+cy*cy+cz*cz);
+            if (cross_len < 1e-15) continue;
+            area[pos[0]] += cross_len/6.0;
+            area[pos[1]] += cross_len/6.0;
+            area[pos[2]] += cross_len/6.0;
+        }
+        for (k = 0; k < 3; k++) {
+            int a = (k+1)%3, b = (k+2)%3, m;
+            double du = 0, dw = 0, dot = 0, c;
+            for (m = 0; m < 3; m++) {
+                double uu = (double)(p[a][m]-p[k][m]);
+                double ww = (double)(p[b][m]-p[k][m]);
+                du += uu*uu; dw += ww*ww; dot += uu*ww;
+            }
+            if (du < 1e-30 || dw < 1e-30) continue;
+            c = dot / sqrt(du*dw);
+            if (c >  1.0) c =  1.0;
+            if (c < -1.0) c = -1.0;
+            ang[pos[k]] += acos(c);
+        }
+    }
+
+    n = 0;
+    FOR_ALL_VERTICES(v_id) {
+        int p2 = pos_map[ordinal(v_id)];
+        if (n >= max_count) break;
+        out[n++] = (area[p2] > 1e-15) ? (2.0*M_PI - ang[p2]) / area[p2] : 0.0;
+    }
+    free(pos_map); free(ang); free(area);
+    return n;
+}
+
 /* ── se_get_body_volumes ──────────────────────────────────────────────── */
 
 int se_get_body_volumes(double *volumes, double *pressures, int max_count)
@@ -499,6 +796,286 @@ int se_get_body_volumes(double *volumes, double *pressures, int max_count)
         n++;
     }
     return n;
+}
+
+/* ── se_get_topo_counts ───────────────────────────────────────────────── */
+/* Cumulative topology-operation counters (they accumulate over the session;
+ * diff before/after a command for per-command deltas).  Fixed order:
+ *   0 equi  1 edge_refine  2 facet_refine  3 vertex_dissolve  4 edge_dissolve
+ *   5 facet_dissolve  6 vertex_pop  7 edge_pop  8 edgeswap  9 fix  10 unfix
+ * Returns number written (<= SE_TOPO_COUNT), or -1 on error. */
+int se_get_topo_counts(int *out, int max_count)
+{
+    int vals[SE_TOPO_COUNT];
+    int i, n;
+    if (!se_initialized || !out || max_count <= 0)
+        return -1;
+    vals[0]  = web.equi_count;
+    vals[1]  = web.edge_refine_count;
+    vals[2]  = web.facet_refine_count;
+    vals[3]  = web.vertex_dissolve_count;
+    vals[4]  = web.edge_dissolve_count;
+    vals[5]  = web.facet_dissolve_count;
+    vals[6]  = web.vertex_pop_count;
+    vals[7]  = web.edge_pop_count;
+    vals[8]  = web.edgeswap_count;
+    vals[9]  = web.fix_count;
+    vals[10] = web.unfix_count;
+    n = (max_count < SE_TOPO_COUNT) ? max_count : SE_TOPO_COUNT;
+    for (i = 0; i < n; i++)
+        out[i] = vals[i];
+    return n;
+}
+
+/* ── se_get_total_time ────────────────────────────────────────────────── */
+/* Accumulated sum of scale factors applied — a proxy for total surface motion. */
+double se_get_total_time(void)
+{
+    return (double)total_time;
+}
+
+/* ── physics globals ──────────────────────────────────────────────────── */
+/* Read [gravflag, grav_const, pressflag, pressure].  Returns n written, -1 on
+ * error. (flags are 0/1 but returned as double for a uniform buffer.) */
+int se_get_physics(double *out, int max_count)
+{
+    double vals[4];
+    int i, n;
+    if (!se_initialized || !out || max_count <= 0)
+        return -1;
+    vals[0] = (double)web.gravflag;
+    vals[1] = (double)web.grav_const;
+    vals[2] = (double)web.pressflag;
+    vals[3] = (double)web.pressure;
+    n = (max_count < 4) ? max_count : 4;
+    for (i = 0; i < n; i++)
+        out[i] = vals[i];
+    return n;
+}
+
+/* Write the physics globals.  Mirrors the engine rule that a non-zero
+ * gravitational constant implies gravity is on (command.c).  Caller should
+ * trigger a recalc afterwards to refresh energy.  Returns 0, or -1 on error. */
+int se_set_physics(double grav_const, int gravflag, double pressure, int pressflag)
+{
+    if (!se_initialized)
+        return -1;
+    web.grav_const = (REAL)grav_const;
+    web.gravflag   = (grav_const != 0.0) ? 1 : gravflag;
+    web.pressure   = (REAL)pressure;
+    web.pressflag  = pressflag ? 1 : 0;
+    return 0;
+}
+
+/* Write the mesh-quality thresholds [min_area, min_length, max_len,
+ * temperature].  Caller should recalc afterwards.  Returns 0, or -1. */
+int se_set_mesh_params(double min_area, double min_length, double max_len, double temperature)
+{
+    if (!se_initialized)
+        return -1;
+    web.min_area    = (REAL)min_area;
+    web.min_length  = (REAL)min_length;
+    web.max_len     = (REAL)max_len;
+    web.temperature = (REAL)temperature;
+    return 0;
+}
+
+/* ── se_get_mesh_params ───────────────────────────────────────────────── */
+/* Mesh-quality thresholds, fixed order: [min_area, min_length, max_len,
+ * temperature].  Returns number written (<= 4), or -1 on error. */
+int se_get_mesh_params(double *out, int max_count)
+{
+    double vals[4];
+    int i, n;
+    if (!se_initialized || !out || max_count <= 0)
+        return -1;
+    vals[0] = (double)web.min_area;
+    vals[1] = (double)web.min_length;
+    vals[2] = (double)web.max_len;
+    vals[3] = (double)web.temperature;
+    n = (max_count < 4) ? max_count : 4;
+    for (i = 0; i < n; i++)
+        out[i] = vals[i];
+    return n;
+}
+
+/* ── named quantities ─────────────────────────────────────────────────── */
+/* Raw count of generalized-quantity slots; iterate 0..count-1 and call
+ * se_get_quantity, which returns -1 for deleted/default slots to skip. */
+int se_get_quantity_count(void)
+{
+    return se_initialized ? gen_quant_count : -1;
+}
+
+/* Read one quantity by raw slot index.  name/value/target/modulus/flags may be
+ * NULL.  Returns 0 on a real quantity, -1 for an empty/deleted/default slot or
+ * out-of-range index. */
+int se_get_quantity(int idx, char *name, int name_size,
+                    double *value, double *target, double *modulus, int *flags)
+{
+    struct gen_quant *q;
+    if (!se_initialized || idx < 0 || idx >= gen_quant_count)
+        return -1;
+    q = GEN_QUANT(idx);
+    if (q->flags & (DEFAULT_QUANTITY | Q_DELETED))
+        return -1;
+    if (name && name_size > 0) {
+        strncpy(name, q->name, (size_t)name_size - 1);
+        name[name_size - 1] = '\0';
+    }
+    if (value)   *value   = (double)q->value;
+    if (target)  *target  = (double)q->target;
+    if (modulus) *modulus = (double)q->modulus;
+    if (flags)   *flags   = q->flags;
+    return 0;
+}
+
+/* ── method instances (energy breakdown) ──────────────────────────────── */
+int se_get_method_instance_count(void)
+{
+    return se_initialized ? meth_inst_count : -1;
+}
+
+/* Read one method instance by raw slot index.  Returns 0 on a real instance,
+ * -1 for deleted/default/out-of-range.  `type` is the element type (VERTEX/
+ * EDGE/FACET/BODY); `value` is its energy contribution. */
+int se_get_method_instance(int idx, char *name, int name_size,
+                           int *type, double *value)
+{
+    struct method_instance *mi;
+    if (!se_initialized || idx < 0 || idx >= meth_inst_count)
+        return -1;
+    mi = METH_INSTANCE(idx);
+    if ((mi->flags & (Q_DELETED | DEFAULT_INSTANCE)) || mi->name[0] == '\0')
+        return -1;
+    if (name && name_size > 0) {
+        strncpy(name, mi->name, (size_t)name_size - 1);
+        name[name_size - 1] = '\0';
+    }
+    if (type)  *type  = mi->type;
+    if (value) *value = (double)mi->value;
+    return 0;
+}
+
+/* ── se_get_body_cm ───────────────────────────────────────────────────── */
+/*
+ * Volume-weighted centre of mass of the body at ordinal `body_idx`.
+ *
+ * The engine's bptr->cm field is filled only in the graphics pipeline (absent
+ * in the headless build), so we compute it directly: decompose the body's
+ * bounding surface into tetrahedra (origin, a, b, c) per oriented facet.
+ *   signed tet volume  v = a·(b×c)/6
+ *   tet centroid          (a+b+c)/4
+ *   body centroid = Σ v·centroid / Σ v
+ * Each facet bounds get_facet_body(f) on one side and the inverse on the other;
+ * contributions are signed so only the net (closed) body volume survives.
+ * SOAPFILM + sdim 3 only.  Fills out_xyz[0..2]; returns 3, or -1 on error /
+ * out-of-range / degenerate (near-zero volume).
+ */
+int se_get_body_cm(int body_idx, double *out_xyz)
+{
+    body_id  target = NULLID, b_id;
+    facet_id f_id;
+    int n = 0, k;
+    double V = 0.0, M[3] = {0, 0, 0};
+
+    if (!se_initialized || !out_xyz || body_idx < 0)
+        return -1;
+    if (web.representation != SOAPFILM || web.sdim != 3)
+        return -1;
+
+    FOR_ALL_BODIES(b_id) {
+        if (n == body_idx) { target = b_id; break; }
+        n++;
+    }
+    if (!valid_id(target))
+        return -1;
+
+    FOR_ALL_FACETS(f_id) {
+        facetedge_id fe;
+        REAL *p[3];
+        double a[3], b[3], c[3], cross[3], v, sign;
+        body_id bf, bb;
+
+        if (inverted(f_id)) continue;
+        fe = get_facet_fe(f_id);
+        if (!valid_id(fe)) continue;
+
+        bf = get_facet_body(f_id);
+        bb = get_facet_body(inverse_id(f_id));
+        if (equal_id(bf, target))      sign =  1.0;
+        else if (equal_id(bb, target)) sign = -1.0;
+        else continue;
+
+        for (k = 0; k < 3; k++) { p[k] = get_coord(get_fe_tailv(fe)); fe = get_next_edge(fe); }
+        for (k = 0; k < 3; k++) { a[k] = (double)p[0][k]; b[k] = (double)p[1][k]; c[k] = (double)p[2][k]; }
+
+        cross[0] = b[1]*c[2] - b[2]*c[1];
+        cross[1] = b[2]*c[0] - b[0]*c[2];
+        cross[2] = b[0]*c[1] - b[1]*c[0];
+        v = sign * (a[0]*cross[0] + a[1]*cross[1] + a[2]*cross[2]) / 6.0;
+
+        V += v;
+        for (k = 0; k < 3; k++)
+            M[k] += v * (a[k] + b[k] + c[k]) / 4.0;
+    }
+
+    if (fabs(V) < 1e-15)
+        return -1;
+    for (k = 0; k < 3; k++)
+        out_xyz[k] = M[k] / V;
+    return 3;
+}
+
+/* ── se_get_vertex_info (element inspector) ────────────────────────────── */
+/*
+ * Detail for the vertex at sequential position `vpos` (matching se_get_vertices
+ * row order).  out_id ← 1-based SE ordinal; out_xyz ← sdim coords; out_attr ←
+ * the attribute bitmap (FIXED 0x40, BOUNDARY 0x80, CONSTRAINT 0x400, …);
+ * out_cons ← active constraint indices (up to cons_max).  Any out param may be
+ * NULL.  Returns the number of constraints on the vertex (may exceed cons_max),
+ * or -1 on error / out-of-range.
+ */
+int se_get_vertex_info(int vpos, int *out_id, double *out_xyz, int *out_attr,
+                       int *out_cons, int cons_max)
+{
+    vertex_id v_id = NULLID;
+    int n = 0, sdim = web.sdim, j, found = 0;
+    conmap_t *cm;
+    int count, w;
+
+    if (!se_initialized || vpos < 0)
+        return -1;
+    FOR_ALL_VERTICES(v_id) {
+        if (n == vpos) { found = 1; break; }
+        n++;
+    }
+    if (!found || !valid_id(v_id))
+        return -1;
+
+    if (out_id)  *out_id  = ordinal(v_id) + 1;
+    if (out_xyz) { REAL *x = get_coord(v_id); for (j = 0; j < sdim; j++) out_xyz[j] = (double)x[j]; }
+    if (out_attr) *out_attr = (int)get_attr(v_id);
+
+    cm    = get_v_constraint_map(v_id);
+    count = (int)cm[0];
+    for (j = 1, w = 0; j <= count; j++, w++) {
+        if (out_cons && w < cons_max)
+            out_cons[w] = (int)(cm[j] & CONMASK);
+    }
+    return count;
+}
+
+/* ── se_get_constraint_name ───────────────────────────────────────────── */
+/* Name of constraint `con_idx` (1..web.highcon) → buf.  Returns 0, or -1 on
+ * out-of-range / error. */
+int se_get_constraint_name(int con_idx, char *buf, int size)
+{
+    if (!se_initialized || !buf || size <= 0 || con_idx < 1 || con_idx > web.highcon)
+        return -1;
+    strncpy(buf, GETCONSTR(con_idx)->name, (size_t)size - 1);
+    buf[size - 1] = '\0';
+    return 0;
 }
 
 /* ── output capture helpers ───────────────────────────────────────────── */
