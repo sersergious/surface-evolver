@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "skills": {
+    "electrobun-best-practices": {
+      "source": "0xbigboss/claude-code",
+      "sourceType": "github",
+      "skillPath": ".claude/skills/electrobun-best-practices/SKILL.md",
+      "computedHash": "708f261a16aa01e1b0d7a9a0b904dbe6176e864f424515db4f48707cd11dfdf9"
+    },
+    "elysiajs": {
+      "source": "elysiajs/skills",
+      "sourceType": "github",
+      "skillPath": "elysia/SKILL.md",
+      "computedHash": "55268e69a2c766ed67e56a0db57544f60cc52dba0c7f024a974baf965e525e1b"
+    },
+    "ponytail": {
+      "source": "DietrichGebert/ponytail",
+      "sourceType": "github",
+      "skillPath": "skills/ponytail/SKILL.md",
+      "computedHash": "9c2a14a09838e12a6bc248e054529fe494060c0d8b78a7ff8e1696a980a12eee"
+    },
+    "typescript-best-practices": {
+      "source": "0xbigboss/claude-code",
+      "sourceType": "github",
+      "skillPath": ".claude/skills/typescript-best-practices/SKILL.md",
+      "computedHash": "9866bb48d92a951feafb77f6f48ea39b42c6c1e901788c916d4aad40f60db008"
+    },
+    "zig-best-practices": {
+      "source": "0xbigboss/claude-code",
+      "sourceType": "github",
+      "skillPath": ".claude/skills/zig-best-practices/SKILL.md",
+      "computedHash": "2066ad212238ab5b8216db478fb19e54e3ed2b2837e0d438e86ba0f717bb0d67"
+    }
+  }
+}
