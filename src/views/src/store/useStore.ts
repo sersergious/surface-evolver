@@ -7,6 +7,7 @@ interface AppState {
   energy:      number | null
   area:        number | null
   totalTime:   number | null
+  vertexAttributes: string[]
   outputLog:   string[]
   meshVersion: number
   jobProgress: { step: number; total: number } | null
@@ -18,6 +19,7 @@ interface AppActions {
   setFileContent:  (content: string | null) => void
   setStats:        (energy: number | null, area: number | null) => void
   setTotalTime:    (t: number | null) => void
+  setVertexAttributes: (attrs: string[]) => void
   appendLog:       (line: string) => void
   clearLog:        () => void
   bumpMeshVersion: () => void
@@ -32,15 +34,17 @@ export const useStore = create<AppState & AppActions>((set) => ({
   energy:      null,
   area:        null,
   totalTime:   null,
+  vertexAttributes: [],
   outputLog:   [],
   meshVersion: 0,
   jobProgress: null,
 
   setSession:      (id, file) => set({ sessionId: id, activeFile: file, totalTime: 0 }),
-  clearSession:    ()         => set({ sessionId: null, activeFile: null, energy: null, area: null, totalTime: null, fileContent: null }),
+  clearSession:    ()         => set({ sessionId: null, activeFile: null, energy: null, area: null, totalTime: null, vertexAttributes: [], fileContent: null }),
   setFileContent:  (content)  => set({ fileContent: content }),
   setStats:        (energy, area) => set({ energy, area }),
   setTotalTime:    (t) => set({ totalTime: t }),
+  setVertexAttributes: (attrs) => set({ vertexAttributes: attrs }),
   appendLog: (line) =>
     set((s) => {
       const next = [...s.outputLog, line]
