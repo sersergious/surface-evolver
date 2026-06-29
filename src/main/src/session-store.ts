@@ -8,6 +8,7 @@ export interface SessionState {
   vertex_count:  number | null;
   edge_count:    number | null;
   facet_count:   number | null;
+  lagrange_order: number | null;
   last_accessed: Date;
 }
 
