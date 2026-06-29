@@ -1,6 +1,18 @@
 {
   "version": 1,
   "skills": {
+    "bun-api": {
+      "source": "dmythro/agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/bun-api/SKILL.md",
+      "computedHash": "ce5d829b5628bfc1abb00596ebf07c2a61dc8c119397ca1199ee0e822337c565"
+    },
+    "bun-cli": {
+      "source": "dmythro/agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/bun-cli/SKILL.md",
+      "computedHash": "e623399d9ab77a77353e4d45998e317a9e8bb505381454b20674fdf9d6f80021"
+    },
     "electrobun-best-practices": {
       "source": "0xbigboss/claude-code",
       "sourceType": "github",
@@ -24,12 +36,6 @@
       "sourceType": "github",
       "skillPath": ".claude/skills/typescript-best-practices/SKILL.md",
       "computedHash": "9866bb48d92a951feafb77f6f48ea39b42c6c1e901788c916d4aad40f60db008"
-    },
-    "zig-best-practices": {
-      "source": "0xbigboss/claude-code",
-      "sourceType": "github",
-      "skillPath": ".claude/skills/zig-best-practices/SKILL.md",
-      "computedHash": "2066ad212238ab5b8216db478fb19e54e3ed2b2837e0d438e86ba0f717bb0d67"
     }
   }
 }
