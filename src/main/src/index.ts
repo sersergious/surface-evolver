@@ -1,10 +1,54 @@
 import Electrobun, { BrowserWindow }                     from "electrobun/bun";
 import { resolve, join, basename, extname }               from "path";
 import { readdirSync, readFileSync, writeFileSync, existsSync } from "fs";
+import { tmpdir } from "os";
 import { config }         from "./config";
 import * as sessionStore  from "./session-store";
 import * as seManager     from "./se-manager";
 import * as jobRunner     from "./job-runner";
+import * as persistence   from "./persistence";
+
+// Best-effort snapshot of the current surface after a mutating op. Reuses SE's
+// own dump so the *evolved* state (post refine/iterate) survives a restart.
+// ponytail: dumps once per mutation — fine at human command pace; throttle if
+// huge-mesh interactive use ever lags.
+function persist(sessionId: string): void {
+    void (async () => {
+        try {
+            const s = sessionStore.get(sessionId);
+            if (!s) return;
+            const { content } = await seManager.dump(sessionId);
+            persistence.saveSession({
+                fe_file: s.fe_file, energy: s.energy, area: s.area,
+                dmp: content, saved_at: new Date().toISOString(),
+            });
+        } catch { /* persistence is best-effort; never surface to the user */ }
+    })();
+}
+
+// On startup, reload the last surface from its saved dump. Awaited by the
+// getRestore RPC so the webview never races the restore.
+const restorePromise: Promise<sessionStore.SessionState | null> = (async () => {
+    const saved = persistence.loadSaved();
+    if (!saved) return null;
+    try {
+        const tmp = join(tmpdir(), `se-restore-${crypto.randomUUID()}.dmp`);
+        writeFileSync(tmp, saved.dmp);
+        const sessionId = crypto.randomUUID();
+        const stats = await seManager.loadSession(sessionId, tmp);
+        const session: sessionStore.SessionState = {
+            session_id: sessionId, fe_file: saved.fe_file,
+            energy: stats.energy, area: stats.area, scale: stats.scale, sdim: stats.sdim,
+            vertex_count: stats.vertex_count, edge_count: stats.edge_count, facet_count: stats.facet_count,
+            lagrange_order: stats.lagrange_order, last_accessed: new Date(),
+        };
+        sessionStore.put(session);
+        return session;
+    } catch {
+        persistence.clearSaved();   // corrupt/unloadable snapshot — drop it
+        return null;
+    }
+})();
 
 const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
 
@@ -35,6 +79,12 @@ const win = new BrowserWindow({
 // Register all bun-side RPC handlers for the webview to call.
 // setRequestHandler replaces the handler object atomically — no per-method addHandler API exists.
 (win.webview.rpc as any).setRequestHandler({
+
+        // Returns the surface restored from the last run's snapshot, or null.
+        getRestore: async () => {
+            const s = await restorePromise;
+            return s ? { ...s, last_accessed: s.last_accessed.toISOString() } : null;
+        },
 
         listFiles: async () => {
             const feDir = resolve(config.seFeDdir);
@@ -67,9 +117,11 @@ const win = new BrowserWindow({
                 vertex_count:  stats.vertex_count,
                 edge_count:    stats.edge_count,
                 facet_count:   stats.facet_count,
+                lagrange_order: stats.lagrange_order,
                 last_accessed: new Date(),
             };
             sessionStore.put(session);
+            persist(sessionId);
             return { ...session, last_accessed: session.last_accessed.toISOString() };
         },
 
@@ -166,6 +218,7 @@ const win = new BrowserWindow({
             session.energy = result.energy;
             session.area   = result.area;
             sessionStore.put(session);
+            persist(sessionId);
 
             return result;
         },
@@ -176,5 +229,59 @@ const win = new BrowserWindow({
             if (!session) throw new Error("Session not found");
 
             return await seManager.getMesh(sessionId, scalars);
+        },
+
+        quantities: async (payload: { sessionId: string }) => {
+            const { sessionId } = payload;
+            const session = sessionStore.get(sessionId);
+            if (!session) throw new Error("Session not found");
+
+            return await seManager.getQuantities(sessionId);
+        },
+
+        settings: async (payload: { sessionId: string }) => {
+            const { sessionId } = payload;
+            const session = sessionStore.get(sessionId);
+            if (!session) throw new Error("Session not found");
+
+            return await seManager.getSettings(sessionId);
+        },
+
+        setSettings: async (payload: { sessionId: string; mesh_params?: seManager.MeshParams; physics?: seManager.Physics }) => {
+            const { sessionId, mesh_params, physics } = payload;
+            const session = sessionStore.get(sessionId);
+            if (!session) throw new Error("Session not found");
+
+            const result = await seManager.setSettings(sessionId, { mesh_params, physics });
+            session.energy = result.energy;
+            session.area   = result.area;
+            sessionStore.put(session);
+            persist(sessionId);
+            return result;
+        },
+
+        vertexInfo: async (payload: { sessionId: string; vpos: number }) => {
+            const { sessionId, vpos } = payload;
+            const session = sessionStore.get(sessionId);
+            if (!session) throw new Error("Session not found");
+            if (typeof vpos !== "number" || vpos < 0) throw new Error("vpos is required");
+
+            return await seManager.getVertexInfo(sessionId, vpos);
+        },
+
+        topo: async (payload: { sessionId: string; op: string; n?: number }) => {
+            const { sessionId, op, n } = payload;
+            const session = sessionStore.get(sessionId);
+            if (!session) throw new Error("Session not found");
+            if (!op) throw new Error("op is required");
+
+            const result = await seManager.runTopo(sessionId, op, n);
+
+            session.energy = result.energy;
+            session.area   = result.area;
+            sessionStore.put(session);
+            persist(sessionId);
+
+            return result;
         },
     });

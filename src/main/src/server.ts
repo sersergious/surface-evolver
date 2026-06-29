@@ -162,6 +162,7 @@ async function handleCreateSession(req: Request): Promise<Response> {
     vertex_count:  stats.vertex_count,
     edge_count:    stats.edge_count,
     facet_count:   stats.facet_count,
+    lagrange_order: stats.lagrange_order,
     last_accessed: new Date(),
   };
   sessionStore.put(session);
