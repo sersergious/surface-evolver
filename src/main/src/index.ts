@@ -7,6 +7,7 @@ import * as sessionStore  from "./session-store";
 import * as seManager     from "./se-manager";
 import * as jobRunner     from "./job-runner";
 import * as persistence   from "./persistence";
+import { installAppMenu } from "./app-menu";
 
 // Best-effort snapshot of the current surface after a mutating op. Reuses SE's
 // own dump so the *evolved* state (post refine/iterate) survives a restart.
@@ -75,6 +76,9 @@ const win = new BrowserWindow({
     titleBarStyle: 'hiddenInset',
     trafficLightOffset: { x: 12, y: 14 },
 });
+
+// Native menu bar + keyboard accelerators → forwarded to the webview as se-menu.
+installAppMenu(win);
 
 // Register all bun-side RPC handlers for the webview to call.
 // setRequestHandler replaces the handler object atomically — no per-method addHandler API exists.
