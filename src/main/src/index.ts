@@ -122,7 +122,13 @@ const win = new BrowserWindow({
             };
             sessionStore.put(session);
             persist(sessionId);
-            return { ...session, last_accessed: session.last_accessed.toISOString() };
+            // vertex_attributes ride the response (not stored) — the viewer uses
+            // them to populate custom-attribute colormaps.
+            return {
+                ...session,
+                vertex_attributes: stats.vertex_attributes,
+                last_accessed: session.last_accessed.toISOString(),
+            };
         },
 
         uploadFile: async (payload: { filename: string; content: string }) => {
@@ -223,12 +229,12 @@ const win = new BrowserWindow({
             return result;
         },
 
-        getMesh: async (payload: { sessionId: string; scalars?: string }) => {
-            const { sessionId, scalars } = payload;
+        getMesh: async (payload: { sessionId: string; scalars?: string; colors?: boolean }) => {
+            const { sessionId, scalars, colors } = payload;
             const session = sessionStore.get(sessionId);
             if (!session) throw new Error("Session not found");
 
-            return await seManager.getMesh(sessionId, scalars);
+            return await seManager.getMesh(sessionId, scalars, colors);
         },
 
         quantities: async (payload: { sessionId: string }) => {
