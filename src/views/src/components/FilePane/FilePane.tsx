@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { listFiles, uploadFile } from '../../api/files'
-import { createSession } from '../../api/sessions'
+import { createSession, getRestore } from '../../api/sessions'
 import { exportFe } from '../../api/export'
 import { useAppState } from '../../store/AppContext'
 
@@ -37,6 +37,20 @@ export default function FilePane() {
 
   useEffect(() => { refreshFiles() }, [refreshFiles])
 
+  // Auto-restore the previous run's evolved surface (once, on first mount).
+  useEffect(() => {
+    let cancelled = false
+    getRestore().then(s => {
+      if (cancelled || !s) return
+      setSession(s.session_id, s.fe_file)
+      setStats(s.energy, s.area)
+      appendLog(`Restored previous session: ${s.fe_file}`)
+      exportFe(s.session_id).then(fe => setFileContent(fe.content)).catch(() => {})
+    }).catch(() => {})
+    return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   async function handleSelect(file: string) {
     if (loadingFile) return
     if (activeFile === file && !fileErrors[file]) return
@@ -48,6 +62,8 @@ export default function FilePane() {
       setSession(session.session_id, file)
       setStats(session.energy, session.area)
       appendLog(`Loaded ${file} — session ${session.session_id.slice(0, 8)}`)
+      if ((session.lagrange_order ?? 1) > 1)
+        appendLog(`[warning] ${file}: Lagrange order ${session.lagrange_order} — curved patches render as straight edges`)
       try {
         const fe = await exportFe(session.session_id)
         setFileContent(fe.content)

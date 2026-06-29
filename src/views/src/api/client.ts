@@ -14,6 +14,9 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   const call = (name: string, params?: unknown) =>
     (view.rpc as any).request(name, params) as Promise<T>
 
+  if (path === '/restore' && method === 'GET')
+    return call('getRestore')
+
   if (path === '/files' && method === 'GET')
     return call('listFiles')
 
@@ -34,6 +37,24 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   const runMatch = path.match(/^\/sessions\/([^/]+)\/run$/)
   if (runMatch && method === 'POST')
     return call('runCommand', { sessionId: runMatch[1], ...(body as object) })
+
+  const topoMatch = path.match(/^\/sessions\/([^/]+)\/topo$/)
+  if (topoMatch && method === 'POST')
+    return call('topo', { sessionId: topoMatch[1], ...(body as object) })
+
+  const quantMatch = path.match(/^\/sessions\/([^/]+)\/quantities$/)
+  if (quantMatch && method === 'GET')
+    return call('quantities', { sessionId: quantMatch[1] })
+
+  const vinfoMatch = path.match(/^\/sessions\/([^/]+)\/vertex\/(\d+)$/)
+  if (vinfoMatch && method === 'GET')
+    return call('vertexInfo', { sessionId: vinfoMatch[1], vpos: Number(vinfoMatch[2]) })
+
+  const settingsMatch = path.match(/^\/sessions\/([^/]+)\/settings$/)
+  if (settingsMatch && method === 'GET')
+    return call('settings', { sessionId: settingsMatch[1] })
+  if (settingsMatch && method === 'POST')
+    return call('setSettings', { sessionId: settingsMatch[1], ...(body as object) })
 
   const meshMatch = path.match(/^\/sessions\/([^/]+)\/mesh(\?.*)?$/)
   if (meshMatch && method === 'GET') {
@@ -57,9 +78,8 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
 }
 
 const client = {
-  get:    <T>(path: string)                => request<T>('GET',    path),
-  post:   <T>(path: string, body?: unknown) => request<T>('POST',   path, body),
-  delete: <T = void>(path: string)         => request<T>('DELETE', path),
+  get:  <T>(path: string)                => request<T>('GET',  path),
+  post: <T>(path: string, body?: unknown) => request<T>('POST', path, body),
 }
 
 export default client

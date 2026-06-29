@@ -5,10 +5,9 @@ import FilePane      from './components/FilePane/FilePane'
 import CliPane       from './components/CliPane/CliPane'
 import EditorPane    from './components/EditorPane/EditorPane'
 import ViewerPane    from './components/ViewerPane/ViewerPane'
-import SmallScreen   from './components/SmallScreen'
 import DocsPage      from './components/DocsPage/DocsPage'
 import { useProgressWS } from './hooks/useProgressWS'
-import { AppProvider, useAppState } from './store/AppContext'
+import { useAppState } from './store/AppContext'
 
 // ── Theme ─────────────────────────────────────────────────────────────────────
 
@@ -61,7 +60,7 @@ function Navbar({ sidebarOpen, onToggleSidebar, theme, onTheme }: {
   theme: Theme
   onTheme: (t: Theme) => void
 }) {
-  const { sessionId, activeFile, energy, area } = useAppState()
+  const { sessionId, activeFile, energy, area, totalTime } = useAppState()
   const navigate = useNavigate()
 
   return (
@@ -91,10 +90,11 @@ function Navbar({ sidebarOpen, onToggleSidebar, theme, onTheme }: {
       {/* ── Right ── */}
       <div className="navbar-end gap-2 no-drag">
         {/* Stats */}
-        {(energy !== null || area !== null) && (
+        {(energy !== null || area !== null || totalTime !== null) && (
           <div className="hidden sm:flex items-center gap-3 mr-1">
             {energy !== null && <StatChip label="E" value={energy.toFixed(4)} />}
             {area   !== null && <StatChip label="A" value={area.toFixed(4)} />}
+            {totalTime !== null && <StatChip label="t" value={totalTime.toPrecision(4)} />}
           </div>
         )}
 
@@ -201,10 +201,7 @@ function Inner() {
   }, []))
 
   return (
-    <>
-      <div className="flex md:hidden h-screen"><SmallScreen /></div>
-
-      <div className="hidden md:flex flex-col h-screen w-screen overflow-hidden bg-base-100 font-sans">
+    <div className="flex flex-col h-screen w-screen overflow-hidden bg-base-100 font-sans">
 
         <Navbar
           sidebarOpen={sidebarOpen}
@@ -267,20 +264,17 @@ function Inner() {
           </div>
 
         </div>
-      </div>
-    </>
+    </div>
   )
 }
 
 export default function App() {
   return (
-    <AppProvider>
-      <ErrorBoundary>
-        <Routes>
-          <Route path="/"     element={<Inner />} />
-          <Route path="/docs" element={<DocsPage />} />
-        </Routes>
-      </ErrorBoundary>
-    </AppProvider>
+    <ErrorBoundary>
+      <Routes>
+        <Route path="/"     element={<Inner />} />
+        <Route path="/docs" element={<DocsPage />} />
+      </Routes>
+    </ErrorBoundary>
   )
 }

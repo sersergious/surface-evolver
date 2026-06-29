@@ -61,6 +61,8 @@ export default function EditorPane() {
       setFileContent(content)
       setDirty(false)
       appendLog(`Reloaded ${activeFile} — session ${session.session_id.slice(0, 8)}`)
+      if ((session.lagrange_order ?? 1) > 1)
+        appendLog(`[warning] ${activeFile}: Lagrange order ${session.lagrange_order} — curved patches render as straight edges`)
     } catch (err: unknown) {
       appendLog(`[error] Save failed: ${err instanceof Error ? err.message : String(err)}`)
     } finally { setSaving(false) }

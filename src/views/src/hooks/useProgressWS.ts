@@ -29,5 +29,5 @@ export function useProgressWS(sessionId: string | null) {
     return () => {
       window.removeEventListener('se-progress', handleProgress)
     }
-  }, [sessionId, setStats, setJobProgress, clearJob, bumpMeshVersion])
+  }, [sessionId]) // ponytail: zustand actions are stable refs, listing them is noise
 }
