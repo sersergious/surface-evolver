@@ -51,6 +51,14 @@ const SYMBOLS = {
   se_get_method_instance_count:     { returns: FFIType.int, args: [] },
   se_get_method_instance:           { returns: FFIType.int, args: [FFIType.int, FFIType.ptr, FFIType.int, FFIType.ptr, FFIType.ptr] },
   se_get_body_cm:                   { returns: FFIType.int, args: [FFIType.int, FFIType.ptr] },
+  se_get_facet_colors:              { returns: FFIType.int, args: [FFIType.ptr, FFIType.ptr, FFIType.int] },
+  se_get_facet_normals:             { returns: FFIType.int, args: [FFIType.ptr, FFIType.int] },
+  se_get_edge_colors:               { returns: FFIType.int, args: [FFIType.ptr, FFIType.int] },
+  se_get_edge_lengths:              { returns: FFIType.int, args: [FFIType.ptr, FFIType.int] },
+  se_get_edge_densities:            { returns: FFIType.int, args: [FFIType.ptr, FFIType.int] },
+  se_get_attribute_count:           { returns: FFIType.int, args: [FFIType.int] },
+  se_get_attribute_info:            { returns: FFIType.int, args: [FFIType.int, FFIType.int, FFIType.ptr, FFIType.int, FFIType.ptr] },
+  se_get_attribute_values:          { returns: FFIType.int, args: [FFIType.int, FFIType.int, FFIType.ptr, FFIType.int] },
   se_get_vertex_info:               { returns: FFIType.int, args: [FFIType.int, FFIType.ptr, FFIType.ptr, FFIType.ptr, FFIType.ptr, FFIType.int] },
   se_get_constraint_name:           { returns: FFIType.int, args: [FFIType.int, FFIType.ptr, FFIType.int] },
   se_get_vertex_mean_curvatures:    { returns: FFIType.int, args: [FFIType.ptr, FFIType.int] },
@@ -132,9 +140,10 @@ function handleLoad(req: { path: string }): object {
     edge_count:     lib.se_get_edge_count()   as number,
     facet_count:    lib.se_get_facet_count()  as number,
     lagrange_order: lib.se_get_lagrange_order() as number,
-    bbox_min:       bbN > 0 ? Array.from(bbMin) : null,
-    bbox_max:       bbN > 0 ? Array.from(bbMax) : null,
-    total_time:     lib.se_get_total_time() as number,
+    bbox_min:          bbN > 0 ? Array.from(bbMin) : null,
+    bbox_max:          bbN > 0 ? Array.from(bbMax) : null,
+    total_time:        lib.se_get_total_time() as number,
+    vertex_attributes: listVertexAttributes(),
   };
 }
 
@@ -165,16 +174,50 @@ const VERTEX_SCALARS: Record<string, { fn: () => ScalarFn; int?: boolean }> = {
   valence:            { fn: () => lib.se_get_vertex_valences as ScalarFn, int: true },
 };
 
+// User-defined vertex attributes (element type VERTEX = 0) become colormaps too,
+// requested as scalars="attr:NAME". They ride the same per-vertex scalar path.
+const VERTEX = 0;
+
+function findVertexAttr(name: string): number {
+  const count   = lib.se_get_attribute_count(VERTEX) as number;
+  const nameBuf = Buffer.alloc(NAME_SIZE);
+  const typeBuf = new Int32Array(1);
+  for (let i = 0; i < count; i++) {
+    const r = lib.se_get_attribute_info(VERTEX, i, ptr(nameBuf), NAME_SIZE, ptr(typeBuf)) as number;
+    if (r === 0 && cstr(nameBuf) === name) return i;
+  }
+  return -1;
+}
+
+function listVertexAttributes(): string[] {
+  const names: string[] = [];
+  const count   = lib.se_get_attribute_count(VERTEX) as number;
+  const nameBuf = Buffer.alloc(NAME_SIZE);
+  const typeBuf = new Int32Array(1);
+  for (let i = 0; i < count; i++) {
+    const r = lib.se_get_attribute_info(VERTEX, i, ptr(nameBuf), NAME_SIZE, ptr(typeBuf)) as number;
+    if (r === 0) names.push(cstr(nameBuf));
+  }
+  return names;
+}
+
 function readVertexScalar(name: string, vcount: number): number[] | null {
+  if (vcount <= 0) return [];                 // empty surface — ptr() rejects 0-length
+  if (name.startsWith("attr:")) {
+    const idx = findVertexAttr(name.slice(5));
+    if (idx < 0) return null;
+    const buf = new Float64Array(vcount);
+    const n   = lib.se_get_attribute_values(VERTEX, idx, ptr(buf), vcount) as number;
+    return n >= 0 ? Array.from(buf.subarray(0, n)) : null;
+  }
   const spec = VERTEX_SCALARS[name];
   if (!spec) return null;
-  if (vcount <= 0) return [];                 // empty surface — ptr() rejects 0-length
   const buf = spec.int ? new Int32Array(vcount) : new Float64Array(vcount);
   const n   = spec.fn()(ptr(buf), vcount);
   return n >= 0 ? Array.from(buf.subarray(0, n)) : null;
 }
 
-function handleMesh(req?: { scalars?: string }): object {
+function handleMesh(req?: { scalars?: string; colors?: boolean }): object {
   const vcount = lib.se_get_vertex_count() as number;
   // bun:ffi ptr() rejects zero-length buffers, so every fill is guarded on a
   // positive count (a STRING model has 0 facets; an empty surface 0 of all).
@@ -231,6 +274,25 @@ function handleMesh(req?: { scalars?: string }): object {
       result.scalars       = req.scalars;
       result.scalar_values = values;
     }
+  }
+
+  // Per-element SE colour-table indices (only when asked — keeps the hot mesh
+  // payload lean otherwise).
+  if (req?.colors) {
+    const facet_colors: number[] = [];
+    const edge_colors:  number[] = [];
+    if (fcount > 0) {
+      const front = new Int32Array(fcount), back = new Int32Array(fcount);
+      const cn = lib.se_get_facet_colors(ptr(front), ptr(back), fcount) as number;
+      for (let i = 0; i < cn; i++) facet_colors.push(front[i]);
+    }
+    if (ecount > 0) {
+      const ec = new Int32Array(ecount);
+      const cn = lib.se_get_edge_colors(ptr(ec), ecount) as number;
+      for (let i = 0; i < cn; i++) edge_colors.push(ec[i]);
+    }
+    result.facet_colors = facet_colors;
+    result.edge_colors  = edge_colors;
   }
 
   return result;
@@ -493,7 +555,7 @@ rl.on("line", (line: string) => {
         send({ type: "result", ...handleRun(req as { command: string }) });
         break;
       case "mesh":
-        send({ type: "result", ...handleMesh(req as { scalars?: string }) });
+        send({ type: "result", ...handleMesh(req as { scalars?: string; colors?: boolean }) });
         break;
       case "set_scale":
         send({ type: "result", ...handleSetScale(req as { scale: number }) });

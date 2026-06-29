@@ -155,7 +155,7 @@ export async function loadSession(sessionId: string, fePath: string): Promise<{
   energy: number; area: number; scale: number; sdim: number;
   vertex_count: number; edge_count: number; facet_count: number;
   lagrange_order: number; bbox_min: number[] | null; bbox_max: number[] | null;
-  total_time: number;
+  total_time: number; vertex_attributes: string[];
 }> {
   await mutex.acquire();
   try {
@@ -275,17 +275,17 @@ export async function runTopo(
   }
 }
 
-export async function getMesh(sessionId: string, scalars?: string): Promise<{
+export async function getMesh(sessionId: string, scalars?: string, colors?: boolean): Promise<{
   vertices: number[][]; vertex_ids: number[]; facets: number[][]; edges: number[][];
   body_volumes: Record<string, number>; body_pressures: Record<string, number>;
-  scalars?: string; scalar_values?: number[];
+  scalars?: string; scalar_values?: number[]; facet_colors?: number[]; edge_colors?: number[];
 }> {
   await mutex.acquire();
   try {
     if (activeSessionId !== sessionId)
       throw new Error(`Session ${sessionId} is not currently loaded (active: ${activeSessionId})`);
     if (!worker) throw new Error(`No active SE worker for session ${sessionId}`);
-    await worker.send({ cmd: "mesh", ...(scalars ? { scalars } : {}) });
+    await worker.send({ cmd: "mesh", ...(scalars ? { scalars } : {}), ...(colors ? { colors: true } : {}) });
     const msg = await worker.recvResult();
     checkResult(msg);
     return msg as unknown as ReturnType<typeof getMesh> extends Promise<infer R> ? R : never;
