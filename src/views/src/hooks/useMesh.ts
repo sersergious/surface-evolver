@@ -6,12 +6,20 @@ export type ColorMode =
   | 'none' | 'height'
   | 'mean_curvature' | 'gaussian_curvature' | 'valence'
   | 'star_area' | 'force' | 'energy_density'
+  | 'se_colors'                 // per-facet SE colour-table indices (not a scalar)
+  | `attr:${string}`            // a user-defined vertex attribute
 
-// Modes computed server-side: the value doubles as the `scalars` query param
-// (must match the C dispatch keys in se-worker.ts). 'height' is derived locally.
-const SERVER_SCALARS: ReadonlySet<ColorMode> = new Set([
+// Built-in modes computed server-side: the value doubles as the `scalars` query
+// param (must match the C dispatch keys in se-worker.ts). 'height' is local.
+const SERVER_SCALARS: ReadonlySet<string> = new Set([
   'mean_curvature', 'gaussian_curvature', 'valence', 'star_area', 'force', 'energy_density',
 ])
+
+// A mode that produces per-vertex scalar values fetched from the server
+// (built-in scalars + any "attr:NAME" custom vertex attribute).
+function isServerScalar(mode: ColorMode): boolean {
+  return SERVER_SCALARS.has(mode) || mode.startsWith('attr:')
+}
 
 export interface ColorScalars {
   values: number[]
@@ -24,27 +32,27 @@ export function useMesh(colorMode: ColorMode = 'none') {
   const [data, setData]           = useState<MeshData | null>(null)
   const [isFetching, setIsFetching] = useState(false)
 
-  // Server-computed modes round-trip; 'none'/'height' need no scalar fetch.
-  const apiScalars = SERVER_SCALARS.has(colorMode) ? colorMode : undefined
+  const apiScalars = isServerScalar(colorMode) ? colorMode : undefined
+  const apiColors  = colorMode === 'se_colors'
 
   useEffect(() => {
     if (!sessionId) { setData(null); return }
     let cancelled = false
     setIsFetching(true)
-    getMesh(sessionId, apiScalars)
+    getMesh(sessionId, apiScalars, apiColors)
       .then(mesh  => { if (!cancelled) setData(mesh) })
       .catch(()   => { if (!cancelled) setData(null) })
       .finally(() => { if (!cancelled) setIsFetching(false) })
     return () => { cancelled = true }
-  }, [sessionId, meshVersion, apiScalars])
+  }, [sessionId, meshVersion, apiScalars, apiColors])
 
   const colorScalars = useMemo<ColorScalars | null>(() => {
-    if (!data || colorMode === 'none') return null
+    if (!data || colorMode === 'none' || colorMode === 'se_colors') return null
 
     let values: number[]
     if (colorMode === 'height') {
       values = data.vertices.map(v => v[2])
-    } else if (SERVER_SCALARS.has(colorMode) && data.scalar_values?.length) {
+    } else if (isServerScalar(colorMode) && data.scalar_values?.length) {
       values = data.scalar_values
     } else {
       return null

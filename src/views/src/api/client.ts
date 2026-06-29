@@ -58,8 +58,10 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
 
   const meshMatch = path.match(/^\/sessions\/([^/]+)\/mesh(\?.*)?$/)
   if (meshMatch && method === 'GET') {
-    const scalars = new URLSearchParams(meshMatch[2]?.slice(1) ?? '').get('scalars') ?? undefined
-    return call('getMesh', { sessionId: meshMatch[1], ...(scalars ? { scalars } : {}) })
+    const qs      = new URLSearchParams(meshMatch[2]?.slice(1) ?? '')
+    const scalars = qs.get('scalars') ?? undefined
+    const colors  = qs.get('colors') === 'true'
+    return call('getMesh', { sessionId: meshMatch[1], ...(scalars ? { scalars } : {}), ...(colors ? { colors: true } : {}) })
   }
 
   const scaleMatch = path.match(/^\/sessions\/([^/]+)\/scale$/)

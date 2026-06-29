@@ -8,9 +8,42 @@ import type { ColorScalars } from '../../hooks/useMesh'
 export type RenderMode = 'solid' | 'wireframe' | 'xray'
 
 interface Props {
-  mesh:         MeshData
-  mode:         RenderMode
-  colorScalars: ColorScalars | null
+  mesh:          MeshData
+  mode:          RenderMode
+  colorScalars:  ColorScalars | null
+  elementColors: boolean        // render per-facet SE colour-table colours
+}
+
+// Standard 16-colour Surface Evolver / DOS palette, index → [r,g,b] in 0..1.
+// CLEAR (-1) and out-of-range fall back to neutral grey.
+const SE_PALETTE: [number, number, number][] = [
+  [0,0,0],[0,0,1],[0,1,0],[0,1,1],[1,0,0],[1,0,1],[0.55,0.27,0.07],[0.75,0.75,0.75],
+  [0.5,0.5,0.5],[0.5,0.5,1],[0.5,1,0.5],[0.5,1,1],[1,0.5,0.5],[1,0.5,1],[1,1,0],[1,1,1],
+]
+function paletteRGB(idx: number): [number, number, number] {
+  return idx >= 0 && idx < SE_PALETTE.length ? SE_PALETTE[idx] : [0.7, 0.7, 0.7]
+}
+
+// Non-indexed geometry with a flat SE-palette colour per facet (each triangle's
+// three vertices carry the facet colour → flat shading respects script colours).
+function buildElementColorGeometry(mesh: MeshData): THREE.BufferGeometry {
+  const geo = new THREE.BufferGeometry()
+  const nf  = mesh.facets.length
+  const pos = new Float32Array(nf * 9)
+  const col = new Float32Array(nf * 9)
+  for (let f = 0; f < nf; f++) {
+    const tri = mesh.facets[f]
+    const [r, g, b] = paletteRGB(mesh.facet_colors?.[f] ?? -1)
+    for (let k = 0; k < 3; k++) {
+      const v = mesh.vertices[tri[k]]
+      pos[f * 9 + k * 3] = v[0]; pos[f * 9 + k * 3 + 1] = v[1]; pos[f * 9 + k * 3 + 2] = v[2]
+      col[f * 9 + k * 3] = r;    col[f * 9 + k * 3 + 1] = g;    col[f * 9 + k * 3 + 2] = b
+    }
+  }
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3))
+  geo.setAttribute('color', new THREE.BufferAttribute(col, 3))
+  geo.computeVertexNormals()
+  return geo
 }
 
 // Coolwarm colormap: blue → near-white → red (matches matplotlib's coolwarm)
@@ -128,17 +161,18 @@ export function BodyMarkers({ cms, radius }: { cms: (number[] | null)[]; radius:
   )
 }
 
-export default function MeshGeometry({ mesh, mode, colorScalars }: Props) {
+export default function MeshGeometry({ mesh, mode, colorScalars, elementColors }: Props) {
+  const useElementColors = elementColors && (mesh.facet_colors?.length ?? 0) > 0
   const geometry = useMemo(
-    () => buildGeometry(mesh, colorScalars),
+    () => useElementColors ? buildElementColorGeometry(mesh) : buildGeometry(mesh, colorScalars),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [mesh, colorScalars],
+    [mesh, colorScalars, useElementColors],
   )
 
   useEffect(() => () => { geometry.dispose() }, [geometry])
 
   const showEdges  = mesh.facets.length <= 200_000
-  const useVColors = colorScalars !== null
+  const useVColors = colorScalars !== null || useElementColors
 
   if (mode === 'wireframe') {
     return (

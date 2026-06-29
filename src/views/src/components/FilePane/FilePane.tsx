@@ -14,7 +14,7 @@ function arrayBufferToBase64(buf: ArrayBuffer): string {
 }
 
 export default function FilePane() {
-  const { activeFile, setSession, setStats, setFileContent, appendLog } = useAppState()
+  const { activeFile, setSession, setStats, setFileContent, setVertexAttributes, appendLog } = useAppState()
 
   const [files,       setFiles]       = useState<string[]>([])
   const [loading,     setLoading]     = useState(true)
@@ -44,6 +44,7 @@ export default function FilePane() {
       if (cancelled || !s) return
       setSession(s.session_id, s.fe_file)
       setStats(s.energy, s.area)
+      setVertexAttributes(s.vertex_attributes ?? [])
       appendLog(`Restored previous session: ${s.fe_file}`)
       exportFe(s.session_id).then(fe => setFileContent(fe.content)).catch(() => {})
     }).catch(() => {})
@@ -61,6 +62,7 @@ export default function FilePane() {
       const session = await createSession(file)
       setSession(session.session_id, file)
       setStats(session.energy, session.area)
+      setVertexAttributes(session.vertex_attributes ?? [])
       appendLog(`Loaded ${file} — session ${session.session_id.slice(0, 8)}`)
       if ((session.lagrange_order ?? 1) > 1)
         appendLog(`[warning] ${file}: Lagrange order ${session.lagrange_order} — curved patches render as straight edges`)

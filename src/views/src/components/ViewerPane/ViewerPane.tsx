@@ -25,6 +25,7 @@ const COLOR_MODES: { value: ColorMode; label: string }[] = [
   { value: 'star_area',          label: 'Star Area'       },
   { value: 'valence',            label: 'Valence'         },
   { value: 'force',              label: 'Force |∇E|'      },
+  { value: 'se_colors',          label: 'SE Colors'       },
 ]
 
 const LEGEND_GRADIENT = 'linear-gradient(to right, rgb(64,104,224), rgb(245,245,245), rgb(183,6,38))'
@@ -49,7 +50,13 @@ function Legend({ scalars, label }: { scalars: ColorScalars; label: string }) {
 }
 
 export default function ViewerPane() {
-  const { sessionId, jobProgress, setStats, setTotalTime, bumpMeshVersion } = useAppState()
+  const { sessionId, jobProgress, vertexAttributes, setStats, setTotalTime, bumpMeshVersion } = useAppState()
+
+  // Built-in colour modes + one entry per user-defined vertex attribute.
+  const colorModes = useMemo(
+    () => [...COLOR_MODES, ...vertexAttributes.map(a => ({ value: `attr:${a}` as ColorMode, label: `Attr: ${a}` }))],
+    [vertexAttributes],
+  )
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const controlsRef = useRef<any>(null)
   const [mode,      setMode]      = useState<RenderMode>('solid')
@@ -102,6 +109,12 @@ export default function ViewerPane() {
     if (!sessionId) { setColorMode('none'); setShowQuants(false); setShowSettings(false); setInspect(false) }
   }, [sessionId])
 
+  // Reset to a valid mode if the selected custom attribute isn't in this surface.
+  useEffect(() => {
+    if (colorMode.startsWith('attr:') && !colorModes.some(m => m.value === colorMode))
+      setColorMode('none')
+  }, [colorModes, colorMode])
+
   // A picked vertex's position index goes stale when the mesh changes (refine,
   // iterate, etc.) — clear the selection so we never highlight the wrong vertex.
   useEffect(() => { setPicked(null); setPickedPos(null) }, [mesh])
@@ -110,7 +123,7 @@ export default function ViewerPane() {
     ? Math.round((jobProgress.step / jobProgress.total) * 100)
     : null
 
-  const colorLabel = COLOR_MODES.find(m => m.value === colorMode)?.label ?? ''
+  const colorLabel = colorModes.find(m => m.value === colorMode)?.label ?? ''
 
   return (
     <div className="relative h-full bg-base-100 min-w-0">
@@ -159,7 +172,7 @@ export default function ViewerPane() {
           className="select select-xs bg-base-300/80 border-base-300 text-base-content min-h-0 h-6 py-0 pr-6 pl-2 text-xs"
           title="Scalar colour field"
         >
-          {COLOR_MODES.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
+          {colorModes.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
         </select>
         <button
           className={`btn btn-xs border-base-300 text-base-content ${showQuants ? 'bg-base-300' : 'bg-base-300/80 hover:bg-base-300'}`}
@@ -217,7 +230,7 @@ export default function ViewerPane() {
         <directionalLight position={[4, 8, 4]} intensity={0.9} />
         <directionalLight position={[-4, -2, -4]} intensity={0.2} color="#4488cc" />
         {mesh && mesh.facets.length > 0 && (
-          <MeshGeometry mesh={mesh} mode={mode} colorScalars={colorScalars} />
+          <MeshGeometry mesh={mesh} mode={mode} colorScalars={colorScalars} elementColors={colorMode === 'se_colors'} />
         )}
         {mesh && mesh.facets.length === 0 && mesh.edges.length > 0 && (
           <EdgeLines mesh={mesh} colorScalars={colorScalars} />

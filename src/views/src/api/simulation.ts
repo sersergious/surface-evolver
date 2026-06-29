@@ -20,6 +20,8 @@ export interface MeshData {
   body_cms?: (number[] | null)[]
   scalars?: string
   scalar_values?: number[]
+  facet_colors?: number[]
+  edge_colors?: number[]
 }
 
 export interface RunCommandResponse {
@@ -66,9 +68,12 @@ export async function runTopo(id: string, op: TopoOp, n?: number): Promise<TopoR
   return client.post<TopoResponse>(`/sessions/${id}/topo`, { op, ...(n ? { n } : {}) })
 }
 
-export async function getMesh(id: string, scalars?: string): Promise<MeshData> {
-  const qs = scalars ? `?scalars=${encodeURIComponent(scalars)}` : ''
-  return client.get<MeshData>(`/sessions/${id}/mesh${qs}`)
+export async function getMesh(id: string, scalars?: string, colors?: boolean): Promise<MeshData> {
+  const p = new URLSearchParams()
+  if (scalars) p.set('scalars', scalars)
+  if (colors)  p.set('colors', 'true')
+  const qs = p.toString()
+  return client.get<MeshData>(`/sessions/${id}/mesh${qs ? `?${qs}` : ''}`)
 }
 
 // flags bits (se_api.h): Q_ENERGY=1, Q_FIXED=2, Q_INFO=4

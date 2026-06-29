@@ -11,7 +11,7 @@ import { createSession }                                  from '../../api/sessio
 import { useAppState }                                    from '../../store/AppContext'
 
 export default function EditorPane() {
-  const { sessionId, activeFile, fileContent, setSession, setStats, setFileContent, appendLog } = useAppState()
+  const { sessionId, activeFile, fileContent, setSession, setStats, setVertexAttributes, setFileContent, appendLog } = useAppState()
 
   const editorRef  = useRef<HTMLDivElement>(null)
   const viewRef    = useRef<EditorView | null>(null)
@@ -58,6 +58,7 @@ export default function EditorPane() {
       const session = await createSession(activeFile)
       setSession(session.session_id, activeFile)
       setStats(session.energy, session.area)
+      setVertexAttributes(session.vertex_attributes ?? [])
       setFileContent(content)
       setDirty(false)
       appendLog(`Reloaded ${activeFile} — session ${session.session_id.slice(0, 8)}`)
