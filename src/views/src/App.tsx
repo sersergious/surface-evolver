@@ -7,6 +7,7 @@ import EditorPane    from './components/EditorPane/EditorPane'
 import ViewerPane    from './components/ViewerPane/ViewerPane'
 import DocsPage      from './components/DocsPage/DocsPage'
 import { useProgressWS } from './hooks/useProgressWS'
+import { useMenuAction } from './hooks/useMenuAction'
 import { useAppState } from './store/AppContext'
 
 // ── Theme ─────────────────────────────────────────────────────────────────────
@@ -141,7 +142,14 @@ function Inner() {
   useProgressWS(sessionId)
 
   useSystemTheme()
+  const navigate = useNavigate()
   const [sidebarOpen,  setSidebarOpen]  = useState(true)
+
+  // Native View/File menu → explorer toggle + docs.
+  useMenuAction(a => {
+    if (a === 'view:sidebar')   setSidebarOpen(o => !o)
+    else if (a === 'view:docs') navigate('/docs')
+  })
   const [sidebarWidth, setSidebarWidth] = useState(SIDEBAR_W)
   const [editorWidth,  setEditorWidth]  = useState(EDITOR_W)
   const [viewerPct,    setViewerPct]    = useState(62)

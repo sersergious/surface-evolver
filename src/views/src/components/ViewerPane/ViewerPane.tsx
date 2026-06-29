@@ -4,6 +4,7 @@ import { Canvas } from '@react-three/fiber'
 import { OrbitControls } from '@react-three/drei'
 import { useMesh, type ColorMode, type ColorScalars } from '../../hooks/useMesh'
 import { useQuantities } from '../../hooks/useQuantities'
+import { useMenuAction } from '../../hooks/useMenuAction'
 import { useAppState } from '../../store/AppContext'
 import { getVertexInfo, type VertexInfo } from '../../api/simulation'
 import MeshGeometry, {
@@ -104,6 +105,16 @@ export default function ViewerPane() {
     controlsRef.current.saveState()
     geo.dispose()
   }, [mesh])
+
+  // Native View menu → colour mode, render mode, panel toggles.
+  useMenuAction(a => {
+    if (!sessionId) return
+    if (a.startsWith('color:'))       setColorMode(a.slice(6) as ColorMode)
+    else if (a.startsWith('render:')) setMode(a.slice(7) as RenderMode)
+    else if (a === 'panel:quants')    { setShowQuants(s => !s); setShowSettings(false) }
+    else if (a === 'panel:settings')  { setShowSettings(s => !s); setShowQuants(false) }
+    else if (a === 'panel:inspect')   { setInspect(i => !i); setPicked(null); setPickedPos(null) }
+  })
 
   useEffect(() => {
     if (!sessionId) { setColorMode('none'); setShowQuants(false); setShowSettings(false); setInspect(false) }
