@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react'
 import { runCommand, runTopo, type TopoOp } from '../../api/simulation'
 import { useAppState } from '../../store/AppContext'
+import { useMenuAction } from '../../hooks/useMenuAction'
 import OutputLog from './OutputLog'
 
 const TOPO_OPS: { op: TopoOp; label: string; title: string }[] = [
@@ -21,6 +22,34 @@ export default function CliPane() {
   const [input, setInput] = useState('')
   const [busy, setBusy]   = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
+
+  // Native Run menu → iterate `g N` (reuses the run path so stats/mesh refresh).
+  async function runG(n: number) {
+    if (!sessionId || busy) return
+    appendLog(`> g ${n}`)
+    setBusy(true)
+    try {
+      const res = await runCommand(sessionId, `g ${n}`)
+      if (res.output) appendLog(res.output)
+      setStats(res.energy, res.area)
+      setTotalTime(res.total_time)
+      bumpMeshVersion()
+    } catch (err: unknown) {
+      appendLog(`[error] ${err instanceof Error ? err.message : String(err)}`)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  useMenuAction(a => {
+    if (a.startsWith('run:')) {
+      const op = a.slice(4) as TopoOp
+      const t  = TOPO_OPS.find(x => x.op === op)
+      if (t) void handleTopo(op, t.label)
+    } else if (a.startsWith('iterate:')) {
+      void runG(Number(a.slice(8)))
+    }
+  })
 
   async function handleTopo(op: TopoOp, label: string) {
     if (!sessionId || busy) return

@@ -3,6 +3,7 @@ import { listFiles, uploadFile } from '../../api/files'
 import { createSession, getRestore } from '../../api/sessions'
 import { exportFe } from '../../api/export'
 import { useAppState } from '../../store/AppContext'
+import { useMenuAction } from '../../hooks/useMenuAction'
 
 function arrayBufferToBase64(buf: ArrayBuffer): string {
   const bytes = new Uint8Array(buf)
@@ -51,6 +52,25 @@ export default function FilePane() {
     return () => { cancelled = true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // Native File ▸ Reload Surface — re-create the session for the active file
+  // (handleSelect short-circuits on the already-active file, so reload directly).
+  useMenuAction(async a => {
+    if (a !== 'file:reload' || !activeFile || loadingFile) return
+    setLoadingFile(activeFile)
+    try {
+      appendLog(`Reloading ${activeFile}…`)
+      const session = await createSession(activeFile)
+      setSession(session.session_id, activeFile)
+      setStats(session.energy, session.area)
+      setVertexAttributes(session.vertex_attributes ?? [])
+      appendLog(`Reloaded ${activeFile}`)
+    } catch (err: unknown) {
+      appendLog(`[error] ${activeFile}: ${(err instanceof Error ? err.message : String(err)).replace(/^Error:\s*/i, '')}`)
+    } finally {
+      setLoadingFile(null)
+    }
+  })
 
   async function handleSelect(file: string) {
     if (loadingFile) return
