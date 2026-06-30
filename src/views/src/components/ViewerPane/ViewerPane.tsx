@@ -52,7 +52,7 @@ function Legend({ scalars, label }: { scalars: ColorScalars; label: string }) {
 }
 
 export default function ViewerPane() {
-  const { sessionId, jobProgress, vertexAttributes, setStats, setTotalTime, bumpMeshVersion } = useAppState()
+  const { sessionId, vertexAttributes, setStats, setTotalTime, bumpMeshVersion } = useAppState()
 
   // Built-in colour modes + one entry per user-defined vertex attribute.
   const colorModes = useMemo(
@@ -141,10 +141,6 @@ export default function ViewerPane() {
   // iterate, etc.) — clear the selection so we never highlight the wrong vertex.
   useEffect(() => { setPicked(null); setPickedPos(null) }, [mesh])
 
-  const progressPct = jobProgress
-    ? Math.round((jobProgress.step / jobProgress.total) * 100)
-    : null
-
   const colorLabel = colorModes.find(m => m.value === colorMode)?.label ?? ''
 
   return (
@@ -167,13 +163,6 @@ export default function ViewerPane() {
         <div className="absolute top-2.5 right-3 z-20 badge badge-neutral gap-1 pointer-events-none">
           <span className="loading loading-xs loading-dots" />
           Loading
-        </div>
-      )}
-
-      {/* Progress bar */}
-      {progressPct !== null && (
-        <div className="absolute top-0 left-0 right-0 h-0.5 bg-base-300 z-20">
-          <div className="h-full bg-primary transition-[width] duration-200" style={{ width: `${progressPct}%` }} />
         </div>
       )}
 
