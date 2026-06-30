@@ -10,7 +10,6 @@ interface AppState {
   vertexAttributes: string[]
   outputLog:   string[]
   meshVersion: number
-  jobProgress: { step: number; total: number } | null
 }
 
 interface AppActions {
@@ -23,8 +22,6 @@ interface AppActions {
   appendLog:       (line: string) => void
   clearLog:        () => void
   bumpMeshVersion: () => void
-  setJobProgress:  (step: number, total: number) => void
-  clearJob:        () => void
 }
 
 export const useStore = create<AppState & AppActions>((set) => ({
@@ -37,7 +34,6 @@ export const useStore = create<AppState & AppActions>((set) => ({
   vertexAttributes: [],
   outputLog:   [],
   meshVersion: 0,
-  jobProgress: null,
 
   setSession:      (id, file) => set({ sessionId: id, activeFile: file, totalTime: 0 }),
   clearSession:    ()         => set({ sessionId: null, activeFile: null, energy: null, area: null, totalTime: null, vertexAttributes: [], fileContent: null }),
@@ -52,8 +48,6 @@ export const useStore = create<AppState & AppActions>((set) => ({
     }),
   clearLog:        () => set({ outputLog: [] }),
   bumpMeshVersion: () => set((s) => ({ meshVersion: s.meshVersion + 1 })),
-  setJobProgress:  (step, total) => set({ jobProgress: { step, total } }),
-  clearJob:        () => set({ jobProgress: null }),
 }))
 
 // Compatibility alias — all existing components import useAppState from AppContext,

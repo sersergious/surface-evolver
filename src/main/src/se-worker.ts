@@ -3,15 +3,14 @@
  * Spawned once per session by se-manager.ts. Owns one libse.so instance.
  *
  * Protocol: line-delimited JSON on stdin/stdout.
- *   stdin  ← {"cmd":"load"|"run"|"mesh"|"iterate", ...}
+ *   stdin  ← {"cmd":"load"|"run"|"mesh"|"topo"|..., ...}
  *   stdout → {"type":"result","ok":true|false, ...}
- *             {"type":"progress","step":N,"total":M,"energy":E}  (iterate only)
  *
  * Cancellation: manager kills the process (SIGTERM/SIGKILL). No in-band cancel cmd.
  */
 
 import { dlopen, FFIType, ptr } from "bun:ffi";
-import { readFileSync, unlinkSync } from "fs";
+import { readFileSync } from "fs";
 import * as readline from "readline";
 
 // ── library load ─────────────────────────────────────────────────────────────
@@ -503,33 +502,6 @@ function handleDump(): object {
   }
 }
 
-function handleIterate(req: { steps: number }): void {
-  const steps       = req.steps;
-  const energyStart = lib.se_get_energy() as number;
-  let   stepsDone   = 0;
-  const BATCH       = 10;
-
-  while (stepsDone < steps) {
-    const n   = Math.min(BATCH, steps - stepsDone);
-    const ret = lib.se_run(ptr(toCString(`g ${n}`))) as number;
-    if (ret !== 0) {
-      send({ type: "result", ok: false, se_error: popErrout() || lastError() || "iteration failed" });
-      return;
-    }
-    stepsDone += n;
-    send({ type: "progress", step: stepsDone, total: steps, energy: lib.se_get_energy() as number });
-  }
-
-  send({
-    type:            "result",
-    ok:              true,
-    steps_completed: stepsDone,
-    energy_start:    energyStart,
-    energy_end:      lib.se_get_energy() as number,
-    total_time:      lib.se_get_total_time() as number,
-  });
-}
-
 // ── main loop ─────────────────────────────────────────────────────────────────
 
 const rl = readline.createInterface({ input: process.stdin, crlfDelay: Infinity });
@@ -577,9 +549,6 @@ rl.on("line", (line: string) => {
         break;
       case "dump":
         send({ type: "result", ...handleDump() });
-        break;
-      case "iterate":
-        handleIterate(req as { steps: number });
         break;
       default:
         send({ type: "result", ok: false, error: `unknown cmd: ${req.cmd}` });

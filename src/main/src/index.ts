@@ -5,7 +5,6 @@ import { tmpdir } from "os";
 import { config }         from "./config";
 import * as sessionStore  from "./session-store";
 import * as seManager     from "./se-manager";
-import * as jobRunner     from "./job-runner";
 import * as persistence   from "./persistence";
 import { installAppMenu } from "./app-menu";
 
@@ -198,23 +197,6 @@ installAppMenu(win);
             session.area   = result.area;
             sessionStore.put(session);
             return result;
-        },
-
-        iterate: async (payload: { sessionId: string; steps?: number }) => {
-            const { sessionId } = payload;
-            const session = sessionStore.get(sessionId);
-            if (!session) throw new Error("Session not found");
-
-            const steps = Math.max(1, Math.min(1000, (payload.steps ?? 100) | 0));
-
-            const job = await jobRunner.submitJob(sessionId, steps, (step, total, energy) => {
-                // Push step-by-step progress into the webview via CustomEvent
-                win.webview.executeJavascript(
-                    `window.dispatchEvent(new CustomEvent('se-progress', { detail: ${JSON.stringify({ sessionId, step, total, energy })} }))`
-                );
-            });
-
-            return job;
         },
 
         runCommand: async (payload: { sessionId: string; command: string }) => {

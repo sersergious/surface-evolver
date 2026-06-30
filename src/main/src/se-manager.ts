@@ -5,9 +5,8 @@
  * subprocess that owns exactly one libse.so instance, preventing the
  * double-init heap corruption that occurs when startup() is called twice.
  *
- * The Mutex serialises all blocking subprocess I/O so the event loop
- * stays free for status-check requests. isBusy() returns true while
- * any operation holds the lock, so callers can return 409 Conflict.
+ * The Mutex serialises all blocking subprocess I/O so concurrent RPC
+ * calls can't interleave on the single worker.
  */
 
 import { config } from "./config";
@@ -99,17 +98,6 @@ class WorkerHandle {
     }
   }
 
-  /** Yield every line (progress + result) until the result. EOF = cancellation. */
-  async *streamUntilResult(): AsyncGenerator<WorkerMsg> {
-    while (true) {
-      const { value, done } = await this.lineGen.next();
-      if (done) return;                          // worker killed = cancelled
-      const msg = JSON.parse(value!) as WorkerMsg;
-      yield msg;
-      if (msg.type === "result") return;
-    }
-  }
-
   kill(): void {
     try { this.proc.kill(); } catch { /* already dead */ }
   }
@@ -148,8 +136,6 @@ function checkResult(msg: WorkerMsg): void {
 }
 
 // ── public API ────────────────────────────────────────────────────────────────
-
-export function isBusy(): boolean { return mutex.locked; }
 
 export async function loadSession(sessionId: string, fePath: string): Promise<{
   energy: number; area: number; scale: number; sdim: number;
@@ -326,52 +312,3 @@ export async function dump(sessionId: string): Promise<{ content: string }> {
   }
 }
 
-export async function iterateAsync(
-  sessionId: string,
-  steps: number,
-  progressCb: (step: number, total: number, energy: number) => Promise<void>,
-): Promise<{ steps_completed: number; energy_start: number | null; energy_end: number | null }> {
-  await mutex.acquire();
-  try {
-    if (activeSessionId !== sessionId)
-      throw new Error(`Session ${sessionId} is not currently loaded (active: ${activeSessionId})`);
-    if (!worker) throw new Error(`No active SE worker for session ${sessionId}`);
-
-    await worker.send({ cmd: "iterate", steps });
-
-    let energyStart: number | null = null;
-    let stepsDone = 0;
-
-    for await (const msg of worker.streamUntilResult()) {
-      if (msg.type === "progress") {
-        if (energyStart === null) energyStart = msg.energy ?? null;
-        stepsDone = msg.step ?? stepsDone;
-        await progressCb(msg.step!, msg.total!, msg.energy!);
-      } else if (msg.type === "result") {
-        checkResult(msg);
-        return {
-          steps_completed: (msg.steps_completed as number | undefined) ?? stepsDone,
-          energy_start:    (msg.energy_start    as number | undefined) ?? energyStart,
-          energy_end:      (msg.energy_end      as number | null | undefined) ?? null,
-        };
-      }
-    }
-
-    // Stream ended without a result = worker was killed (cancellation).
-    return { steps_completed: stepsDone, energy_start: energyStart, energy_end: null };
-  } finally {
-    mutex.release();
-  }
-}
-
-export function clearSession(sessionId: string): void {
-  if (activeSessionId === sessionId) {
-    activeSessionId = null;
-    if (worker) { worker.kill(); worker = null; }
-  }
-}
-
-export function cancelCurrent(): void {
-  if (worker) { worker.kill(); }
-  // Don't null worker here; iterateAsync will see stream EOF and return.
-}

@@ -30,10 +30,6 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   if (path === '/sessions' && method === 'POST')
     return call('createSession', body)
 
-  const iterateMatch = path.match(/^\/sessions\/([^/]+)\/iterate$/)
-  if (iterateMatch && method === 'POST')
-    return call('iterate', { sessionId: iterateMatch[1], ...(body as object) })
-
   const runMatch = path.match(/^\/sessions\/([^/]+)\/run$/)
   if (runMatch && method === 'POST')
     return call('runCommand', { sessionId: runMatch[1], ...(body as object) })

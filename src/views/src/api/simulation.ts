@@ -1,16 +1,5 @@
 import client from './client'
 
-export interface JobResult {
-  job_id: string
-  session_id: string
-  status: 'queued' | 'running' | 'completed' | 'cancelled' | 'failed'
-  steps_requested: number
-  steps_completed: number
-  energy_start: number | null
-  energy_end: number | null
-  error: string | null
-}
-
 export interface MeshData {
   vertices: number[][]
   vertex_ids: number[]
@@ -43,10 +32,6 @@ export async function setSettings(
   id: string, patch: { mesh_params?: MeshParams; physics?: Physics },
 ): Promise<Settings & { energy: number; area: number }> {
   return client.post<Settings & { energy: number; area: number }>(`/sessions/${id}/settings`, patch)
-}
-
-export async function iterateSession(id: string, steps: number): Promise<JobResult> {
-  return client.post<JobResult>(`/sessions/${id}/iterate`, { steps })
 }
 
 export async function runCommand(id: string, command: string): Promise<RunCommandResponse> {

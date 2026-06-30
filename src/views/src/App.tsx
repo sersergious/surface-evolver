@@ -6,7 +6,6 @@ import CliPane       from './components/CliPane/CliPane'
 import EditorPane    from './components/EditorPane/EditorPane'
 import ViewerPane    from './components/ViewerPane/ViewerPane'
 import DocsPage      from './components/DocsPage/DocsPage'
-import { useProgressWS } from './hooks/useProgressWS'
 import { useMenuAction } from './hooks/useMenuAction'
 import { useAppState } from './store/AppContext'
 
@@ -138,9 +137,6 @@ const EDITOR_MIN  = 200
 const EDITOR_MAX  = 600
 
 function Inner() {
-  const { sessionId } = useAppState()
-  useProgressWS(sessionId)
-
   useSystemTheme()
   const navigate = useNavigate()
   const [sidebarOpen,  setSidebarOpen]  = useState(true)
@@ -155,12 +151,14 @@ function Inner() {
   const [viewerPct,    setViewerPct]    = useState(62)
   const bodyRef = useRef<HTMLDivElement>(null)
 
+  // Files (left) + Editor (middle): both handles sit on the panel's right edge,
+  // so dragging right grows the panel.
   const onSidebarDrag = useDrag('h', useCallback((d: number) => {
     setSidebarWidth(w => Math.max(SIDEBAR_MIN, Math.min(SIDEBAR_MAX, w + d)))
   }, []))
 
   const onEditorDrag = useDrag('h', useCallback((d: number) => {
-    setEditorWidth(w => Math.max(EDITOR_MIN, Math.min(EDITOR_MAX, w - d)))
+    setEditorWidth(w => Math.max(EDITOR_MIN, Math.min(EDITOR_MAX, w + d)))
   }, []))
 
   const onSplitDrag = useDrag('v', useCallback((d: number) => {
@@ -179,7 +177,7 @@ function Inner() {
 
         <div ref={bodyRef} className="flex flex-1 min-h-0 overflow-hidden">
 
-          {/* File sidebar */}
+          {/* File explorer (left, collapsible) */}
           {sidebarOpen && (
             <>
               <div className="shrink-0 h-full overflow-hidden bg-base-200"
@@ -187,7 +185,6 @@ function Inner() {
                 <FilePane />
               </div>
 
-              {/* Sidebar drag handle */}
               <div
                 onMouseDown={onSidebarDrag}
                 className="relative w-px shrink-0 h-full cursor-col-resize bg-base-300 hover:bg-primary transition-colors duration-150"
@@ -197,23 +194,10 @@ function Inner() {
             </>
           )}
 
-          {/* Center column: viewer on top, terminal below */}
-          <div className="flex flex-col flex-1 min-w-0 min-h-0 overflow-hidden">
-            <div className="overflow-hidden min-h-0" style={{ height: `${viewerPct}%` }}>
-              <ViewerPane />
-            </div>
-
-            {/* Viewer/terminal drag handle */}
-            <div
-              onMouseDown={onSplitDrag}
-              className="relative h-px w-full shrink-0 cursor-row-resize bg-base-300 hover:bg-primary transition-colors duration-150"
-            >
-              <div className="absolute inset-x-0 -top-1.5 -bottom-1.5" />
-            </div>
-
-            <div className="flex-1 min-h-0 overflow-hidden">
-              <CliPane />
-            </div>
+          {/* Editor (middle) */}
+          <div className="shrink-0 h-full overflow-hidden"
+               style={{ width: editorWidth }}>
+            <EditorPane />
           </div>
 
           {/* Editor drag handle */}
@@ -224,10 +208,23 @@ function Inner() {
             <div className="absolute inset-y-0 -left-1.5 -right-1.5" />
           </div>
 
-          {/* Editor panel (right) */}
-          <div className="shrink-0 h-full overflow-hidden"
-               style={{ width: editorWidth }}>
-            <EditorPane />
+          {/* Right column: viewer on top, CLI/output below */}
+          <div className="flex flex-col flex-1 min-w-0 min-h-0 overflow-hidden">
+            <div className="overflow-hidden min-h-0" style={{ height: `${viewerPct}%` }}>
+              <ViewerPane />
+            </div>
+
+            {/* Viewer / output drag handle */}
+            <div
+              onMouseDown={onSplitDrag}
+              className="relative h-px w-full shrink-0 cursor-row-resize bg-base-300 hover:bg-primary transition-colors duration-150"
+            >
+              <div className="absolute inset-x-0 -top-1.5 -bottom-1.5" />
+            </div>
+
+            <div className="flex-1 min-h-0 overflow-hidden">
+              <CliPane />
+            </div>
           </div>
 
         </div>

@@ -26,13 +26,6 @@ bun run dev          # launch Electrobun dev mode (compiles Tailwind CSS then ho
 bun run build        # production app bundle
 ```
 
-### Frontend only (Vite dev server, useful for UI work)
-```bash
-cd src/views
-bun install
-bun run dev          # http://localhost:5173 (proxies /api to localhost:8000)
-```
-
 ## Tests
 
 ```bash
@@ -74,19 +67,15 @@ The worker speaks line-delimited JSON on stdin/stdout:
 
 Cancellation is done by killing the worker process (SIGTERM); no in-band cancel command.
 
-### Dual-mode backend
-
-`src/main/src/server.ts` exists as an alternative HTTP/WebSocket server (same API surface) for web/Docker deployment. The Electrobun desktop path (`index.ts`) uses native IPC RPC handlers instead of HTTP routes, but both call the same `se-manager`, `session-store`, and `job-runner` modules.
-
 ### Frontend (src/views)
 
 React + Vite app. Four routes rendered in `App.tsx`:
 - `/` — three-pane layout: **FilePane** (file picker) + **CliPane** (commands) + **ViewerPane** (Three.js mesh)
 - `/docs` — **DocsPage** serving bundled HTML documentation from `src/views/docs/`
 
-State management: `useStore.ts` (**Zustand**) is the single source of truth. `AppContext.tsx` is now a thin re-export shim — it re-exports `useStore` as `useAppState` (so existing component imports keep working) and exposes a no-op `AppProvider` (no Provider is actually needed). Progress updates arrive via `CustomEvent('se-progress')` dispatched by the Electrobun main process (or WebSocket in server mode).
+State management: `useStore.ts` (**Zustand**) is the single source of truth. `AppContext.tsx` is a thin re-export shim — it re-exports `useStore` as `useAppState` so existing component imports keep working. Native-menu clicks arrive as `CustomEvent('se-menu')` and are routed by `useMenuAction`.
 
-**API client** (`src/views/src/api/client.ts`): in Electrobun mode the client maps HTTP-style calls to Electrobun RPC (`Electroview.rpc.request`). When running against the HTTP server (Vite dev with proxy), the same API paths hit `localhost:8000`.
+**API client** (`src/views/src/api/client.ts`): maps HTTP-style call paths to Electrobun RPC (`Electroview.rpc.request`). The paths are a naming convention only — there is no HTTP server; every call is native IPC.
 
 CSS is compiled from Tailwind source (`src/styles/global.css`) to `src/styles/compiled.css` via `bun run css` before dev/build.
 
@@ -103,12 +92,11 @@ surface-evolver/
 ├── src/
 │   ├── main/src/               # Electrobun main process (Bun)
 │   │   ├── index.ts            # App entry, IPC RPC handlers
-│   │   ├── server.ts           # Alternative HTTP/WS server (web mode)
+│   │   ├── app-menu.ts         # Native macOS menu bar
 │   │   ├── se-manager.ts       # Worker lifecycle + mutex
 │   │   ├── se-worker.ts        # Subprocess: owns libse via bun:ffi
-│   │   ├── job-runner.ts       # Async iteration job queue
 │   │   ├── session-store.ts    # In-memory session state
-│   │   ├── ws-hub.ts           # WebSocket broadcast (server mode)
+│   │   ├── persistence.ts      # Auto-save/restore last surface
 │   │   └── config.ts           # Reads env vars
 │   └── views/src/              # React + Vite frontend
 │       ├── components/         # FilePane, CliPane, ViewerPane, DocsPage, ...
@@ -135,7 +123,4 @@ surface-evolver/
 | `SE_LIB_PATH` | `cmake-build-debug/libse.dylib` | Path to compiled shared library |
 | `SE_FE_DIR` | `fe/` | Directory of `.fe` datafiles |
 | `SE_WORKER_PATH` | `src/main/src/se-worker.ts` | Path to the worker script |
-| `BACKEND_HOST` / `BACKEND_PORT` | `0.0.0.0:8000` | HTTP server mode only |
-| `CORS_ORIGINS` | `http://localhost:3000,http://localhost:5173` | Comma-separated allowed origins |
-| `DEMO_USERNAME` / `DEMO_PASSWORD` | `demo` / *(empty = auth disabled)* | Basic auth for web demo mode |
-| `MAX_SESSIONS` | `10` | Max concurrent sessions |
+| `SE_STATE_DIR` | `~/.surface-evolver` | Session-persistence sidecar dir |
