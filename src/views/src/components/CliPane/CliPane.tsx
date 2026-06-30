@@ -4,11 +4,12 @@ import { useAppState } from '../../store/AppContext'
 import { useMenuAction } from '../../hooks/useMenuAction'
 import OutputLog from './OutputLog'
 
-const TOPO_OPS: { op: TopoOp; label: string; title: string }[] = [
-  { op: 'refine',     label: 'Refine',  title: 'Subdivide all edges (r)' },
-  { op: 'equi',       label: 'Equiang', title: 'Equiangulate by edge swaps (u)' },
-  { op: 'vertex_avg', label: 'V-Avg',   title: 'Vertex averaging (V)' },
-  { op: 'pop',        label: 'Pop',     title: 'Pop non-manifold vertices/edges (pop)' },
+// Structured topology ops, routed from the native Run menu (see useMenuAction).
+const TOPO_OPS: { op: TopoOp; label: string }[] = [
+  { op: 'refine',     label: 'Refine'  },
+  { op: 'equi',       label: 'Equiang' },
+  { op: 'vertex_avg', label: 'V-Avg'   },
+  { op: 'pop',        label: 'Pop'     },
 ]
 
 // Turn the structured counts object into a compact one-line summary.
@@ -93,21 +94,6 @@ export default function CliPane() {
   return (
     <div className="flex flex-col h-full bg-base-100">
       <OutputLog lines={outputLog} />
-
-      {/* Topology op buttons */}
-      <div className="shrink-0 flex items-center gap-1 px-3 py-1.5 border-t border-base-300 bg-base-200">
-        {TOPO_OPS.map(t => (
-          <button
-            key={t.op}
-            className="btn btn-xs bg-base-300/80 border-base-300 hover:bg-base-300 text-base-content"
-            onClick={() => handleTopo(t.op, t.label)}
-            disabled={!sessionId || busy}
-            title={t.title}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
 
       {/* Input row */}
       <div className="shrink-0 flex items-center gap-2 px-3 py-2 border-t border-base-300 bg-base-200">

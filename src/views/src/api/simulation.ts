@@ -7,8 +7,6 @@ export interface MeshData {
   edges: number[][]
   body_volumes: Record<number, number>
   body_cms?: (number[] | null)[]
-  scalars?: string
-  scalar_values?: number[]
   facet_colors?: number[]
   edge_colors?: number[]
 }
@@ -53,12 +51,9 @@ export async function runTopo(id: string, op: TopoOp, n?: number): Promise<TopoR
   return client.post<TopoResponse>(`/sessions/${id}/topo`, { op, ...(n ? { n } : {}) })
 }
 
-export async function getMesh(id: string, scalars?: string, colors?: boolean): Promise<MeshData> {
-  const p = new URLSearchParams()
-  if (scalars) p.set('scalars', scalars)
-  if (colors)  p.set('colors', 'true')
-  const qs = p.toString()
-  return client.get<MeshData>(`/sessions/${id}/mesh${qs ? `?${qs}` : ''}`)
+// Always requests native SE per-element colours alongside the geometry.
+export async function getMesh(id: string): Promise<MeshData> {
+  return client.get<MeshData>(`/sessions/${id}/mesh?colors=true`)
 }
 
 // flags bits (se_api.h): Q_ENERGY=1, Q_FIXED=2, Q_INFO=4

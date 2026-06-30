@@ -1,9 +1,7 @@
 import { useEffect, useMemo } from 'react'
 import * as THREE from 'three'
-import { Edges } from '@react-three/drei'
 import { useThree, type ThreeEvent } from '@react-three/fiber'
 import type { MeshData } from '../../api/simulation'
-import type { ColorScalars } from '../../hooks/useMesh'
 import type { ThemeColors } from '../../hooks/useThemeColors'
 
 export type RenderMode = 'solid' | 'wireframe' | 'xray'
@@ -11,7 +9,6 @@ export type RenderMode = 'solid' | 'wireframe' | 'xray'
 interface Props {
   mesh:          MeshData
   mode:          RenderMode
-  colorScalars:  ColorScalars | null
   elementColors: boolean        // render per-facet SE colour-table colours
   themeColors:   ThemeColors
 }
@@ -54,36 +51,10 @@ function buildElementColorGeometry(mesh: MeshData, neutral: THREE.Color): THREE.
   return geo
 }
 
-// Coolwarm colormap: blue → near-white → red (matches matplotlib's coolwarm)
-function coolwarm(t: number): [number, number, number] {
-  const c = Math.max(0, Math.min(1, t))
-  if (c <= 0.5) {
-    const s = c * 2
-    return [0.25 + s * 0.71, 0.41 + s * 0.55, 0.88 - s * 0.14]  // blue → white
-  }
-  const s = (c - 0.5) * 2
-  return [0.96 - s * 0.25, 0.96 - s * 0.94, 0.96 - s * 0.81]    // white → red
-}
-
-function applyVertexColors(geo: THREE.BufferGeometry, colorScalars: ColorScalars | null): void {
-  if (!colorScalars) return
-  const { values, min, max } = colorScalars
-  const range = max > min ? max - min : 1
-  const colors = new Float32Array(values.length * 3)
-  for (let i = 0; i < values.length; i++) {
-    const [r, g, b] = coolwarm((values[i] - min) / range)
-    colors[i * 3]     = r
-    colors[i * 3 + 1] = g
-    colors[i * 3 + 2] = b
-  }
-  geo.setAttribute('color', new THREE.BufferAttribute(colors, 3))
-}
-
-function buildGeometry(mesh: MeshData, colorScalars: ColorScalars | null): THREE.BufferGeometry {
+function buildGeometry(mesh: MeshData): THREE.BufferGeometry {
   const geo = new THREE.BufferGeometry()
   geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(mesh.vertices.flat()), 3))
   geo.setIndex(new THREE.BufferAttribute(new Uint32Array(mesh.facets.flat()), 1))
-  applyVertexColors(geo, colorScalars)
   geo.computeVertexNormals()
   return geo
 }
@@ -92,24 +63,37 @@ function buildGeometry(mesh: MeshData, colorScalars: ColorScalars | null): THREE
  * Line rendering for edge geometry — the only geometry the STRING (1-D) model
  * produces, so curve/filament .fe files render here instead of MeshGeometry.
  */
-export function EdgeLines({ mesh, colorScalars, themeColors }: {
-  mesh: MeshData; colorScalars: ColorScalars | null; themeColors: ThemeColors
-}) {
+export function EdgeLines({ mesh, themeColors }: { mesh: MeshData; themeColors: ThemeColors }) {
   const geometry = useMemo(() => {
     const geo = new THREE.BufferGeometry()
     geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(mesh.vertices.flat()), 3))
     geo.setIndex(new THREE.BufferAttribute(new Uint32Array(mesh.edges.flat()), 1))
-    applyVertexColors(geo, colorScalars)
     return geo
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mesh, colorScalars])
+  }, [mesh])
 
   useEffect(() => () => { geometry.dispose() }, [geometry])
 
-  const useVColors = colorScalars !== null
   return (
     <lineSegments geometry={geometry}>
-      <lineBasicMaterial color={useVColors ? '#ffffff' : themeColors.line} vertexColors={useVColors} />
+      <lineBasicMaterial color={themeColors.line} />
+    </lineSegments>
+  )
+}
+
+// Every real engine edge as line segments. drei <Edges> only draws *feature*
+// edges (dihedral angle > threshold), hiding the triangulation edges across
+// coplanar facets — so we render the actual edge list the engine provides.
+function EdgeOverlay({ mesh, color }: { mesh: MeshData; color: THREE.Color | string }) {
+  const geometry = useMemo(() => {
+    const geo = new THREE.BufferGeometry()
+    geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(mesh.vertices.flat()), 3))
+    geo.setIndex(new THREE.BufferAttribute(new Uint32Array(mesh.edges.flat()), 1))
+    return geo
+  }, [mesh])
+  useEffect(() => () => { geometry.dispose() }, [geometry])
+  return (
+    <lineSegments geometry={geometry}>
+      <lineBasicMaterial color={color} />
     </lineSegments>
   )
 }
@@ -171,20 +155,18 @@ export function BodyMarkers({ cms, radius }: { cms: (number[] | null)[]; radius:
   )
 }
 
-export default function MeshGeometry({ mesh, mode, colorScalars, elementColors, themeColors }: Props) {
+export default function MeshGeometry({ mesh, mode, elementColors, themeColors }: Props) {
   const useElementColors = elementColors && (mesh.facet_colors?.length ?? 0) > 0
   const geometry = useMemo(
     () => useElementColors
       ? buildElementColorGeometry(mesh, themeColors.surface)
-      : buildGeometry(mesh, colorScalars),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [mesh, colorScalars, useElementColors, themeColors],
+      : buildGeometry(mesh),
+    [mesh, useElementColors, themeColors],
   )
 
   useEffect(() => () => { geometry.dispose() }, [geometry])
 
-  const showEdges  = mesh.facets.length <= 200_000
-  const useVColors = colorScalars !== null || useElementColors
+  const showEdges = mesh.facets.length <= 200_000 && mesh.edges.length > 0
 
   if (mode === 'wireframe') {
     return (
@@ -206,23 +188,23 @@ export default function MeshGeometry({ mesh, mode, colorScalars, elementColors, 
           depthWrite={false}
           polygonOffset polygonOffsetFactor={1} polygonOffsetUnits={1}
         />
-        {showEdges && <Edges threshold={1} color={themeColors.line} lineWidth={0.8} />}
+        {showEdges && <EdgeOverlay mesh={mesh} color={themeColors.line} />}
       </mesh>
     )
   }
 
-  // solid — per-vertex/element colours when present, else the theme surface.
+  // solid — per-element SE colours when present, else the theme surface.
   return (
     <mesh geometry={geometry}>
       <meshPhongMaterial
-        color={useVColors ? '#ffffff' : themeColors.surface}
-        specular={useVColors ? '#555555' : themeColors.specular}
-        shininess={useVColors ? 25 : 40}
-        vertexColors={useVColors}
+        color={useElementColors ? '#ffffff' : themeColors.surface}
+        specular={useElementColors ? '#555555' : themeColors.specular}
+        shininess={useElementColors ? 25 : 40}
+        vertexColors={useElementColors}
         side={THREE.DoubleSide}
         polygonOffset polygonOffsetFactor={1} polygonOffsetUnits={1}
       />
-      {showEdges && <Edges threshold={1} color={themeColors.line} lineWidth={0.6} />}
+      {showEdges && <EdgeOverlay mesh={mesh} color={themeColors.line} />}
     </mesh>
   )
 }

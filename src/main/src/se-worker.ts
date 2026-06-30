@@ -142,7 +142,6 @@ function handleLoad(req: { path: string }): object {
     bbox_min:          bbN > 0 ? Array.from(bbMin) : null,
     bbox_max:          bbN > 0 ? Array.from(bbMax) : null,
     total_time:        lib.se_get_total_time() as number,
-    vertex_attributes: listVertexAttributes(),
   };
 }
 
@@ -160,63 +159,7 @@ function handleRun(req: { command: string }): object {
   };
 }
 
-// Per-vertex scalar fields exposed as colormaps. `int` fields (valence) come
-// back as Int32Array; everything else is Float64Array. A negative return means
-// the field is unsupported for the current surface → null (caller omits it).
-type ScalarFn = (out: unknown, max: number) => number;
-const VERTEX_SCALARS: Record<string, { fn: () => ScalarFn; int?: boolean }> = {
-  mean_curvature:     { fn: () => lib.se_get_vertex_mean_curvatures as ScalarFn },
-  star_area:          { fn: () => lib.se_get_vertex_star_areas as ScalarFn },
-  force:              { fn: () => lib.se_get_vertex_force_mags as ScalarFn },
-  energy_density:     { fn: () => lib.se_get_vertex_energy_density as ScalarFn },
-  gaussian_curvature: { fn: () => lib.se_get_vertex_gaussian_curvatures as ScalarFn },
-  valence:            { fn: () => lib.se_get_vertex_valences as ScalarFn, int: true },
-};
-
-// User-defined vertex attributes (element type VERTEX = 0) become colormaps too,
-// requested as scalars="attr:NAME". They ride the same per-vertex scalar path.
-const VERTEX = 0;
-
-function findVertexAttr(name: string): number {
-  const count   = lib.se_get_attribute_count(VERTEX) as number;
-  const nameBuf = Buffer.alloc(NAME_SIZE);
-  const typeBuf = new Int32Array(1);
-  for (let i = 0; i < count; i++) {
-    const r = lib.se_get_attribute_info(VERTEX, i, ptr(nameBuf), NAME_SIZE, ptr(typeBuf)) as number;
-    if (r === 0 && cstr(nameBuf) === name) return i;
-  }
-  return -1;
-}
-
-function listVertexAttributes(): string[] {
-  const names: string[] = [];
-  const count   = lib.se_get_attribute_count(VERTEX) as number;
-  const nameBuf = Buffer.alloc(NAME_SIZE);
-  const typeBuf = new Int32Array(1);
-  for (let i = 0; i < count; i++) {
-    const r = lib.se_get_attribute_info(VERTEX, i, ptr(nameBuf), NAME_SIZE, ptr(typeBuf)) as number;
-    if (r === 0) names.push(cstr(nameBuf));
-  }
-  return names;
-}
-
-function readVertexScalar(name: string, vcount: number): number[] | null {
-  if (vcount <= 0) return [];                 // empty surface — ptr() rejects 0-length
-  if (name.startsWith("attr:")) {
-    const idx = findVertexAttr(name.slice(5));
-    if (idx < 0) return null;
-    const buf = new Float64Array(vcount);
-    const n   = lib.se_get_attribute_values(VERTEX, idx, ptr(buf), vcount) as number;
-    return n >= 0 ? Array.from(buf.subarray(0, n)) : null;
-  }
-  const spec = VERTEX_SCALARS[name];
-  if (!spec) return null;
-  const buf = spec.int ? new Int32Array(vcount) : new Float64Array(vcount);
-  const n   = spec.fn()(ptr(buf), vcount);
-  return n >= 0 ? Array.from(buf.subarray(0, n)) : null;
-}
-
-function handleMesh(req?: { scalars?: string; colors?: boolean }): object {
+function handleMesh(req?: { colors?: boolean }): object {
   const vcount = lib.se_get_vertex_count() as number;
   // bun:ffi ptr() rejects zero-length buffers, so every fill is guarded on a
   // positive count (a STRING model has 0 facets; an empty surface 0 of all).
@@ -266,14 +209,6 @@ function handleMesh(req?: { scalars?: string; colors?: boolean }): object {
   const result: Record<string, unknown> = {
     ok: true, vertices, vertex_ids, facets, edges, body_volumes, body_pressures, body_cms,
   };
-
-  if (req?.scalars) {
-    const values = readVertexScalar(req.scalars, vcount);
-    if (values) {
-      result.scalars       = req.scalars;
-      result.scalar_values = values;
-    }
-  }
 
   // Per-element SE colour-table indices (only when asked — keeps the hot mesh
   // payload lean otherwise).
@@ -452,10 +387,16 @@ function handleSettings(): object {
 function handleSetSettings(req: { mesh_params?: MeshParams; physics?: Physics }): object {
   if (req.mesh_params) {
     const m = req.mesh_params;
+    for (const [k, v] of Object.entries(m))
+      if (!Number.isFinite(v) || (v as number) <= 0)
+        return { ok: false, error: `invalid ${k}: must be a positive finite number` };
     lib.se_set_mesh_params(m.min_area, m.min_length, m.max_len, m.temperature);
   }
   if (req.physics) {
     const p = req.physics;
+    // grav/pressure may legitimately be negative or zero -> only finite-check.
+    if (!Number.isFinite(p.grav_const) || !Number.isFinite(p.pressure))
+      return { ok: false, error: "grav_const/pressure must be finite numbers" };
     lib.se_set_physics(p.grav_const, p.gravflag ? 1 : 0, p.pressure, p.pressflag ? 1 : 0);
   }
   // recalc through the protected command path so energy/area refresh.
@@ -527,7 +468,7 @@ rl.on("line", (line: string) => {
         send({ type: "result", ...handleRun(req as { command: string }) });
         break;
       case "mesh":
-        send({ type: "result", ...handleMesh(req as { scalars?: string; colors?: boolean }) });
+        send({ type: "result", ...handleMesh(req as { colors?: boolean }) });
         break;
       case "set_scale":
         send({ type: "result", ...handleSetScale(req as { scale: number }) });

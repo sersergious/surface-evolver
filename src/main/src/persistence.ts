@@ -32,7 +32,9 @@ export function saveSession(s: SavedSession): void {
 export function loadSaved(): SavedSession | null {
   try {
     if (!existsSync(STATE_FILE)) return null;
-    return JSON.parse(readFileSync(STATE_FILE, "utf8")) as SavedSession;
+    const s = JSON.parse(readFileSync(STATE_FILE, "utf8"));
+    if (typeof s?.dmp !== "string" || typeof s?.fe_file !== "string") return null;
+    return s as SavedSession;
   } catch {
     return null;
   }
