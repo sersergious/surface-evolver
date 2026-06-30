@@ -33,7 +33,9 @@ export function useMesh(colorMode: ColorMode = 'none') {
   const [isFetching, setIsFetching] = useState(false)
 
   const apiScalars = isServerScalar(colorMode) ? colorMode : undefined
-  const apiColors  = colorMode === 'se_colors'
+  // Fetch element colours for the default view too, so the renderer can honour
+  // SE-assigned facet colours instead of a flat theme surface.
+  const apiColors  = colorMode === 'se_colors' || colorMode === 'none'
 
   useEffect(() => {
     if (!sessionId) { setData(null); return }

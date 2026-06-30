@@ -5,6 +5,7 @@ import { OrbitControls } from '@react-three/drei'
 import { useMesh, type ColorMode, type ColorScalars } from '../../hooks/useMesh'
 import { useQuantities } from '../../hooks/useQuantities'
 import { useMenuAction } from '../../hooks/useMenuAction'
+import { useThemeColors } from '../../hooks/useThemeColors'
 import { useAppState } from '../../store/AppContext'
 import { getVertexInfo, type VertexInfo } from '../../api/simulation'
 import MeshGeometry, {
@@ -70,6 +71,16 @@ export default function ViewerPane() {
 
   const { data: mesh, isFetching, colorScalars } = useMesh(colorMode)
   const quantities = useQuantities(showQuants)
+  const themeColors = useThemeColors()
+
+  // True when the surface carries explicit SE facet colours (anything other than
+  // the default WHITE/CLEAR). The default view then renders those colours;
+  // otherwise it falls back to the smooth theme surface.
+  const hasSEColors = useMemo(
+    () => !colorScalars && (mesh?.facet_colors?.some(c => c >= 0 && c !== 15) ?? false),
+    [colorScalars, mesh],
+  )
+  const showElementColors = colorMode === 'se_colors' || (colorMode === 'none' && hasSEColors)
 
   // Characteristic mesh size → raycaster threshold + marker radii (scale-aware).
   const meshRadius = useMemo(() => {
@@ -241,10 +252,10 @@ export default function ViewerPane() {
         <directionalLight position={[4, 8, 4]} intensity={0.9} />
         <directionalLight position={[-4, -2, -4]} intensity={0.2} color="#4488cc" />
         {mesh && mesh.facets.length > 0 && (
-          <MeshGeometry mesh={mesh} mode={mode} colorScalars={colorScalars} elementColors={colorMode === 'se_colors'} />
+          <MeshGeometry mesh={mesh} mode={mode} colorScalars={colorScalars} elementColors={showElementColors} themeColors={themeColors} />
         )}
         {mesh && mesh.facets.length === 0 && mesh.edges.length > 0 && (
-          <EdgeLines mesh={mesh} colorScalars={colorScalars} />
+          <EdgeLines mesh={mesh} colorScalars={colorScalars} themeColors={themeColors} />
         )}
         {inspect && mesh && (
           <>
