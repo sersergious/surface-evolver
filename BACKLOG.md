@@ -64,24 +64,14 @@ with ctest coverage. See `git log` on the feature branch for the commits.
 
 ---
 
-## Remaining — worth doing
+## ✅ Done — Phase 6 (commit 1d2464dc)
 
-### Default render should use SE colours, not a hardcoded green
-The default (no-colormap) mesh appearance is a hardcoded green palette in
-`MeshGeometry.tsx` — `#2d9a5e` (solid/x-ray base), `#80e0aa` (specular),
-`#94d4b0` (edges/wireframe), used across solid/wireframe/x-ray/edge paths.
-Two problems:
-1. **Ignores SE colours by default.** `set facet color` is only honoured in the
-   opt-in "SE Colors" mode (Phase 5). The plain render should respect each
-   element's SE colour-table index when the datafile assigns one, falling back
-   to a neutral default only for uncoloured (CLEAR/white) elements.
-2. **Hardcoded hex, not theme-aware.** The green is fixed regardless of the
-   light/dark OS appearance — it should derive from daisyUI theme tokens
-   (`--p`/`--bc`/…) so the surface reads correctly in both themes.
-**Work:** fetch facet/edge colours by default (the `colors` mesh flag already
-exists), colour elements that carry a non-default SE index, and replace the
-hardcoded greens with a theme-token-derived fallback for the rest. Folds the
-Phase-5 "SE Colors" path into the default instead of a separate mode.
+### Default render uses SE colours + theme tokens (was hardcoded green)
+`useThemeColors` reads daisyUI tokens (`--bc`/`--p`) off `:root` and normalises
+via canvas; `MeshGeometry` no longer hardcodes green. The default view honours
+SE facet colours when a datafile assigns them (auto-detected → flat per-facet),
+and falls back to the theme surface colour (smooth) for uncoloured (white/clear)
+facets. Surface/edge/specular follow the OS light/dark theme.
 
 ---
 
@@ -118,3 +108,11 @@ Phase-5 "SE Colors" path into the default instead of a separate mode.
   persistence path.
 - **Multi-session / multi-window** — no multi-window UI exists; speculative
   until it does.
+
+
+## Bug 
+  can't load 5pb.fe and run it
+
+## MVP Goal
+
+Being able to run all .fe files inside the /fe folder 
