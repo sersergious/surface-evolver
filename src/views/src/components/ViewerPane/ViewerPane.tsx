@@ -1,13 +1,14 @@
 import { useRef, useEffect, useState, useMemo } from 'react'
 import * as THREE from 'three'
-import { Canvas } from '@react-three/fiber'
+import { Canvas, useThree } from '@react-three/fiber'
 import { OrbitControls } from '@react-three/drei'
-import { useMesh, type ColorMode, type ColorScalars } from '../../hooks/useMesh'
+import { ArrowPathIcon, ChartBarIcon, CursorArrowRaysIcon, Cog6ToothIcon } from '@heroicons/react/24/outline'
+import { useMesh } from '../../hooks/useMesh'
 import { useQuantities } from '../../hooks/useQuantities'
 import { useMenuAction } from '../../hooks/useMenuAction'
 import { useThemeColors } from '../../hooks/useThemeColors'
 import { useAppState } from '../../store/AppContext'
-import { getVertexInfo, type VertexInfo } from '../../api/simulation'
+import { getVertexInfo, type MeshData, type VertexInfo } from '../../api/simulation'
 import MeshGeometry, {
   EdgeLines, PickPoints, VertexMarker, BodyMarkers, RaycasterConfig, type RenderMode,
 } from './MeshGeometry'
@@ -18,69 +19,47 @@ import SettingsPanel from './SettingsPanel'
 const MODES: RenderMode[] = ['solid', 'wireframe', 'xray']
 const MODE_LABEL: Record<RenderMode, string> = { solid: 'Solid', wireframe: 'Wire', xray: 'X-Ray' }
 
-const COLOR_MODES: { value: ColorMode; label: string }[] = [
-  { value: 'none',               label: 'Color: Off'      },
-  { value: 'height',             label: 'Height Z'        },
-  { value: 'mean_curvature',     label: 'Mean Curv. |H|'  },
-  { value: 'gaussian_curvature', label: 'Gauss Curv. K'   },
-  { value: 'energy_density',     label: 'Energy Density'  },
-  { value: 'star_area',          label: 'Star Area'       },
-  { value: 'valence',            label: 'Valence'         },
-  { value: 'force',              label: 'Force |∇E|'      },
-  { value: 'se_colors',          label: 'SE Colors'       },
-]
-
-const LEGEND_GRADIENT = 'linear-gradient(to right, rgb(64,104,224), rgb(245,245,245), rgb(183,6,38))'
-
-function fmtScalar(v: number): string {
-  if (!isFinite(v)) return '—'
-  if (Math.abs(v) >= 1000 || (Math.abs(v) < 0.001 && v !== 0)) return v.toExponential(2)
-  return v.toPrecision(4).replace(/\.?0+$/, '')
-}
-
-function Legend({ scalars, label }: { scalars: ColorScalars; label: string }) {
-  return (
-    <div className="absolute bottom-10 left-3 z-20 pointer-events-none select-none">
-      <div className="text-[10px] text-base-content/40 mb-1">{label}</div>
-      <div className="flex items-center gap-1.5">
-        <span className="text-[10px] font-mono text-base-content/60">{fmtScalar(scalars.min)}</span>
-        <div className="w-24 h-2.5 rounded border border-base-content/10" style={{ background: LEGEND_GRADIENT }} />
-        <span className="text-[10px] font-mono text-base-content/60">{fmtScalar(scalars.max)}</span>
-      </div>
-    </div>
-  )
+// Frames the camera on a new mesh. Runs *inside* the Canvas and reads the
+// controls from R3F state (not a ref) so it re-fires once OrbitControls has
+// mounted — otherwise the first load runs before controls exist, the orbit
+// target stays at the origin, and you end up pivoting around a corner vertex.
+function FitCamera({ mesh }: { mesh: MeshData | null }) {
+  const camera = useThree(s => s.camera)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const controls = useThree(s => s.controls) as any
+  useEffect(() => {
+    if (!controls || !mesh || mesh.vertices.length === 0) return
+    const geo = new THREE.BufferGeometry()
+    geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(mesh.vertices.flat()), 3))
+    geo.computeBoundingBox(); geo.computeBoundingSphere()
+    const center = new THREE.Vector3()
+    geo.boundingBox!.getCenter(center)
+    const radius   = geo.boundingSphere!.radius || 1
+    const distance = radius * 3.5
+    camera.position.set(center.x + distance * 0.7, center.y + distance * 0.6, center.z + distance * 0.7)
+    controls.target.copy(center)
+    controls.update()
+    controls.saveState()
+    geo.dispose()
+  }, [mesh, camera, controls])
+  return null
 }
 
 export default function ViewerPane() {
-  const { sessionId, vertexAttributes, setStats, setTotalTime, bumpMeshVersion } = useAppState()
+  const { sessionId, setStats, setTotalTime, bumpMeshVersion } = useAppState()
 
-  // Built-in colour modes + one entry per user-defined vertex attribute.
-  const colorModes = useMemo(
-    () => [...COLOR_MODES, ...vertexAttributes.map(a => ({ value: `attr:${a}` as ColorMode, label: `Attr: ${a}` }))],
-    [vertexAttributes],
-  )
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const controlsRef = useRef<any>(null)
   const [mode,      setMode]      = useState<RenderMode>('solid')
-  const [colorMode, setColorMode] = useState<ColorMode>('none')
   const [showQuants, setShowQuants] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
   const [inspect,    setInspect]    = useState(false)
   const [picked,     setPicked]     = useState<VertexInfo | null>(null)
   const [pickedPos,  setPickedPos]  = useState<number[] | null>(null)
 
-  const { data: mesh, isFetching, colorScalars } = useMesh(colorMode)
+  const { data: mesh, isFetching } = useMesh()
   const quantities = useQuantities(showQuants)
   const themeColors = useThemeColors()
-
-  // True when the surface carries explicit SE facet colours (anything other than
-  // the default WHITE/CLEAR). The default view then renders those colours;
-  // otherwise it falls back to the smooth theme surface.
-  const hasSEColors = useMemo(
-    () => !colorScalars && (mesh?.facet_colors?.some(c => c >= 0 && c !== 15) ?? false),
-    [colorScalars, mesh],
-  )
-  const showElementColors = colorMode === 'se_colors' || (colorMode === 'none' && hasSEColors)
 
   // Characteristic mesh size → raycaster threshold + marker radii (scale-aware).
   const meshRadius = useMemo(() => {
@@ -99,49 +78,22 @@ export default function ViewerPane() {
     catch { setPicked(null) }
   }
 
-  useEffect(() => {
-    if (!controlsRef.current || !mesh) return
-    const positions = new Float32Array(mesh.vertices.flat())
-    const geo = new THREE.BufferGeometry()
-    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3))
-    geo.computeBoundingBox(); geo.computeBoundingSphere()
-    const center = new THREE.Vector3()
-    geo.boundingBox!.getCenter(center)
-    const radius   = geo.boundingSphere!.radius || 1
-    const distance = radius * 3.5
-    const camera   = controlsRef.current.object as THREE.Camera
-    camera.position.set(center.x + distance * 0.7, center.y + distance * 0.6, center.z + distance * 0.7)
-    controlsRef.current.target.copy(center)
-    controlsRef.current.update()
-    controlsRef.current.saveState()
-    geo.dispose()
-  }, [mesh])
-
-  // Native View menu → colour mode, render mode, panel toggles.
+  // Native View menu → render mode, panel toggles.
   useMenuAction(a => {
     if (!sessionId) return
-    if (a.startsWith('color:'))       setColorMode(a.slice(6) as ColorMode)
-    else if (a.startsWith('render:')) setMode(a.slice(7) as RenderMode)
+    if (a.startsWith('render:'))      setMode(a.slice(7) as RenderMode)
     else if (a === 'panel:quants')    { setShowQuants(s => !s); setShowSettings(false) }
     else if (a === 'panel:settings')  { setShowSettings(s => !s); setShowQuants(false) }
     else if (a === 'panel:inspect')   { setInspect(i => !i); setPicked(null); setPickedPos(null) }
   })
 
   useEffect(() => {
-    if (!sessionId) { setColorMode('none'); setShowQuants(false); setShowSettings(false); setInspect(false) }
+    if (!sessionId) { setShowQuants(false); setShowSettings(false); setInspect(false) }
   }, [sessionId])
-
-  // Reset to a valid mode if the selected custom attribute isn't in this surface.
-  useEffect(() => {
-    if (colorMode.startsWith('attr:') && !colorModes.some(m => m.value === colorMode))
-      setColorMode('none')
-  }, [colorModes, colorMode])
 
   // A picked vertex's position index goes stale when the mesh changes (refine,
   // iterate, etc.) — clear the selection so we never highlight the wrong vertex.
   useEffect(() => { setPicked(null); setPickedPos(null) }, [mesh])
-
-  const colorLabel = colorModes.find(m => m.value === colorMode)?.label ?? ''
 
   return (
     <div className="relative h-full bg-base-100 min-w-0">
@@ -171,38 +123,30 @@ export default function ViewerPane() {
         <button
           className="btn btn-xs bg-base-300/80 border-base-300 hover:bg-base-300 text-base-content"
           onClick={() => controlsRef.current?.reset()} title="Reset camera"
-        >↺</button>
+        ><ArrowPathIcon className="w-4 h-4" /></button>
         <button
           className="btn btn-xs bg-base-300/80 border-base-300 hover:bg-base-300 text-base-content"
           onClick={() => setMode(m => MODES[(MODES.indexOf(m) + 1) % MODES.length])}
           title="Cycle render mode"
         >{MODE_LABEL[mode]}</button>
-        <select
-          value={colorMode}
-          onChange={e => setColorMode(e.target.value as ColorMode)}
-          className="select select-xs bg-base-300/80 border-base-300 text-base-content min-h-0 h-6 py-0 pr-6 pl-2 text-xs"
-          title="Scalar colour field"
-        >
-          {colorModes.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
-        </select>
         <button
           className={`btn btn-xs border-base-300 text-base-content ${showQuants ? 'bg-base-300' : 'bg-base-300/80 hover:bg-base-300'}`}
           onClick={() => { setShowQuants(s => !s); setShowSettings(false) }}
           disabled={!sessionId}
           title="Quantities & energy breakdown"
-        >Σ</button>
+        ><ChartBarIcon className="w-4 h-4" /></button>
         <button
           className={`btn btn-xs border-base-300 text-base-content ${inspect ? 'bg-base-300' : 'bg-base-300/80 hover:bg-base-300'}`}
           onClick={() => { setInspect(i => !i); setPicked(null); setPickedPos(null) }}
           disabled={!sessionId}
           title="Inspect: click a vertex; show body centroids"
-        >⊙</button>
+        ><CursorArrowRaysIcon className="w-4 h-4" /></button>
         <button
           className={`btn btn-xs border-base-300 text-base-content ${showSettings ? 'bg-base-300' : 'bg-base-300/80 hover:bg-base-300'}`}
           onClick={() => { setShowSettings(s => !s); setShowQuants(false) }}
           disabled={!sessionId}
           title="Mesh & physics settings"
-        >⚙</button>
+        ><Cog6ToothIcon className="w-4 h-4" /></button>
       </div>
 
       {showQuants && quantities && (
@@ -221,17 +165,14 @@ export default function ViewerPane() {
         <VertexInspector info={picked} onClose={() => { setPicked(null); setPickedPos(null) }} />
       )}
       {inspect && !picked && mesh && (
-        <div className="absolute bottom-3 right-3 z-30 badge badge-neutral text-[10px] pointer-events-none">
+        <div className="absolute bottom-3 right-3 z-30 badge bg-base-300/80 border-base-300 text-base-content text-[10px] pointer-events-none">
           Click a vertex to inspect
         </div>
       )}
 
-      {/* Colour legend */}
-      {colorScalars && colorMode !== 'none' && <Legend scalars={colorScalars} label={colorLabel} />}
-
-      {/* Mesh stats (bottom-right) */}
+      {/* Mesh stats (bottom-left — bottom-right is the Inspect panel's spot) */}
       {mesh && (
-        <div className="absolute bottom-2 right-2 z-20 badge badge-neutral font-mono text-[10px] pointer-events-none">
+        <div className="absolute bottom-3 left-3 z-20 badge bg-base-300/80 border-base-300 text-base-content font-mono text-[10px] pointer-events-none">
           {mesh.vertices.length.toLocaleString()} v · {mesh.edges.length.toLocaleString()} e · {mesh.facets.length.toLocaleString()} f
         </div>
       )}
@@ -241,10 +182,10 @@ export default function ViewerPane() {
         <directionalLight position={[4, 8, 4]} intensity={0.9} />
         <directionalLight position={[-4, -2, -4]} intensity={0.2} color="#4488cc" />
         {mesh && mesh.facets.length > 0 && (
-          <MeshGeometry mesh={mesh} mode={mode} colorScalars={colorScalars} elementColors={showElementColors} themeColors={themeColors} />
+          <MeshGeometry mesh={mesh} mode={mode} elementColors themeColors={themeColors} />
         )}
         {mesh && mesh.facets.length === 0 && mesh.edges.length > 0 && (
-          <EdgeLines mesh={mesh} colorScalars={colorScalars} themeColors={themeColors} />
+          <EdgeLines mesh={mesh} themeColors={themeColors} />
         )}
         {inspect && mesh && (
           <>
@@ -256,6 +197,7 @@ export default function ViewerPane() {
           </>
         )}
         <OrbitControls ref={controlsRef} makeDefault />
+        <FitCamera mesh={mesh} />
       </Canvas>
     </div>
   )

@@ -11,7 +11,6 @@ export interface SessionState {
   facet_count:  number | null
   edge_count:   number | null
   lagrange_order: number | null
-  vertex_attributes?: string[]   // user-defined scalar vertex attrs → custom colormaps
 }
 
 export async function createSession(feFile: string): Promise<SessionState> {

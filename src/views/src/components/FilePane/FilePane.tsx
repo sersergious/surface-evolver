@@ -1,42 +1,22 @@
-import { useEffect, useRef, useState, useCallback } from 'react'
-import { listFiles, uploadFile } from '../../api/files'
+import { useEffect, useState } from 'react'
 import { createSession, getRestore } from '../../api/sessions'
 import { exportFe } from '../../api/export'
 import { useAppState } from '../../store/AppContext'
 import { useMenuAction } from '../../hooks/useMenuAction'
-
-function arrayBufferToBase64(buf: ArrayBuffer): string {
-  const bytes = new Uint8Array(buf)
-  let binary = ''
-  for (let i = 0; i < bytes.length; i += 8192) {
-    binary += String.fromCharCode(...bytes.subarray(i, Math.min(i + 8192, bytes.length)))
-  }
-  return btoa(binary)
-}
+import FileBrowserModal from './FileBrowserModal'
 
 export default function FilePane() {
-  const { activeFile, setSession, setStats, setFileContent, setVertexAttributes, appendLog } = useAppState()
+  const {
+    sessionId, activeFile, openFiles,
+    setSession, setStats, setFileContent, appendLog, removeOpenFile,
+  } = useAppState()
 
-  const [files,       setFiles]       = useState<string[]>([])
-  const [loading,     setLoading]     = useState(true)
   const [loadingFile, setLoadingFile] = useState<string | null>(null)
   const [fileErrors,  setFileErrors]  = useState<Record<string, string>>({})
-  const [uploading,   setUploading]   = useState(false)
-  const [uploadErr,   setUploadErr]   = useState<string | null>(null)
-  const [dragging,    setDragging]    = useState(false)
-  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [browserOpen, setBrowserOpen] = useState(false)
 
   const clearError = (file: string) =>
     setFileErrors(prev => { const n = { ...prev }; delete n[file]; return n })
-
-  const refreshFiles = useCallback(async () => {
-    setLoading(true)
-    try   { setFiles(await listFiles()) }
-    catch { setFiles([]) }
-    finally { setLoading(false) }
-  }, [])
-
-  useEffect(() => { refreshFiles() }, [refreshFiles])
 
   // Auto-restore the previous run's evolved surface (once, on first mount).
   useEffect(() => {
@@ -45,7 +25,6 @@ export default function FilePane() {
       if (cancelled || !s) return
       setSession(s.session_id, s.fe_file)
       setStats(s.energy, s.area)
-      setVertexAttributes(s.vertex_attributes ?? [])
       appendLog(`Restored previous session: ${s.fe_file}`)
       exportFe(s.session_id).then(fe => setFileContent(fe.content)).catch(() => {})
     }).catch(() => {})
@@ -53,8 +32,7 @@ export default function FilePane() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Native File ▸ Reload Surface — re-create the session for the active file
-  // (handleSelect short-circuits on the already-active file, so reload directly).
+  // Native File ▸ Reload Surface — re-create the session for the active file.
   useMenuAction(async a => {
     if (a !== 'file:reload' || !activeFile || loadingFile) return
     setLoadingFile(activeFile)
@@ -63,7 +41,6 @@ export default function FilePane() {
       const session = await createSession(activeFile)
       setSession(session.session_id, activeFile)
       setStats(session.energy, session.area)
-      setVertexAttributes(session.vertex_attributes ?? [])
       appendLog(`Reloaded ${activeFile}`)
     } catch (err: unknown) {
       appendLog(`[error] ${activeFile}: ${(err instanceof Error ? err.message : String(err)).replace(/^Error:\s*/i, '')}`)
@@ -80,9 +57,8 @@ export default function FilePane() {
     try {
       appendLog(`Loading ${file}…`)
       const session = await createSession(file)
-      setSession(session.session_id, file)
+      setSession(session.session_id, file)   // also adds to openFiles
       setStats(session.energy, session.area)
-      setVertexAttributes(session.vertex_attributes ?? [])
       appendLog(`Loaded ${file} — session ${session.session_id.slice(0, 8)}`)
       if ((session.lagrange_order ?? 1) > 1)
         appendLog(`[warning] ${file}: Lagrange order ${session.lagrange_order} — curved patches render as straight edges`)
@@ -99,56 +75,34 @@ export default function FilePane() {
     }
   }
 
-  async function handleFiles(fileList: FileList | null) {
-    if (!fileList?.length) return
-    const file = fileList[0]
-    if (!file.name.endsWith('.fe')) { setUploadErr('Only .fe files are accepted'); return }
-    setUploading(true); setUploadErr(null)
-    try {
-      const result = await uploadFile(file.name, arrayBufferToBase64(await file.arrayBuffer()))
-      appendLog(`Uploaded ${result.filename} (${result.size_bytes} bytes)`)
-      await refreshFiles()
-      if (result.renderable) await handleSelect(result.filename)
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err)
-      setUploadErr(msg.length > 80 ? msg.slice(0, 77) + '…' : msg)
-      appendLog(`[error] Upload failed: ${msg}`)
-    } finally {
-      setUploading(false)
-      if (fileInputRef.current) fileInputRef.current.value = ''
-    }
+  function closeFile(e: React.MouseEvent, file: string) {
+    e.stopPropagation()
+    clearError(file)
+    removeOpenFile(file)
   }
 
-  const onDrop     = useCallback((e: React.DragEvent) => {
-    e.preventDefault(); setDragging(false); handleFiles(e.dataTransfer.files)
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
-  const onDragOver  = (e: React.DragEvent) => { e.preventDefault(); setDragging(true) }
-  const onDragLeave = () => setDragging(false)
-
   return (
-    <div
-      className={`flex flex-col h-full min-h-0 transition-colors duration-100 ${dragging ? 'ring-2 ring-inset ring-primary' : ''}`}
-      onDrop={onDrop} onDragOver={onDragOver} onDragLeave={onDragLeave}
-    >
-      {/* Section header */}
-      <div className="px-3 py-2 text-[10px] font-bold tracking-[0.12em] uppercase text-base-content/40 border-b border-base-300 shrink-0">
-        Files
+    <div className="flex flex-col h-full min-h-0">
+      {/* Section header with Add button */}
+      <div className="flex items-center justify-between pl-3 pr-1.5 py-1.5 border-b border-base-300 shrink-0">
+        <span className="text-[10px] font-bold tracking-[0.12em] uppercase text-base-content/40">Files</span>
+        <button
+          className="btn btn-ghost btn-xs btn-square text-base-content/60 hover:text-base-content"
+          onClick={() => setBrowserOpen(true)}
+          title="Add .fe file"
+        >+</button>
       </div>
 
-      {/* File list */}
+      {/* Open files */}
       <div className="flex-1 min-h-0 overflow-y-auto">
-        {loading && (
-          <div className="px-3 py-3 flex items-center gap-2 text-xs text-base-content/40">
-            <span className="loading loading-dots loading-xs" />
-            Loading…
-          </div>
-        )}
-        {!loading && files.length === 0 && (
-          <p className="px-3 py-3 text-xs text-base-content/40">No .fe files found</p>
+        {openFiles.length === 0 && (
+          <p className="px-3 py-3 text-xs text-base-content/40">
+            No open files. Press <span className="font-bold">+</span> to add a .fe file.
+          </p>
         )}
 
         <ul className="menu menu-sm w-full py-1 px-1 gap-0.5">
-          {files.map((f) => {
+          {openFiles.map((f) => {
             const isActive  = activeFile === f
             const isLoading = loadingFile === f
             const hasError  = Boolean(fileErrors[f])
@@ -161,15 +115,28 @@ export default function FilePane() {
                   title={hasError ? fileErrors[f] : f}
                   className={[
                     'flex items-center gap-1 py-1.5 font-mono text-xs leading-none rounded',
-                    isActive && !hasError ? 'active' : '',
+                    // Light tinted highlight for the selected row instead of daisyUI's
+                    // `active` (which fills it with the dark neutral colour → in light
+                    // mode the row goes dark and the ✕ is hard to see).
+                    isActive && !hasError ? '!bg-primary/15 text-base-content font-medium' : '',
                     hasError ? 'text-error hover:text-error' : '',
                   ].join(' ')}
                 >
-                  <span className="truncate flex-1 min-w-0">{f}</span>
+                  <span className="flex-1 min-w-0">
+                    <span className="block truncate">{f}</span>
+                    {isActive && sessionId && !isLoading && (
+                      <span className="block truncate text-[10px] font-mono text-base-content/50">#{sessionId.slice(0, 6)}</span>
+                    )}
+                  </span>
                   {isLoading && <span className="loading loading-dots loading-xs shrink-0" />}
                   {hasError && !isLoading && (
                     <span className="shrink-0 text-error" title={fileErrors[f]}>⚠</span>
                   )}
+                  <button
+                    className="shrink-0 px-1 text-base-content/40 hover:text-error"
+                    onClick={e => closeFile(e, f)}
+                    title="Close file"
+                  >✕</button>
                 </a>
               </li>
             )
@@ -177,25 +144,11 @@ export default function FilePane() {
         </ul>
       </div>
 
-      {/* Upload footer */}
-      <div className="shrink-0 border-t border-base-300 p-2 space-y-1.5">
-        {uploadErr && (
-          <p className="text-[11px] text-error leading-tight break-words" title={uploadErr}>
-            {uploadErr}
-          </p>
-        )}
-        <button
-          className={`btn btn-sm btn-block btn-ghost border border-base-300 normal-case text-xs font-normal ${uploading ? 'loading' : ''}`}
-          onClick={() => !uploading && fileInputRef.current?.click()}
-          disabled={uploading}
-        >
-          {uploading ? 'Uploading…' : dragging ? 'Drop to upload' : '+ Upload .fe'}
-        </button>
-        <input
-          ref={fileInputRef} type="file" accept=".fe" className="hidden"
-          onChange={e => handleFiles(e.target.files)}
-        />
-      </div>
+      <FileBrowserModal
+        open={browserOpen}
+        onClose={() => setBrowserOpen(false)}
+        onPick={handleSelect}
+      />
     </div>
   )
 }

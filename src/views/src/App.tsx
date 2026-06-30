@@ -1,11 +1,9 @@
-import { Routes, Route, useNavigate } from 'react-router-dom'
 import { useState, useRef, useCallback, useEffect } from 'react'
 import ErrorBoundary from './components/ErrorBoundary'
 import FilePane      from './components/FilePane/FilePane'
 import CliPane       from './components/CliPane/CliPane'
 import EditorPane    from './components/EditorPane/EditorPane'
 import ViewerPane    from './components/ViewerPane/ViewerPane'
-import DocsPage      from './components/DocsPage/DocsPage'
 import { useMenuAction } from './hooks/useMenuAction'
 import { useAppState } from './store/AppContext'
 
@@ -53,15 +51,14 @@ function Navbar({ sidebarOpen, onToggleSidebar }: {
   onToggleSidebar: () => void
 }) {
   const { sessionId, activeFile, energy, area, totalTime } = useAppState()
-  const navigate = useNavigate()
 
   return (
-    <div className="navbar min-h-0 h-11 bg-base-200 border-b border-base-300 px-2 gap-0 shrink-0 drag-region">
+    <div className="navbar min-h-0 h-11 bg-base-200 border-b border-base-300 px-2 gap-0 shrink-0 electrobun-webkit-app-region-drag">
 
       {/* ── Left ── */}
       <div className="navbar-start gap-1.5 min-w-0 pl-[72px]">
         <button
-          className={`btn btn-ghost btn-xs btn-square no-drag ${sidebarOpen ? 'bg-base-300' : ''}`}
+          className={`btn btn-ghost btn-xs btn-square electrobun-webkit-app-region-no-drag ${sidebarOpen ? 'bg-base-300' : ''}`}
           onClick={onToggleSidebar}
           title={sidebarOpen ? 'Hide explorer' : 'Show explorer'}
         >
@@ -80,7 +77,7 @@ function Navbar({ sidebarOpen, onToggleSidebar }: {
       </div>
 
       {/* ── Right ── */}
-      <div className="navbar-end gap-2 no-drag">
+      <div className="navbar-end gap-2 electrobun-webkit-app-region-no-drag">
         {/* Stats */}
         {(energy !== null || area !== null || totalTime !== null) && (
           <div className="hidden sm:flex items-center gap-3 mr-1">
@@ -96,13 +93,6 @@ function Navbar({ sidebarOpen, onToggleSidebar }: {
             #{sessionId.slice(0, 8)}
           </div>
         )}
-
-        <div className="w-px h-5 bg-base-300 hidden sm:block" />
-
-        {/* Help */}
-        <button className="btn btn-ghost btn-xs" onClick={() => navigate('/docs')}>
-          Docs
-        </button>
       </div>
     </div>
   )
@@ -138,13 +128,11 @@ const EDITOR_MAX  = 600
 
 function Inner() {
   useSystemTheme()
-  const navigate = useNavigate()
   const [sidebarOpen,  setSidebarOpen]  = useState(true)
 
-  // Native View/File menu → explorer toggle + docs.
+  // Native View menu → explorer toggle.
   useMenuAction(a => {
-    if (a === 'view:sidebar')   setSidebarOpen(o => !o)
-    else if (a === 'view:docs') navigate('/docs')
+    if (a === 'view:sidebar') setSidebarOpen(o => !o)
   })
   const [sidebarWidth, setSidebarWidth] = useState(SIDEBAR_W)
   const [editorWidth,  setEditorWidth]  = useState(EDITOR_W)
@@ -235,10 +223,7 @@ function Inner() {
 export default function App() {
   return (
     <ErrorBoundary>
-      <Routes>
-        <Route path="/"     element={<Inner />} />
-        <Route path="/docs" element={<DocsPage />} />
-      </Routes>
+      <Inner />
     </ErrorBoundary>
   )
 }

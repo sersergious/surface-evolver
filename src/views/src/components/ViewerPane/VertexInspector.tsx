@@ -16,7 +16,7 @@ export default function VertexInspector({ info, onClose }: { info: VertexInfo; o
   const flags = ATTR_FLAGS.filter(f => info.attr & f.bit).map(f => f.label)
 
   return (
-    <div className="absolute bottom-3 right-3 z-30 w-60 rounded-box border border-base-300 bg-base-200/95 shadow-xl text-xs">
+    <div className="absolute bottom-3 right-3 z-30 w-60 rounded-box overflow-hidden border border-base-300 bg-base-200/95 shadow-xl text-xs">
       <div className="flex items-center justify-between bg-base-300/90 px-2.5 py-1.5">
         <span className="font-semibold">Vertex #{info.id}</span>
         <button className="btn btn-ghost btn-xs btn-square -mr-1" onClick={onClose} title="Close">✕</button>

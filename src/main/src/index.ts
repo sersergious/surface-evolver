@@ -125,11 +125,8 @@ installAppMenu(win);
             };
             sessionStore.put(session);
             persist(sessionId);
-            // vertex_attributes ride the response (not stored) — the viewer uses
-            // them to populate custom-attribute colormaps.
             return {
                 ...session,
-                vertex_attributes: stats.vertex_attributes,
                 last_accessed: session.last_accessed.toISOString(),
             };
         },
@@ -215,12 +212,12 @@ installAppMenu(win);
             return result;
         },
 
-        getMesh: async (payload: { sessionId: string; scalars?: string; colors?: boolean }) => {
-            const { sessionId, scalars, colors } = payload;
+        getMesh: async (payload: { sessionId: string; colors?: boolean }) => {
+            const { sessionId, colors } = payload;
             const session = sessionStore.get(sessionId);
             if (!session) throw new Error("Session not found");
 
-            return await seManager.getMesh(sessionId, scalars, colors);
+            return await seManager.getMesh(sessionId, colors);
         },
 
         quantities: async (payload: { sessionId: string }) => {

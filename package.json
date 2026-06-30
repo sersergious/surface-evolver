@@ -12,6 +12,7 @@
     "src/views"
   ],
   "dependencies": {
+    "@heroicons/react": "^2.2.0",
     "electrobun": "^1.18.1"
   },
   "devDependencies": {

@@ -12,9 +12,6 @@ export default {
         entrypoint: "src/views/index.html"
       }
     },
-    copy: {
-      "src/views/docs": "views/main/docs"
-    },
     mac: {
       entitlements: "default"
     }

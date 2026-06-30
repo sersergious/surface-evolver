@@ -3,23 +3,10 @@
  *
  * Menu clicks carry a string `action` that is forwarded verbatim to the webview
  * as a `se-menu` CustomEvent; the React side routes it (see useMenuAction).
- * This surfaces every existing feature — colormaps, render modes, topology ops,
+ * This surfaces every existing feature — render modes, topology ops,
  * iteration, panels — through the OS-native menu and keyboard shortcuts.
  */
 import Electrobun, { type BrowserWindow } from "electrobun/bun";
-
-// Colour modes must match ViewerPane's COLOR_MODES values.
-const COLOR_ITEMS: { label: string; mode: string; accelerator?: string }[] = [
-  { label: "Off",              mode: "none", accelerator: "CmdOrCtrl+0" },
-  { label: "Height Z",         mode: "height" },
-  { label: "Mean Curvature",   mode: "mean_curvature" },
-  { label: "Gaussian Curvature", mode: "gaussian_curvature" },
-  { label: "Energy Density",   mode: "energy_density" },
-  { label: "Star Area",        mode: "star_area" },
-  { label: "Valence",          mode: "valence" },
-  { label: "Force",            mode: "force" },
-  { label: "SE Colors",        mode: "se_colors" },
-];
 
 // `any` for the menu config — Electrobun's ApplicationMenuItemConfig is loosely
 // typed and a precise shape here adds noise without safety.
@@ -39,8 +26,6 @@ function menuConfig(): unknown[] {
       label: "File",
       submenu: [
         { label: "Reload Surface", action: "file:reload", accelerator: "CmdOrCtrl+Shift+R" },
-        { type: "separator" },
-        { label: "Documentation", action: "view:docs", accelerator: "CmdOrCtrl+/" },
       ],
     },
     {
@@ -56,12 +41,6 @@ function menuConfig(): unknown[] {
       submenu: [
         { label: "Toggle Explorer", action: "view:sidebar", accelerator: "CmdOrCtrl+B" },
         { type: "separator" },
-        {
-          label: "Color By",
-          submenu: COLOR_ITEMS.map(c => ({
-            label: c.label, action: `color:${c.mode}`, ...(c.accelerator ? { accelerator: c.accelerator } : {}),
-          })),
-        },
         {
           label: "Render",
           submenu: [
