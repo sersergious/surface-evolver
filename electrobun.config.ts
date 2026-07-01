@@ -31,8 +31,11 @@ export default {
     mac: {
       entitlements: "default",
       createDmg: true,
+      icons: "assets/icon.iconset",   // electrobun converts → .icns via iconutil
     },
-    win: {},
+    win: {
+      icon: "assets/icon.ico",
+    },
   },
   // Builds the headless libse for the current runner before bundling.
   scripts: {
