@@ -5,9 +5,8 @@
  * subprocess that owns exactly one libse.so instance, preventing the
  * double-init heap corruption that occurs when startup() is called twice.
  *
- * The Mutex serialises all blocking subprocess I/O so the event loop
- * stays free for status-check requests. isBusy() returns true while
- * any operation holds the lock, so callers can return 409 Conflict.
+ * The Mutex serialises all blocking subprocess I/O so concurrent RPC
+ * calls can't interleave on the single worker.
  */
 
 import { config } from "./config";
@@ -99,17 +98,6 @@ class WorkerHandle {
     }
   }
 
-  /** Yield every line (progress + result) until the result. EOF = cancellation. */
-  async *streamUntilResult(): AsyncGenerator<WorkerMsg> {
-    while (true) {
-      const { value, done } = await this.lineGen.next();
-      if (done) return;                          // worker killed = cancelled
-      const msg = JSON.parse(value!) as WorkerMsg;
-      yield msg;
-      if (msg.type === "result") return;
-    }
-  }
-
   kill(): void {
     try { this.proc.kill(); } catch { /* already dead */ }
   }
@@ -136,7 +124,14 @@ function spawnWorker(): WorkerHandle {
     stderr: "inherit",   // worker's debug output surfaces in server logs
     env:    process.env,
   });
-  return (worker = new WorkerHandle(proc));
+  const handle = new WorkerHandle(proc);
+  // When this proc dies (crash / OOM / our own kill), drop module state so the
+  // next RPC gets a clean "not loaded" the frontend handles, instead of a hung
+  // send() to dead stdin. The in-flight recvResult() still rejects on its own.
+  proc.exited.then(() => {
+    if (worker === handle) { worker = null; activeSessionId = null; }
+  });
+  return (worker = handle);
 }
 
 function checkResult(msg: WorkerMsg): void {
@@ -149,11 +144,11 @@ function checkResult(msg: WorkerMsg): void {
 
 // ── public API ────────────────────────────────────────────────────────────────
 
-export function isBusy(): boolean { return mutex.locked; }
-
 export async function loadSession(sessionId: string, fePath: string): Promise<{
   energy: number; area: number; scale: number; sdim: number;
   vertex_count: number; edge_count: number; facet_count: number;
+  lagrange_order: number; bbox_min: number[] | null; bbox_max: number[] | null;
+  total_time: number;
 }> {
   await mutex.acquire();
   try {
@@ -170,7 +165,7 @@ export async function loadSession(sessionId: string, fePath: string): Promise<{
 
 export async function runCommand(
   sessionId: string, command: string,
-): Promise<{ output: string; energy: number; area: number }> {
+): Promise<{ output: string; energy: number; area: number; total_time: number }> {
   await mutex.acquire();
   try {
     if (activeSessionId !== sessionId)
@@ -179,23 +174,111 @@ export async function runCommand(
     await worker.send({ cmd: "run", command });
     const msg = await worker.recvResult();
     checkResult(msg);
-    return msg as unknown as { output: string; energy: number; area: number };
+    return msg as unknown as { output: string; energy: number; area: number; total_time: number };
   } finally {
     mutex.release();
   }
 }
 
-export async function getMesh(sessionId: string, scalars?: string): Promise<{
-  vertices: number[][]; vertex_ids: number[]; facets: number[][];
-  body_volumes: Record<string, number>; body_pressures: Record<string, number>;
-  scalars?: string; scalar_values?: number[];
+export async function getQuantities(sessionId: string): Promise<{
+  quantities: { name: string; value: number; target: number; modulus: number; flags: number }[];
+  methods: { name: string; type: number; value: number }[];
 }> {
   await mutex.acquire();
   try {
     if (activeSessionId !== sessionId)
       throw new Error(`Session ${sessionId} is not currently loaded (active: ${activeSessionId})`);
     if (!worker) throw new Error(`No active SE worker for session ${sessionId}`);
-    await worker.send({ cmd: "mesh", ...(scalars ? { scalars } : {}) });
+    await worker.send({ cmd: "quantities" });
+    const msg = await worker.recvResult();
+    checkResult(msg);
+    return msg as unknown as ReturnType<typeof getQuantities> extends Promise<infer R> ? R : never;
+  } finally {
+    mutex.release();
+  }
+}
+
+export interface MeshParams { min_area: number; min_length: number; max_len: number; temperature: number }
+export interface Physics { gravflag: boolean; grav_const: number; pressflag: boolean; pressure: number }
+export interface Settings { mesh_params: MeshParams; physics: Physics; total_time: number }
+
+export async function getSettings(sessionId: string): Promise<Settings> {
+  await mutex.acquire();
+  try {
+    if (activeSessionId !== sessionId)
+      throw new Error(`Session ${sessionId} is not currently loaded (active: ${activeSessionId})`);
+    if (!worker) throw new Error(`No active SE worker for session ${sessionId}`);
+    await worker.send({ cmd: "settings" });
+    const msg = await worker.recvResult();
+    checkResult(msg);
+    return msg as unknown as Settings;
+  } finally {
+    mutex.release();
+  }
+}
+
+export async function setSettings(
+  sessionId: string, patch: { mesh_params?: MeshParams; physics?: Physics },
+): Promise<Settings & { energy: number; area: number }> {
+  await mutex.acquire();
+  try {
+    if (activeSessionId !== sessionId)
+      throw new Error(`Session ${sessionId} is not currently loaded (active: ${activeSessionId})`);
+    if (!worker) throw new Error(`No active SE worker for session ${sessionId}`);
+    await worker.send({ cmd: "set_settings", ...patch });
+    const msg = await worker.recvResult();
+    checkResult(msg);
+    return msg as unknown as Settings & { energy: number; area: number };
+  } finally {
+    mutex.release();
+  }
+}
+
+export async function getVertexInfo(sessionId: string, vpos: number): Promise<{
+  id: number; xyz: number[]; attr: number; constraints: { idx: number; name: string }[];
+}> {
+  await mutex.acquire();
+  try {
+    if (activeSessionId !== sessionId)
+      throw new Error(`Session ${sessionId} is not currently loaded (active: ${activeSessionId})`);
+    if (!worker) throw new Error(`No active SE worker for session ${sessionId}`);
+    await worker.send({ cmd: "vertex_info", vpos });
+    const msg = await worker.recvResult();
+    checkResult(msg);
+    return msg as unknown as ReturnType<typeof getVertexInfo> extends Promise<infer R> ? R : never;
+  } finally {
+    mutex.release();
+  }
+}
+
+export async function runTopo(
+  sessionId: string, op: string, n?: number,
+): Promise<{ output: string; counts: Record<string, number>; energy: number; energy_delta: number; area: number; total_time: number }> {
+  await mutex.acquire();
+  try {
+    if (activeSessionId !== sessionId)
+      throw new Error(`Session ${sessionId} is not currently loaded (active: ${activeSessionId})`);
+    if (!worker) throw new Error(`No active SE worker for session ${sessionId}`);
+    await worker.send({ cmd: "topo", op, ...(typeof n === "number" ? { n } : {}) });
+    const msg = await worker.recvResult();
+    checkResult(msg);
+    return msg as unknown as { output: string; counts: Record<string, number>; energy: number; energy_delta: number; area: number; total_time: number };
+  } finally {
+    mutex.release();
+  }
+}
+
+export async function getMesh(sessionId: string, colors?: boolean): Promise<{
+  vertices: number[][]; vertex_ids: number[]; facets: number[][]; edges: number[][];
+  body_volumes: Record<string, number>; body_pressures: Record<string, number>;
+  facet_colors?: number[]; edge_colors?: number[];
+}> {
+  await mutex.acquire();
+  try {
+    if (activeSessionId !== sessionId)
+      throw new Error(`Session ${sessionId} is not currently loaded (active: ${activeSessionId})`);
+    if (!worker) throw new Error(`No active SE worker for session ${sessionId}`);
+    await worker.send({ cmd: "mesh", ...(colors ? { colors: true } : {}) });
     const msg = await worker.recvResult();
     checkResult(msg);
     return msg as unknown as ReturnType<typeof getMesh> extends Promise<infer R> ? R : never;
@@ -236,52 +319,3 @@ export async function dump(sessionId: string): Promise<{ content: string }> {
   }
 }
 
-export async function iterateAsync(
-  sessionId: string,
-  steps: number,
-  progressCb: (step: number, total: number, energy: number) => Promise<void>,
-): Promise<{ steps_completed: number; energy_start: number | null; energy_end: number | null }> {
-  await mutex.acquire();
-  try {
-    if (activeSessionId !== sessionId)
-      throw new Error(`Session ${sessionId} is not currently loaded (active: ${activeSessionId})`);
-    if (!worker) throw new Error(`No active SE worker for session ${sessionId}`);
-
-    await worker.send({ cmd: "iterate", steps });
-
-    let energyStart: number | null = null;
-    let stepsDone = 0;
-
-    for await (const msg of worker.streamUntilResult()) {
-      if (msg.type === "progress") {
-        if (energyStart === null) energyStart = msg.energy ?? null;
-        stepsDone = msg.step ?? stepsDone;
-        await progressCb(msg.step!, msg.total!, msg.energy!);
-      } else if (msg.type === "result") {
-        checkResult(msg);
-        return {
-          steps_completed: (msg.steps_completed as number | undefined) ?? stepsDone,
-          energy_start:    (msg.energy_start    as number | undefined) ?? energyStart,
-          energy_end:      (msg.energy_end      as number | null | undefined) ?? null,
-        };
-      }
-    }
-
-    // Stream ended without a result = worker was killed (cancellation).
-    return { steps_completed: stepsDone, energy_start: energyStart, energy_end: null };
-  } finally {
-    mutex.release();
-  }
-}
-
-export function clearSession(sessionId: string): void {
-  if (activeSessionId === sessionId) {
-    activeSessionId = null;
-    if (worker) { worker.kill(); worker = null; }
-  }
-}
-
-export function cancelCurrent(): void {
-  if (worker) { worker.kill(); }
-  // Don't null worker here; iterateAsync will see stream EOF and return.
-}

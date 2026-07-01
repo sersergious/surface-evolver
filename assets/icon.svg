@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <clipPath id="round"><rect width="1024" height="1024" rx="205"/></clipPath>
+  </defs>
+
+  <g clip-path="url(#round)">
+    <rect width="1024" height="1024" fill="#e6e8eb"/>
+    <path fill="none" stroke="#d2d6dc" stroke-width="3"
+          d="M128 0V1024 M256 0V1024 M384 0V1024 M512 0V1024 M640 0V1024 M768 0V1024 M896 0V1024
+             M0 128H1024 M0 256H1024 M0 384H1024 M0 512H1024 M0 640H1024 M0 768H1024 M0 896H1024"/>
+  </g>
+
+  <text x="512" y="700" text-anchor="middle"
+        font-family="'Helvetica Neue', Helvetica, Arial, sans-serif"
+        font-weight="800" font-size="500" letter-spacing="-24" fill="#3a3f45">SE</text>
+</svg>

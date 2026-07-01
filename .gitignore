@@ -10,6 +10,9 @@ Thumbs.db
 
 # ── C / CMake build ──────────────────────────────────────────────────────────
 build/
+cmake-build-debug/
+cmake-build-release/
+build-native/
 *.o
 *.a
 *.so
@@ -26,6 +29,7 @@ src/views/src/styles/compiled.css
 # ── Electrobun ───────────────────────────────────────────────────────────────
 dist-electrobun/
 out/
+artifacts/
 
 # ── Surface Evolver runtime files ────────────────────────────────────────────
 fe/*.dmp
