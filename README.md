@@ -8,6 +8,34 @@ Surface Evolver minimizes the energy of surfaces subject to constraints — volu
 
 This project drives the original C engine directly through `bun:ffi`, so you get the full Surface Evolver command language in the CLI pane, plus first-class UI for the common workflow (load → evolve → refine → inspect → export) and a WebGL viewer that renders the mesh as it evolves.
 
+## What you can do
+
+- **Load** any bundled `.fe` file, or upload your own (the **+** button in the file pane). Open several as tabs.
+- **Run the full SE command language** in the CLI pane — anything you'd type in the real Evolver (`g`, `r`, `u`, `hessian`, `ritz`, quantity/constraint definitions, macros like `gogo := { … }`, …).
+- **Evolve & refine** via the Run menu / keyboard: iterate (`⌘G`), Refine (`⌘R`), Equiangulate (`⌘U`), Vertex Average (`⌘E`), Pop.
+- **Visualize** in 3D: Solid / Wireframe / X-Ray modes, native SE per-element colours, full edge overlay, orbit + reset camera.
+- **Inspect**: click a vertex for its id, coordinates, constraints and flags; body centre-of-mass markers.
+- **Panels**: named quantities + energy breakdown; mesh-quality and physics settings (min area/length, gravity, pressure).
+- **Export** the current surface as `.fe` or an exact-state `.dmp`.
+- **Auto-restore** — your evolved surface comes back after a restart.
+
+## What you can't do (yet)
+
+- **Only one live session at a time.** The engine is one-worker-per-session, so open files are tabs — switching reloads; background tabs aren't kept warm.
+- **Power features are CLI-only** (they work, just no buttons): Hessian/eigenvalue stability analysis, and advanced ops like `edgeswap`, `dissolve`, `jiggle`, `optimize`, `conj_grad`, `saddle`.
+- **Defining** quantities / constraints / methods happens in the CLI or the `.fe` file — the panels are view-only.
+- **No scalar heat-map colormaps** (curvature/valence/…); the viewer shows native SE colours only.
+- **No native graphics window or PostScript export** — the WebGL viewer replaces them.
+- **Windows isn't supported** — run under WSL.
+
+## Known issues
+
+- **`simplex3.fe` and `slidestr.fe` are hidden** — `simplex3` (SIMPLEX model) loads and runs but renders empty (simplex cells aren't exposed by the mesh API); `slidestr` is a malformed bundled datafile the engine rejects at load.
+- **Curved (Lagrange/quadratic) patches render as straight edges** — you'll see a warning in the log; the geometry is approximate.
+- **Attributes defined in a datafile's *command* section** don't appear in the colour/inspector lists until the file is reloaded (header-defined attributes are fine).
+- **Closing the active tab clears the viewer** — it doesn't auto-switch to another open file.
+- **Distributables are unsigned** — macOS Gatekeeper will warn on first open (right-click → Open); Linux artifact is pending its first CI build.
+
 ## Overall architecture
 
 One worker subprocess owns exactly one `libse` instance per session — `libse` can't be initialized twice in the same process, so loading a new file spawns a fresh worker.
