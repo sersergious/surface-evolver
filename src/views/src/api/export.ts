@@ -32,13 +32,11 @@ export async function updateFile(filename: string, content: string): Promise<{ f
   return rpc<{ filename: string; size_bytes: number }>('updateFile', { filename, content })
 }
 
-/** Trigger a browser download from an in-memory string. */
-export function triggerDownload(filename: string, content: string, mimeType = 'text/plain'): void {
-  const blob = new Blob([content], { type: mimeType })
-  const url  = URL.createObjectURL(blob)
-  const a    = document.createElement('a')
-  a.href     = url
-  a.download = filename
-  a.click()
-  URL.revokeObjectURL(url)
+/**
+ * Save an export to ~/Downloads via the bun process (which also reveals it).
+ * A blob-URL <a download> is silently dropped by the embedded webview, so
+ * downloads must go through native IPC.
+ */
+export function saveExport(filename: string, content: string): Promise<{ path: string }> {
+  return rpc<{ path: string }>('saveExport', { filename, content })
 }

@@ -10,8 +10,9 @@
  */
 
 import { dlopen, FFIType, ptr } from "bun:ffi";
-import { readFileSync } from "fs";
-import { dirname } from "path";
+import { readFileSync, unlinkSync } from "fs";
+import { dirname, join } from "path";
+import { tmpdir } from "os";
 import * as readline from "readline";
 
 // ── library load ─────────────────────────────────────────────────────────────
@@ -444,21 +445,22 @@ function handleSetScale(req: { scale: number }): object {
 function handleDump(): object {
   if (!loadedFilePath) return { ok: false, error: "No file loaded" };
 
-  const ret = lib.se_run(ptr(toCString("dump"))) as number;
+  // Dump to an explicit temp path: a bare `dump` writes next to the datafile,
+  // whose directory can be read-only (translocated .app, /opt install).
+  const dmpPath = join(tmpdir(), `se-dump-${process.pid}.dmp`);
+  const ret = lib.se_run(ptr(toCString(`dump "${dmpPath}"`))) as number;
   if (ret !== 0) {
     return { ok: false, se_error: popErrout() || lastError() || "dump failed" };
   }
-
-  // SE creates <loadedFilePath>.dmp; parse output to confirm actual path.
-  const out     = popOutput();
-  const matched = out.match(/Dumping to (.+?)\s*\.?\s*$/m);
-  const dmpPath = matched ? matched[1].replace(/\.$/, "").trim() : loadedFilePath + ".dmp";
+  popOutput();
 
   try {
     const content = readFileSync(dmpPath, "utf8");
     return { ok: true, content };
   } catch (e) {
     return { ok: false, error: `Could not read dump file at ${dmpPath}: ${e}` };
+  } finally {
+    try { unlinkSync(dmpPath); } catch { /* already gone */ }
   }
 }
 

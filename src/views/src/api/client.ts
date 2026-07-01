@@ -2,9 +2,9 @@
 import { Electroview } from 'electrobun/view'
 
 // View-side RPC. View has no incoming handlers; all calls go to bun.
-// maxRequestTime covers slow ops like createSession and runCommand.
+// maxRequestTime covers slow ops — a `g N` on a large mesh can run minutes.
 const electroRpc = (Electroview as any).defineRPC({
-  maxRequestTime: 30_000,
+  maxRequestTime: 300_000,
   handlers: { requests: {}, messages: {} },
 })
 
