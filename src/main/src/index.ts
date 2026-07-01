@@ -1,3 +1,4 @@
+import "./bootstrap-paths";   // MUST be first — injects SE_* env before ./config loads
 import Electrobun, { BrowserWindow }                     from "electrobun/bun";
 import { resolve, join, basename, extname }               from "path";
 import { readdirSync, readFileSync, writeFileSync, existsSync } from "fs";
@@ -52,15 +53,16 @@ const restorePromise: Promise<sessionStore.SessionState | null> = (async () => {
 
 const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
 
-const UNSUPPORTED_FE = [
-    /^\s*SIMPLEX_REPRESENTATION\b/i,
-    /^\s*space_dimension\s+[12]\b/i,
-];
+// Datafiles hidden from the picker (load/render unsupported in this build).
+// - slidestr.fe: STRING model with an open (non-closed) face edge loop; engine
+//   rejects it at load ("Facetedge tail vertex disagrees with prev head").
+// - simplex3.fe: SIMPLEX_REPRESENTATION; loads + runs but renders empty because
+//   se_get_facets is SOAPFILM-only (simplex cells aren't exposed). See BACKLOG.
+// (2-D/4-D space_dimension files render fine now that se_get_vertices emits a
+// fixed 3-component stride, so they are no longer filtered.)
+const QUARANTINED_FE = new Set<string>(["slidestr.fe", "simplex3.fe"]);
 function isRenderable(filePath: string): boolean {
-    try {
-        const lines = readFileSync(filePath, "utf8").split("\n").slice(0, 120);
-        return !lines.some(l => UNSUPPORTED_FE.some(re => re.test(l)));
-    } catch { return false; }
+    return !QUARANTINED_FE.has(basename(filePath));
 }
 
 const win = new BrowserWindow({

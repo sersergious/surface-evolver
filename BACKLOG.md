@@ -38,9 +38,14 @@ Full commit history in `git log`. Headline:
 Effort: **S** ≈ hours / **M** ≈ a day / **L** ≈ multi-day. No C/engine work
 unless noted.
 
-### P0 — blocking the MVP ("run every `.fe` in `/fe`")
-1. **Fix load+run failures across `/fe`** — `5pb.fe` can't load/run; audit the
-   whole `fe/` set, fix or quarantine each. Correctness; gates the MVP. **M**
+### P0 — blocking the MVP ("run every `.fe` in `/fe`") — ✅ DONE
+1. ~~Fix load+run failures across `/fe`.~~ Root cause was `se_get_vertices`/
+   `se_get_vertex_info` emitting `sdim` comps into a stride-3 buffer → 2-D/4-D
+   files scrambled (the `isRenderable` filter had been hiding them). Fixed to a
+   fixed 3-component stride (pad `z=0`); worker now `chdir`s to the datafile dir
+   so relative includes resolve (`crystal.fe`'s `Wulff "octa.wlf"`). **25/27 load
+   + render**; `slidestr.fe` (malformed open face loop) and `simplex3.fe` (empty
+   render, see P3) are quarantined in `index.ts`.
 
 ### P1 — high value, cheap-to-moderate
 2. **Hessian / eigenvalue stability panel** — the one high-value capability with
@@ -71,7 +76,14 @@ unless noted.
    an opt-in toggle. **S**
 9. **Refresh attribute list after `recalc`** — attrs defined in a datafile's
    command section aren't in the load-time list (header-defined only). **S**
-10. **Lagrange / curved-patch rendering** — quadratic patches render as straight
+10. **SIMPLEX geometry rendering** — `SIMPLEX_REPRESENTATION` files (e.g.
+    `simplex3.fe`, sdim=4) load + run but render empty: `se_get_facets` is
+    SOAPFILM-only, so simplex cells aren't exposed. Needs a simplex→triangle
+    accessor. Currently quarantined from the picker. **M**, niche
+11. **Fix or replace `slidestr.fe`** — bundled STRING datafile with an open face
+    edge loop the engine rejects at load. Quarantined. Fixing needs the intended
+    geometry (don't guess); may just be a bad bundled copy. **S**, niche
+12. **Lagrange / curved-patch rendering** — quadratic patches render as straight
     edges; we only warn. High effort, niche files. Defer unless a target file
     needs it. **L**
 

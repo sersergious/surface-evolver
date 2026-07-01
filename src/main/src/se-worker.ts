@@ -11,6 +11,7 @@
 
 import { dlopen, FFIType, ptr } from "bun:ffi";
 import { readFileSync } from "fs";
+import { dirname } from "path";
 import * as readline from "readline";
 
 // ── library load ─────────────────────────────────────────────────────────────
@@ -120,6 +121,9 @@ function lastError(): string {
 let loadedFilePath: string | null = null;
 
 function handleLoad(req: { path: string }): object {
+  // Resolve relative includes (e.g. crystal.fe's `Wulff "octa.wlf"`) against the
+  // datafile's own directory — the engine opens them relative to the CWD.
+  try { process.chdir(dirname(req.path)); } catch { /* keep current CWD */ }
   const ret = lib.se_load(ptr(toCString(req.path))) as number;
   if (ret !== 0) {
     return { ok: false, se_error: popErrout() || lastError() || "se_load() failed" };

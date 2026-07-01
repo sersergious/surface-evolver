@@ -1,0 +1,51 @@
+name: Build
+
+# Builds the native headless libse on each OS runner (via the electrobun
+# preBuild hook → scripts/build-native.ts) and bundles a distributable app.
+# Trigger on version tags, or manually.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14        # Apple Silicon → macos-arm64
+            artifact: macos-arm64
+          - os: windows-latest  # → win-x64
+            artifact: win-x64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      # cmake + a C toolchain (Xcode clang on macOS, MSVC on Windows) are
+      # preinstalled on GitHub-hosted runners. On Windows, cmake defaults to the
+      # Visual Studio generator; build-native.ts passes --config Release.
+      - name: Install dependencies
+        run: bun install
+
+      - name: Build native lib + bundle app
+        run: bun run build:canary
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: surface-evolver-${{ matrix.artifact }}
+          path: artifacts/*
+          if-no-files-found: error
+
+# Notes:
+# - Artifacts are UNSIGNED (codesign/notarization skipped). For public
+#   distribution add signing certs + secrets and configure mac.codesign/notarize
+#   and win signing in electrobun.config.ts.
+# - The Windows job depends on the SE C engine compiling under MSVC. If it fails
+#   to build there, that's an engine-portability fix (POSIX assumptions), surfaced
+#   here rather than hidden.
