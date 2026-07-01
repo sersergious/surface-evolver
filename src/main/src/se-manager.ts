@@ -150,6 +150,13 @@ export async function loadSession(sessionId: string, fePath: string): Promise<{
   lagrange_order: number; bbox_min: number[] | null; bbox_max: number[] | null;
   total_time: number;
 }> {
+  // Loading always replaces the worker, so kill the current one *before*
+  // taking the mutex. If a previous command is hung (e.g. an interactive
+  // command like `f`/`G` blocking on prompt() in headless mode), its
+  // recvResult() holds the mutex forever; killing its worker makes that
+  // recvResult() reject and release the mutex so this load can proceed.
+  // Without this, a single hung command deadlocks every subsequent load.
+  if (worker) { worker.kill(); worker = null; }
   await mutex.acquire();
   try {
     activeSessionId = sessionId;

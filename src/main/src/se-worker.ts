@@ -149,7 +149,22 @@ function handleLoad(req: { path: string }): object {
   };
 }
 
+// Bare single-letter SE commands whose handlers call prompt() for keyboard
+// input (command.c letter_command). Here stdin is the IPC pipe, so prompt()
+// would block forever and hang the worker. None has a non-interactive inline
+// form, so reject the bare command outright with a clear error. (A compound
+// like "f; g" isn't caught — rare, and se-manager recovers via a fresh load.)
+const INTERACTIVE_CMDS = new Set(
+  ["a", "b", "f", "G", "J", "j", "k", "K", "l", "m", "n", "p", "t", "w", "W", "y", "Z", "F"],
+);
+
 function handleRun(req: { command: string }): object {
+  if (INTERACTIVE_CMDS.has(req.command.trim())) {
+    return {
+      ok: false,
+      se_error: `Command "${req.command.trim()}" requires interactive keyboard input, which this UI does not support.`,
+    };
+  }
   const ret = lib.se_run(ptr(toCString(req.command))) as number;
   if (ret !== 0) {
     return { ok: false, se_error: popErrout() || lastError() || "se_run() failed" };
