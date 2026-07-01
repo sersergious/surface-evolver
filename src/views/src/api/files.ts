@@ -1,4 +1,4 @@
-import client from './client'
+import { rpc } from './client'
 
 export interface UploadResult {
   filename:   string
@@ -7,9 +7,9 @@ export interface UploadResult {
 }
 
 export async function listFiles(): Promise<string[]> {
-  return client.get<string[]>('/files')
+  return rpc<string[]>('listFiles')
 }
 
 export async function uploadFile(filename: string, content: string): Promise<UploadResult> {
-  return client.post<UploadResult>('/files/upload', { filename, content })
+  return rpc<UploadResult>('uploadFile', { filename, content })
 }

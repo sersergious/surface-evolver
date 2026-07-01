@@ -1,4 +1,4 @@
-import client from './client'
+import { rpc } from './client'
 
 export interface DmpExport {
   filename: string
@@ -17,20 +17,19 @@ export interface ScaleResult {
 }
 
 export async function exportDmp(sessionId: string): Promise<DmpExport> {
-  return client.get<DmpExport>(`/sessions/${sessionId}/export/dmp`)
+  return rpc<DmpExport>('exportDmp', { sessionId })
 }
 
 export async function exportFe(sessionId: string): Promise<FeExport> {
-  return client.get<FeExport>(`/sessions/${sessionId}/export/fe`)
+  return rpc<FeExport>('exportFe', { sessionId })
 }
 
 export async function setScale(sessionId: string, scale: number): Promise<ScaleResult> {
-  return client.post<ScaleResult>(`/sessions/${sessionId}/scale`, { scale })
+  return rpc<ScaleResult>('setScale', { sessionId, scale })
 }
 
 export async function updateFile(filename: string, content: string): Promise<{ filename: string; size_bytes: number }> {
-  // client.post maps to PUT via the /files/:filename route in client.ts
-  return client.post<{ filename: string; size_bytes: number }>(`/files/${encodeURIComponent(filename)}`, { content })
+  return rpc<{ filename: string; size_bytes: number }>('updateFile', { filename, content })
 }
 
 /** Trigger a browser download from an in-memory string. */

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { createSession, getRestore } from '../../api/sessions'
 import { exportFe } from '../../api/export'
-import { useAppState } from '../../store/AppContext'
+import { useStore } from '../../store/useStore'
 import { useMenuAction } from '../../hooks/useMenuAction'
 import FileBrowserModal from './FileBrowserModal'
 
@@ -9,7 +9,7 @@ export default function FilePane() {
   const {
     sessionId, activeFile, openFiles,
     setSession, setStats, setFileContent, appendLog, removeOpenFile,
-  } = useAppState()
+  } = useStore()
 
   const [loadingFile, setLoadingFile] = useState<string | null>(null)
   const [fileErrors,  setFileErrors]  = useState<Record<string, string>>({})

@@ -58,7 +58,3 @@ export const useStore = create<AppState & AppActions>((set) => ({
   clearLog:        () => set({ outputLog: [] }),
   bumpMeshVersion: () => set((s) => ({ meshVersion: s.meshVersion + 1 })),
 }))
-
-// Compatibility alias — all existing components import useAppState from AppContext,
-// which re-exports this. Zustand needs no Provider wrapper.
-export const useAppState = useStore
