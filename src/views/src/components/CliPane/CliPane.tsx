@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react'
 import { runCommand, runTopo, type TopoOp } from '../../api/simulation'
-import { useAppState } from '../../store/AppContext'
+import { useStore } from '../../store/useStore'
 import { useMenuAction } from '../../hooks/useMenuAction'
 import OutputLog from './OutputLog'
 
@@ -19,7 +19,7 @@ function summarize(counts: Record<string, number>): string {
 }
 
 export default function CliPane() {
-  const { sessionId, outputLog, appendLog, setStats, setTotalTime, bumpMeshVersion } = useAppState()
+  const { sessionId, outputLog, appendLog, setStats, setTotalTime, bumpMeshVersion } = useStore()
   const [input, setInput] = useState('')
   const [busy, setBusy]   = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)

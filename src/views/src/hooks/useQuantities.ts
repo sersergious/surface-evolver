@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react'
 import { getQuantities, type QuantitiesData } from '../api/simulation'
-import { useAppState } from '../store/AppContext'
+import { useStore } from '../store/useStore'
 
 // Fetches named quantities + method-instance energy breakdown, refreshing
 // whenever the surface changes (meshVersion bump after run/iterate/topo).
 export function useQuantities(enabled: boolean) {
-  const { sessionId, meshVersion } = useAppState()
+  const { sessionId, meshVersion } = useStore()
   const [data, setData] = useState<QuantitiesData | null>(null)
 
   useEffect(() => {

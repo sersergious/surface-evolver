@@ -8,10 +8,10 @@ import { feLanguage }                                     from './feLanguage'
 import { seTheme }                                        from './seTheme'
 import { exportDmp, exportFe, updateFile, triggerDownload } from '../../api/export'
 import { createSession }                                  from '../../api/sessions'
-import { useAppState }                                    from '../../store/AppContext'
+import { useStore }                                    from '../../store/useStore'
 
 export default function EditorPane() {
-  const { sessionId, activeFile, fileContent, setSession, setStats, setFileContent, appendLog } = useAppState()
+  const { sessionId, activeFile, fileContent, setSession, setStats, setFileContent, appendLog } = useStore()
 
   const editorRef  = useRef<HTMLDivElement>(null)
   const viewRef    = useRef<EditorView | null>(null)

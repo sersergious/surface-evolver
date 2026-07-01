@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { listFiles, uploadFile } from '../../api/files'
-import { useAppState } from '../../store/AppContext'
+import { useStore } from '../../store/useStore'
 
 function arrayBufferToBase64(buf: ArrayBuffer): string {
   const bytes = new Uint8Array(buf)
@@ -21,7 +21,7 @@ export default function FileBrowserModal({ open, onClose, onPick }: {
   onClose: () => void
   onPick: (file: string) => void
 }) {
-  const { appendLog } = useAppState()
+  const { appendLog } = useStore()
   const [files,     setFiles]     = useState<string[]>([])
   const [loading,   setLoading]   = useState(true)
   const [uploading, setUploading] = useState(false)

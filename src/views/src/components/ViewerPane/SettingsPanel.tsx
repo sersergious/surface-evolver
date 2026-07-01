@@ -57,7 +57,7 @@ export default function SettingsPanel({ sessionId, onClose, onApplied }: Props) 
   }
 
   return (
-    <div className="absolute top-10 right-3 z-30 w-64 rounded-box border border-base-300 bg-base-200/95 shadow-xl text-xs">
+    <div className="absolute top-10 right-3 z-30 w-64 rounded-box overflow-hidden border border-base-300 bg-base-200/95 shadow-xl text-xs">
       <div className="flex items-center justify-between bg-base-300/90 px-2.5 py-1.5">
         <span className="font-semibold">Settings</span>
         <button className="btn btn-ghost btn-xs btn-square -mr-1" onClick={onClose} title="Close">✕</button>
