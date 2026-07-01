@@ -8,6 +8,7 @@ export interface SessionState {
   vertex_count:  number | null;
   edge_count:    number | null;
   facet_count:   number | null;
+  lagrange_order: number | null;
   last_accessed: Date;
 }
 
@@ -25,20 +26,4 @@ export function get(sessionId: string): SessionState | undefined {
 
 export function put(session: SessionState): void {
   store.set(session.session_id, session);
-}
-
-export function del(sessionId: string): boolean {
-  return store.delete(sessionId);
-}
-
-export function exists(sessionId: string): boolean {
-  return store.has(sessionId);
-}
-
-export function count(): number {
-  return store.size;
-}
-
-export function all(): SessionState[] {
-  return [...store.values()];
 }

@@ -1,13 +1,73 @@
 import { useState, useRef } from 'react'
-import { runCommand } from '../../api/simulation'
+import { runCommand, runTopo, type TopoOp } from '../../api/simulation'
 import { useAppState } from '../../store/AppContext'
+import { useMenuAction } from '../../hooks/useMenuAction'
 import OutputLog from './OutputLog'
 
+// Structured topology ops, routed from the native Run menu (see useMenuAction).
+const TOPO_OPS: { op: TopoOp; label: string }[] = [
+  { op: 'refine',     label: 'Refine'  },
+  { op: 'equi',       label: 'Equiang' },
+  { op: 'vertex_avg', label: 'V-Avg'   },
+  { op: 'pop',        label: 'Pop'     },
+]
+
+// Turn the structured counts object into a compact one-line summary.
+function summarize(counts: Record<string, number>): string {
+  const parts = Object.entries(counts).map(([k, v]) => `${k.replace(/_/g, ' ')} ${v > 0 ? '+' : ''}${v}`)
+  return parts.length ? parts.join(', ') : 'no change'
+}
+
 export default function CliPane() {
-  const { sessionId, outputLog, appendLog, setStats, bumpMeshVersion } = useAppState()
+  const { sessionId, outputLog, appendLog, setStats, setTotalTime, bumpMeshVersion } = useAppState()
   const [input, setInput] = useState('')
   const [busy, setBusy]   = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
+
+  // Native Run menu → iterate `g N` (reuses the run path so stats/mesh refresh).
+  async function runG(n: number) {
+    if (!sessionId || busy) return
+    appendLog(`> g ${n}`)
+    setBusy(true)
+    try {
+      const res = await runCommand(sessionId, `g ${n}`)
+      if (res.output) appendLog(res.output)
+      setStats(res.energy, res.area)
+      setTotalTime(res.total_time)
+      bumpMeshVersion()
+    } catch (err: unknown) {
+      appendLog(`[error] ${err instanceof Error ? err.message : String(err)}`)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  useMenuAction(a => {
+    if (a.startsWith('run:')) {
+      const op = a.slice(4) as TopoOp
+      const t  = TOPO_OPS.find(x => x.op === op)
+      if (t) void handleTopo(op, t.label)
+    } else if (a.startsWith('iterate:')) {
+      void runG(Number(a.slice(8)))
+    }
+  })
+
+  async function handleTopo(op: TopoOp, label: string) {
+    if (!sessionId || busy) return
+    appendLog(`> ${label}`)
+    setBusy(true)
+    try {
+      const res = await runTopo(sessionId, op)
+      appendLog(`  ${summarize(res.counts)} · ΔE ${res.energy_delta >= 0 ? '+' : ''}${res.energy_delta.toExponential(2)}`)
+      setStats(res.energy, res.area)
+      setTotalTime(res.total_time)
+      bumpMeshVersion()
+    } catch (err: unknown) {
+      appendLog(`[error] ${err instanceof Error ? err.message : String(err)}`)
+    } finally {
+      setBusy(false)
+    }
+  }
 
   async function handleRun() {
     if (!sessionId || !input.trim() || busy) return
@@ -20,6 +80,7 @@ export default function CliPane() {
       if (res.output) appendLog(res.output)
       if (res.energy !== null || res.area !== null) {
         setStats(res.energy, res.area)
+        setTotalTime(res.total_time)
         bumpMeshVersion()
       }
     } catch (err: unknown) {

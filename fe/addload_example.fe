@@ -84,7 +84,7 @@ setup := {
     for ( col := 0 ; col < 3  ; col += 1 )
     { if ( row > 0 or col > 0 ) then addload datafilename;
       // Move and mark vertices
-      foreach vertex vv where load_marker == 0 do
+      foreach verte  vv where load_marker == 0 do
       { vv.x += 2*row;
         vv.y += 2*col;
         vv.load_marker := 3*row+col+1;  // different loads get different marks

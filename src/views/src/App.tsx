@@ -1,33 +1,24 @@
-import { Routes, Route, useNavigate } from 'react-router-dom'
 import { useState, useRef, useCallback, useEffect } from 'react'
 import ErrorBoundary from './components/ErrorBoundary'
 import FilePane      from './components/FilePane/FilePane'
 import CliPane       from './components/CliPane/CliPane'
 import EditorPane    from './components/EditorPane/EditorPane'
 import ViewerPane    from './components/ViewerPane/ViewerPane'
-import SmallScreen   from './components/SmallScreen'
-import DocsPage      from './components/DocsPage/DocsPage'
-import { useProgressWS } from './hooks/useProgressWS'
-import { AppProvider, useAppState } from './store/AppContext'
+import { useMenuAction } from './hooks/useMenuAction'
+import { useAppState } from './store/AppContext'
 
 // ── Theme ─────────────────────────────────────────────────────────────────────
 
-const THEMES = ['dim', 'night', 'corporate', 'light'] as const
-type Theme = typeof THEMES[number]
-
-function useTheme() {
-  const [theme, setThemeState] = useState<Theme>(() =>
-    (localStorage.getItem('se-theme') as Theme) ?? 'dim'
-  )
-  const applyTheme = useCallback((t: Theme) => {
-    setThemeState(t)
-    localStorage.setItem('se-theme', t)
-    document.documentElement.setAttribute('data-theme', t)
-  }, [])
+// Follow the OS light/dark appearance — native desktop behaviour, no toggle.
+function useSystemTheme() {
   useEffect(() => {
-    document.documentElement.setAttribute('data-theme', theme)
-  }, [theme])
-  return [theme, applyTheme] as const
+    const mq = window.matchMedia('(prefers-color-scheme: dark)')
+    const apply = () =>
+      document.documentElement.setAttribute('data-theme', mq.matches ? 'dark' : 'light')
+    apply()
+    mq.addEventListener('change', apply)
+    return () => mq.removeEventListener('change', apply)
+  }, [])
 }
 
 // ── Resize ────────────────────────────────────────────────────────────────────
@@ -55,22 +46,19 @@ function useDrag(direction: 'h' | 'v', onDelta: (d: number) => void) {
 
 // ── Navbar ────────────────────────────────────────────────────────────────────
 
-function Navbar({ sidebarOpen, onToggleSidebar, theme, onTheme }: {
+function Navbar({ sidebarOpen, onToggleSidebar }: {
   sidebarOpen: boolean
   onToggleSidebar: () => void
-  theme: Theme
-  onTheme: (t: Theme) => void
 }) {
-  const { sessionId, activeFile, energy, area } = useAppState()
-  const navigate = useNavigate()
+  const { sessionId, activeFile, energy, area, totalTime } = useAppState()
 
   return (
-    <div className="navbar min-h-0 h-11 bg-base-200 border-b border-base-300 px-2 gap-0 shrink-0 drag-region">
+    <div className="navbar min-h-0 h-11 bg-base-200 border-b border-base-300 px-2 gap-0 shrink-0 electrobun-webkit-app-region-drag">
 
       {/* ── Left ── */}
       <div className="navbar-start gap-1.5 min-w-0 pl-[72px]">
         <button
-          className={`btn btn-ghost btn-xs btn-square no-drag ${sidebarOpen ? 'bg-base-300' : ''}`}
+          className={`btn btn-ghost btn-xs btn-square electrobun-webkit-app-region-no-drag ${sidebarOpen ? 'bg-base-300' : ''}`}
           onClick={onToggleSidebar}
           title={sidebarOpen ? 'Hide explorer' : 'Show explorer'}
         >
@@ -89,12 +77,13 @@ function Navbar({ sidebarOpen, onToggleSidebar, theme, onTheme }: {
       </div>
 
       {/* ── Right ── */}
-      <div className="navbar-end gap-2 no-drag">
+      <div className="navbar-end gap-2 electrobun-webkit-app-region-no-drag">
         {/* Stats */}
-        {(energy !== null || area !== null) && (
+        {(energy !== null || area !== null || totalTime !== null) && (
           <div className="hidden sm:flex items-center gap-3 mr-1">
             {energy !== null && <StatChip label="E" value={energy.toFixed(4)} />}
             {area   !== null && <StatChip label="A" value={area.toFixed(4)} />}
+            {totalTime !== null && <StatChip label="t" value={totalTime.toPrecision(4)} />}
           </div>
         )}
 
@@ -104,33 +93,6 @@ function Navbar({ sidebarOpen, onToggleSidebar, theme, onTheme }: {
             #{sessionId.slice(0, 8)}
           </div>
         )}
-
-        <div className="w-px h-5 bg-base-300 hidden sm:block" />
-
-        {/* Theme picker */}
-        <div className="dropdown dropdown-end">
-          <label tabIndex={0} className="btn btn-ghost btn-xs gap-1 normal-case">
-            <PaletteIcon />
-            <span className="hidden lg:inline capitalize">{theme}</span>
-          </label>
-          <ul tabIndex={0} className="dropdown-content menu menu-sm bg-base-200 border border-base-300 rounded-box shadow-xl z-50 w-32 p-1 mt-1">
-            {THEMES.map(t => (
-              <li key={t}>
-                <button
-                  className={`capitalize ${t === theme ? 'active' : ''}`}
-                  onClick={() => onTheme(t)}
-                >
-                  {t}
-                </button>
-              </li>
-            ))}
-          </ul>
-        </div>
-
-        {/* Help */}
-        <button className="btn btn-ghost btn-xs" onClick={() => navigate('/docs')}>
-          Docs
-        </button>
       </div>
     </div>
   )
@@ -154,17 +116,6 @@ function SidebarIcon() {
   )
 }
 
-function PaletteIcon() {
-  return (
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/>
-      <circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/>
-      <circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/>
-      <circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/>
-      <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/>
-    </svg>
-  )
-}
 
 // ── Main layout ───────────────────────────────────────────────────────────────
 
@@ -176,22 +127,26 @@ const EDITOR_MIN  = 200
 const EDITOR_MAX  = 600
 
 function Inner() {
-  const { sessionId } = useAppState()
-  useProgressWS(sessionId)
-
-  const [theme, applyTheme] = useTheme()
+  useSystemTheme()
   const [sidebarOpen,  setSidebarOpen]  = useState(true)
+
+  // Native View menu → explorer toggle.
+  useMenuAction(a => {
+    if (a === 'view:sidebar') setSidebarOpen(o => !o)
+  })
   const [sidebarWidth, setSidebarWidth] = useState(SIDEBAR_W)
   const [editorWidth,  setEditorWidth]  = useState(EDITOR_W)
   const [viewerPct,    setViewerPct]    = useState(62)
   const bodyRef = useRef<HTMLDivElement>(null)
 
+  // Files (left) + Editor (middle): both handles sit on the panel's right edge,
+  // so dragging right grows the panel.
   const onSidebarDrag = useDrag('h', useCallback((d: number) => {
     setSidebarWidth(w => Math.max(SIDEBAR_MIN, Math.min(SIDEBAR_MAX, w + d)))
   }, []))
 
   const onEditorDrag = useDrag('h', useCallback((d: number) => {
-    setEditorWidth(w => Math.max(EDITOR_MIN, Math.min(EDITOR_MAX, w - d)))
+    setEditorWidth(w => Math.max(EDITOR_MIN, Math.min(EDITOR_MAX, w + d)))
   }, []))
 
   const onSplitDrag = useDrag('v', useCallback((d: number) => {
@@ -201,21 +156,16 @@ function Inner() {
   }, []))
 
   return (
-    <>
-      <div className="flex md:hidden h-screen"><SmallScreen /></div>
-
-      <div className="hidden md:flex flex-col h-screen w-screen overflow-hidden bg-base-100 font-sans">
+    <div className="flex flex-col h-screen w-screen overflow-hidden bg-base-100 font-sans">
 
         <Navbar
           sidebarOpen={sidebarOpen}
           onToggleSidebar={() => setSidebarOpen(o => !o)}
-          theme={theme}
-          onTheme={applyTheme}
         />
 
         <div ref={bodyRef} className="flex flex-1 min-h-0 overflow-hidden">
 
-          {/* File sidebar */}
+          {/* File explorer (left, collapsible) */}
           {sidebarOpen && (
             <>
               <div className="shrink-0 h-full overflow-hidden bg-base-200"
@@ -223,7 +173,6 @@ function Inner() {
                 <FilePane />
               </div>
 
-              {/* Sidebar drag handle */}
               <div
                 onMouseDown={onSidebarDrag}
                 className="relative w-px shrink-0 h-full cursor-col-resize bg-base-300 hover:bg-primary transition-colors duration-150"
@@ -233,13 +182,27 @@ function Inner() {
             </>
           )}
 
-          {/* Center column: viewer on top, terminal below */}
+          {/* Editor (middle) */}
+          <div className="shrink-0 h-full overflow-hidden"
+               style={{ width: editorWidth }}>
+            <EditorPane />
+          </div>
+
+          {/* Editor drag handle */}
+          <div
+            onMouseDown={onEditorDrag}
+            className="relative w-px shrink-0 h-full cursor-col-resize bg-base-300 hover:bg-primary transition-colors duration-150"
+          >
+            <div className="absolute inset-y-0 -left-1.5 -right-1.5" />
+          </div>
+
+          {/* Right column: viewer on top, CLI/output below */}
           <div className="flex flex-col flex-1 min-w-0 min-h-0 overflow-hidden">
             <div className="overflow-hidden min-h-0" style={{ height: `${viewerPct}%` }}>
               <ViewerPane />
             </div>
 
-            {/* Viewer/terminal drag handle */}
+            {/* Viewer / output drag handle */}
             <div
               onMouseDown={onSplitDrag}
               className="relative h-px w-full shrink-0 cursor-row-resize bg-base-300 hover:bg-primary transition-colors duration-150"
@@ -252,35 +215,15 @@ function Inner() {
             </div>
           </div>
 
-          {/* Editor drag handle */}
-          <div
-            onMouseDown={onEditorDrag}
-            className="relative w-px shrink-0 h-full cursor-col-resize bg-base-300 hover:bg-primary transition-colors duration-150"
-          >
-            <div className="absolute inset-y-0 -left-1.5 -right-1.5" />
-          </div>
-
-          {/* Editor panel (right) */}
-          <div className="shrink-0 h-full overflow-hidden"
-               style={{ width: editorWidth }}>
-            <EditorPane />
-          </div>
-
         </div>
-      </div>
-    </>
+    </div>
   )
 }
 
 export default function App() {
   return (
-    <AppProvider>
-      <ErrorBoundary>
-        <Routes>
-          <Route path="/"     element={<Inner />} />
-          <Route path="/docs" element={<DocsPage />} />
-        </Routes>
-      </ErrorBoundary>
-    </AppProvider>
+    <ErrorBoundary>
+      <Inner />
+    </ErrorBoundary>
   )
 }

@@ -1,0 +1,52 @@
+name: Build
+
+# Builds the native headless libse on each OS runner (via the electrobun
+# preBuild hook → scripts/build-native.ts) and bundles a distributable app.
+# macOS + Linux only. Trigger on version tags, or manually.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14        # Apple Silicon → macos-arm64
+            artifact: macos-arm64
+          - os: ubuntu-latest   # → linux-x64
+            artifact: linux-x64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      # Electrobun's Linux renderer is GTK-WebKit; provide the system libs.
+      # (cmake + a C toolchain are preinstalled on GitHub runners.)
+      - name: Linux system deps
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-0 libwebkit2gtk-4.1-0 || \
+          sudo apt-get install -y libgtk-3-0 libwebkit2gtk-4.0-37
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Build native lib + bundle app
+        run: bun run build:canary
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: surface-evolver-${{ matrix.artifact }}
+          path: artifacts/*
+          if-no-files-found: error
+
+# Artifacts are UNSIGNED (codesign/notarization skipped). Windows is intentionally
+# not built — run under WSL if needed.

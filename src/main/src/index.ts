@@ -1,22 +1,68 @@
+import "./bootstrap-paths";   // MUST be first — injects SE_* env before ./config loads
 import Electrobun, { BrowserWindow }                     from "electrobun/bun";
 import { resolve, join, basename, extname }               from "path";
 import { readdirSync, readFileSync, writeFileSync, existsSync } from "fs";
+import { tmpdir } from "os";
 import { config }         from "./config";
 import * as sessionStore  from "./session-store";
 import * as seManager     from "./se-manager";
-import * as jobRunner     from "./job-runner";
+import * as persistence   from "./persistence";
+import { installAppMenu } from "./app-menu";
+
+// Best-effort snapshot of the current surface after a mutating op. Reuses SE's
+// own dump so the *evolved* state (post refine/iterate) survives a restart.
+// ponytail: dumps once per mutation — fine at human command pace; throttle if
+// huge-mesh interactive use ever lags.
+function persist(sessionId: string): void {
+    void (async () => {
+        try {
+            const s = sessionStore.get(sessionId);
+            if (!s) return;
+            const { content } = await seManager.dump(sessionId);
+            persistence.saveSession({
+                fe_file: s.fe_file, energy: s.energy, area: s.area,
+                dmp: content, saved_at: new Date().toISOString(),
+            });
+        } catch { /* persistence is best-effort; never surface to the user */ }
+    })();
+}
+
+// On startup, reload the last surface from its saved dump. Awaited by the
+// getRestore RPC so the webview never races the restore.
+const restorePromise: Promise<sessionStore.SessionState | null> = (async () => {
+    const saved = persistence.loadSaved();
+    if (!saved) return null;
+    try {
+        const tmp = join(tmpdir(), `se-restore-${crypto.randomUUID()}.dmp`);
+        writeFileSync(tmp, saved.dmp);
+        const sessionId = crypto.randomUUID();
+        const stats = await seManager.loadSession(sessionId, tmp);
+        const session: sessionStore.SessionState = {
+            session_id: sessionId, fe_file: saved.fe_file,
+            energy: stats.energy, area: stats.area, scale: stats.scale, sdim: stats.sdim,
+            vertex_count: stats.vertex_count, edge_count: stats.edge_count, facet_count: stats.facet_count,
+            lagrange_order: stats.lagrange_order, last_accessed: new Date(),
+        };
+        sessionStore.put(session);
+        return session;
+    } catch {
+        persistence.clearSaved();   // corrupt/unloadable snapshot — drop it
+        return null;
+    }
+})();
 
 const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
 
-const UNSUPPORTED_FE = [
-    /^\s*SIMPLEX_REPRESENTATION\b/i,
-    /^\s*space_dimension\s+[12]\b/i,
-];
+// Datafiles hidden from the picker (load/render unsupported in this build).
+// - slidestr.fe: STRING model with an open (non-closed) face edge loop; engine
+//   rejects it at load ("Facetedge tail vertex disagrees with prev head").
+// - simplex3.fe: SIMPLEX_REPRESENTATION; loads + runs but renders empty because
+//   se_get_facets is SOAPFILM-only (simplex cells aren't exposed). See BACKLOG.
+// (2-D/4-D space_dimension files render fine now that se_get_vertices emits a
+// fixed 3-component stride, so they are no longer filtered.)
+const QUARANTINED_FE = new Set<string>(["slidestr.fe", "simplex3.fe"]);
 function isRenderable(filePath: string): boolean {
-    try {
-        const lines = readFileSync(filePath, "utf8").split("\n").slice(0, 120);
-        return !lines.some(l => UNSUPPORTED_FE.some(re => re.test(l)));
-    } catch { return false; }
+    return !QUARANTINED_FE.has(basename(filePath));
 }
 
 const win = new BrowserWindow({
@@ -32,9 +78,18 @@ const win = new BrowserWindow({
     trafficLightOffset: { x: 12, y: 14 },
 });
 
+// Native menu bar + keyboard accelerators → forwarded to the webview as se-menu.
+installAppMenu(win);
+
 // Register all bun-side RPC handlers for the webview to call.
 // setRequestHandler replaces the handler object atomically — no per-method addHandler API exists.
 (win.webview.rpc as any).setRequestHandler({
+
+        // Returns the surface restored from the last run's snapshot, or null.
+        getRestore: async () => {
+            const s = await restorePromise;
+            return s ? { ...s, last_accessed: s.last_accessed.toISOString() } : null;
+        },
 
         listFiles: async () => {
             const feDir = resolve(config.seFeDdir);
@@ -67,10 +122,15 @@ const win = new BrowserWindow({
                 vertex_count:  stats.vertex_count,
                 edge_count:    stats.edge_count,
                 facet_count:   stats.facet_count,
+                lagrange_order: stats.lagrange_order,
                 last_accessed: new Date(),
             };
             sessionStore.put(session);
-            return { ...session, last_accessed: session.last_accessed.toISOString() };
+            persist(sessionId);
+            return {
+                ...session,
+                last_accessed: session.last_accessed.toISOString(),
+            };
         },
 
         uploadFile: async (payload: { filename: string; content: string }) => {
@@ -138,23 +198,6 @@ const win = new BrowserWindow({
             return result;
         },
 
-        iterate: async (payload: { sessionId: string; steps?: number }) => {
-            const { sessionId } = payload;
-            const session = sessionStore.get(sessionId);
-            if (!session) throw new Error("Session not found");
-
-            const steps = Math.max(1, Math.min(1000, (payload.steps ?? 100) | 0));
-
-            const job = await jobRunner.submitJob(sessionId, steps, (step, total, energy) => {
-                // Push step-by-step progress into the webview via CustomEvent
-                win.webview.executeJavascript(
-                    `window.dispatchEvent(new CustomEvent('se-progress', { detail: ${JSON.stringify({ sessionId, step, total, energy })} }))`
-                );
-            });
-
-            return job;
-        },
-
         runCommand: async (payload: { sessionId: string; command: string }) => {
             const { sessionId, command } = payload;
             const session = sessionStore.get(sessionId);
@@ -166,15 +209,70 @@ const win = new BrowserWindow({
             session.energy = result.energy;
             session.area   = result.area;
             sessionStore.put(session);
+            persist(sessionId);
 
             return result;
         },
 
-        getMesh: async (payload: { sessionId: string; scalars?: string }) => {
-            const { sessionId, scalars } = payload;
+        getMesh: async (payload: { sessionId: string; colors?: boolean }) => {
+            const { sessionId, colors } = payload;
             const session = sessionStore.get(sessionId);
             if (!session) throw new Error("Session not found");
 
-            return await seManager.getMesh(sessionId, scalars);
+            return await seManager.getMesh(sessionId, colors);
+        },
+
+        quantities: async (payload: { sessionId: string }) => {
+            const { sessionId } = payload;
+            const session = sessionStore.get(sessionId);
+            if (!session) throw new Error("Session not found");
+
+            return await seManager.getQuantities(sessionId);
+        },
+
+        settings: async (payload: { sessionId: string }) => {
+            const { sessionId } = payload;
+            const session = sessionStore.get(sessionId);
+            if (!session) throw new Error("Session not found");
+
+            return await seManager.getSettings(sessionId);
+        },
+
+        setSettings: async (payload: { sessionId: string; mesh_params?: seManager.MeshParams; physics?: seManager.Physics }) => {
+            const { sessionId, mesh_params, physics } = payload;
+            const session = sessionStore.get(sessionId);
+            if (!session) throw new Error("Session not found");
+
+            const result = await seManager.setSettings(sessionId, { mesh_params, physics });
+            session.energy = result.energy;
+            session.area   = result.area;
+            sessionStore.put(session);
+            persist(sessionId);
+            return result;
+        },
+
+        vertexInfo: async (payload: { sessionId: string; vpos: number }) => {
+            const { sessionId, vpos } = payload;
+            const session = sessionStore.get(sessionId);
+            if (!session) throw new Error("Session not found");
+            if (typeof vpos !== "number" || vpos < 0) throw new Error("vpos is required");
+
+            return await seManager.getVertexInfo(sessionId, vpos);
+        },
+
+        topo: async (payload: { sessionId: string; op: string; n?: number }) => {
+            const { sessionId, op, n } = payload;
+            const session = sessionStore.get(sessionId);
+            if (!session) throw new Error("Session not found");
+            if (!op) throw new Error("op is required");
+
+            const result = await seManager.runTopo(sessionId, op, n);
+
+            session.energy = result.energy;
+            session.area   = result.area;
+            sessionStore.put(session);
+            persist(sessionId);
+
+            return result;
         },
     });
