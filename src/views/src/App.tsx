@@ -55,8 +55,8 @@ function Navbar({ sidebarOpen, onToggleSidebar }: {
   return (
     <div className="navbar min-h-0 h-11 bg-base-200 border-b border-base-300 px-2 gap-0 shrink-0 electrobun-webkit-app-region-drag">
 
-      {/* ── Left ── */}
-      <div className="navbar-start gap-1.5 min-w-0 pl-[72px]">
+      {/* ── Left ── (traffic-light inset only exists on macOS) */}
+      <div className={`navbar-start gap-1.5 min-w-0 ${navigator.platform.includes('Mac') ? 'pl-[72px]' : 'pl-1'}`}>
         <button
           className={`btn btn-ghost btn-xs btn-square electrobun-webkit-app-region-no-drag ${sidebarOpen ? 'bg-base-300' : ''}`}
           onClick={onToggleSidebar}

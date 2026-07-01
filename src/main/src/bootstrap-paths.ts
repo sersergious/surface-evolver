@@ -1,10 +1,12 @@
 /**
- * Packaged-app resource resolution. Imported FIRST by index.ts (before config).
+ * Resource resolution. Imported FIRST by index.ts (before config).
  *
- * In dev, the launch script sets SE_LIB_PATH / SE_FE_DIR / SE_WORKER_PATH. When
- * those are absent we're running from a packaged bundle, so derive them from the
- * app's Resources folder. Setting them on process.env means the spawned worker
+ * Electrobun runs preBuild + copy for BOTH `dev` and `build`, so the app
+ * bundle's Resources folder always contains the native lib, fe/ library and
+ * worker script. When SE_* env vars are absent (the normal case), derive them
+ * from Resources; setting them on process.env means the spawned worker
  * (se-manager passes `env: process.env`) resolves the same paths.
+ * Env vars remain as an explicit override (tests, custom lib builds).
  */
 import Electrobun from "electrobun/bun";
 import { join } from "path";
