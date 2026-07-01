@@ -6,7 +6,7 @@ import { defaultKeymap, history, historyKeymap,
 import { indentOnInput, bracketMatching }                 from '@codemirror/language'
 import { feLanguage }                                     from './feLanguage'
 import { seTheme }                                        from './seTheme'
-import { exportDmp, exportFe, updateFile, triggerDownload } from '../../api/export'
+import { exportDmp, exportFe, updateFile, saveExport } from '../../api/export'
 import { createSession }                                  from '../../api/sessions'
 import { useStore }                                    from '../../store/useStore'
 
@@ -73,7 +73,8 @@ export default function EditorPane() {
     setExporting(type)
     try {
       const result = type === 'fe' ? await exportFe(sessionId) : await exportDmp(sessionId)
-      triggerDownload(result.filename, result.content, 'text/plain')
+      const saved  = await saveExport(result.filename, result.content)
+      appendLog(`Exported ${saved.path}`)
     } catch (err: unknown) {
       appendLog(`[error] Export .${type} failed: ${err instanceof Error ? err.message : String(err)}`)
     } finally { setExporting(null) }

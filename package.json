@@ -4,10 +4,11 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "bun run --cwd src/views css && concurrently \"bun run --cwd src/views css:watch\" \"SE_FE_DIR=$PWD/fe SE_LIB_PATH=$PWD/cmake-build-debug/libse.dylib SE_WORKER_PATH=$PWD/src/main/src/se-worker.ts electrobun dev\"",
+    "dev": "bun run --cwd src/views css && concurrently \"bun run --cwd src/views css:watch\" \"electrobun dev\"",
     "build": "bun run --cwd src/views css && electrobun build",
     "build:canary": "bun run --cwd src/views css && electrobun build --env=canary",
-    "build:stable": "bun run --cwd src/views css && electrobun build --env=stable"
+    "build:stable": "bun run --cwd src/views css && electrobun build --env=stable",
+    "icons": "bun scripts/make-icons.ts"
   },
   "workspaces": [
     "src/main",
