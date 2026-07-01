@@ -49,9 +49,9 @@ jobs:
           path: build/libse.so
           retention-days: 1
 
-  # ── Stage 2: Bun backend smoke-test ──────────────────────────────────────────
+  # ── Stage 2: Backend type-check (native IPC, no HTTP server to smoke-test) ───
   backend-tests:
-    name: Backend API tests (Bun)
+    name: Backend type-check (Bun)
     runs-on: ubuntu-latest
     needs: c-tests
 
@@ -62,15 +62,6 @@ jobs:
         with:
           bun-version: latest
 
-      - name: Download libse.so
-        uses: actions/download-artifact@v4
-        with:
-          name: libse-so
-          path: build/
-
-      - name: Restore execute permission on shared library
-        run: chmod +x build/libse.so
-
       - name: Install backend dev dependencies
         working-directory: src/main
         run: bun install
@@ -78,18 +69,6 @@ jobs:
       - name: Type-check backend
         working-directory: src/main
         run: bunx tsc --noEmit -p .
-
-      - name: Start backend and run smoke tests
-        env:
-          SE_LIB_PATH: ${{ github.workspace }}/build/libse.so
-          SE_FE_DIR:   ${{ github.workspace }}/fe
-        run: |
-          bun run src/main/src/server.ts &
-          SERVER_PID=$!
-          sleep 3
-          curl -sf http://localhost:8000/health
-          curl -sf http://localhost:8000/api/files | grep -q '\['
-          kill $SERVER_PID
 
   # ── Stage 3: Frontend type-check and unit tests ───────────────────────────────
   frontend-tests:
