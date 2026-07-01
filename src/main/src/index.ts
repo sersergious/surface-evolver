@@ -1,8 +1,8 @@
 import "./bootstrap-paths";   // MUST be first — injects SE_* env before ./config loads
-import Electrobun, { BrowserWindow }                     from "electrobun/bun";
+import Electrobun, { BrowserWindow, Utils }               from "electrobun/bun";
 import { resolve, join, basename, extname }               from "path";
-import { readdirSync, readFileSync, writeFileSync, existsSync } from "fs";
-import { tmpdir } from "os";
+import { readdirSync, readFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
+import { tmpdir, homedir } from "os";
 import { config }         from "./config";
 import * as sessionStore  from "./session-store";
 import * as seManager     from "./se-manager";
@@ -53,6 +53,17 @@ const restorePromise: Promise<sessionStore.SessionState | null> = (async () => {
 
 const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
 
+// User-writable datafile dir. The bundled fe/ can be read-only in a packaged
+// app (Gatekeeper translocation on macOS, /opt installs on Linux), so uploads
+// and editor saves land here; reads check here first, then the bundle.
+const USER_FE_DIR = join(config.stateDir, "fe");
+
+function resolveFePath(feFile: string): string {
+    const name = basename(feFile);
+    const userPath = join(USER_FE_DIR, name);
+    return existsSync(userPath) ? userPath : join(resolve(config.seFeDdir), name);
+}
+
 // Datafiles hidden from the picker (load/render unsupported in this build).
 // - slidestr.fe: STRING model with an open (non-closed) face edge loop; engine
 //   rejects it at load ("Facetedge tail vertex disagrees with prev head").
@@ -74,12 +85,17 @@ const win = new BrowserWindow({
         width: 1280,
         height: 800,
     },
-    titleBarStyle: 'hiddenInset',
-    trafficLightOffset: { x: 12, y: 14 },
+    // Frameless-with-inset-traffic-lights is a macOS concept; Linux keeps the
+    // native titlebar so the window has close/minimize controls.
+    ...(process.platform === "darwin"
+        ? { titleBarStyle: "hiddenInset" as const, trafficLightOffset: { x: 12, y: 14 } }
+        : {}),
 });
 
 // Native menu bar + keyboard accelerators → forwarded to the webview as se-menu.
-installAppMenu(win);
+// Best-effort: every menu action is also reachable from the UI or the CLI pane,
+// so a platform without app-menu support must not take down startup.
+try { installAppMenu(win); } catch (e) { console.error("[menu] install failed:", e); }
 
 // Register all bun-side RPC handlers for the webview to call.
 // setRequestHandler replaces the handler object atomically — no per-method addHandler API exists.
@@ -92,22 +108,20 @@ installAppMenu(win);
         },
 
         listFiles: async () => {
-            const feDir = resolve(config.seFeDdir);
-            try {
-                return readdirSync(feDir)
-                    .filter(f => f.endsWith(".fe") && isRenderable(join(feDir, f)))
-                    .sort();
-            } catch { return []; }
+            const list = (dir: string) => {
+                try { return readdirSync(dir).filter(f => f.endsWith(".fe") && isRenderable(f)); }
+                catch { return []; }
+            };
+            // User files shadow bundled ones of the same name (see resolveFePath).
+            return [...new Set([...list(resolve(config.seFeDdir)), ...list(USER_FE_DIR)])].sort();
         },
 
         createSession: async (payload: { fe_file: string }) => {
             if (!payload.fe_file) throw new Error("fe_file is required");
 
-            const feDir  = resolve(config.seFeDdir);
-            const fePath = resolve(join(feDir, payload.fe_file));
-
-            if (!fePath.startsWith(feDir + "/") && fePath !== feDir)
-                throw new Error("Invalid file path");
+            const fePath = resolveFePath(payload.fe_file);   // basename()d — no traversal
+            if (!existsSync(fePath))
+                throw new Error(`File not found: ${basename(payload.fe_file)}`);
 
             const sessionId = crypto.randomUUID();
             const stats = await seManager.loadSession(sessionId, fePath);
@@ -140,18 +154,17 @@ installAppMenu(win);
                 throw new Error("Only .fe files are accepted");
 
             const safeName = basename(payload.filename).replace(/[^a-zA-Z0-9._-]/g, "_");
-            const feDir    = resolve(config.seFeDdir);
-            const destPath = resolve(join(feDir, safeName));
-            if (!destPath.startsWith(feDir + "/")) throw new Error("Invalid filename");
-            if (existsSync(destPath)) throw new Error(`File '${safeName}' already exists — rename and retry`);
+            if (existsSync(resolveFePath(safeName)))
+                throw new Error(`File '${safeName}' already exists — rename and retry`);
 
             const buf = Buffer.from(payload.content, "base64");
             if (buf.length > MAX_UPLOAD_BYTES) throw new Error("File exceeds 5 MB limit");
 
+            mkdirSync(USER_FE_DIR, { recursive: true });
             // Wrap in a plain Uint8Array view: @types/node 22+ types Buffer as
             // Buffer<ArrayBuffer>, which trips writeFileSync's ArrayBufferView param.
-            writeFileSync(destPath, new Uint8Array(buf));
-            return { filename: safeName, size_bytes: buf.length, renderable: isRenderable(destPath) };
+            writeFileSync(join(USER_FE_DIR, safeName), new Uint8Array(buf));
+            return { filename: safeName, size_bytes: buf.length, renderable: isRenderable(safeName) };
         },
 
         exportDmp: async (payload: { sessionId: string }) => {
@@ -168,20 +181,39 @@ installAppMenu(win);
             const { sessionId } = payload;
             const session = sessionStore.get(sessionId);
             if (!session) throw new Error("Session not found");
-            const fePath  = resolve(join(config.seFeDdir, session.fe_file));
-            const content = readFileSync(fePath, "utf8");
+            const content = readFileSync(resolveFePath(session.fe_file), "utf8");
             return { filename: basename(session.fe_file), content };
         },
 
         updateFile: async (payload: { filename: string; content: string }) => {
             if (!payload.filename || typeof payload.content !== 'string')
                 throw new Error("filename and content are required");
+            if (Buffer.byteLength(payload.content) > MAX_UPLOAD_BYTES)
+                throw new Error("File exceeds 5 MB limit");
             const safeName = basename(payload.filename).replace(/[^a-zA-Z0-9._-]/g, "_");
-            const feDir    = resolve(config.seFeDdir);
-            const destPath = resolve(join(feDir, safeName));
-            if (!destPath.startsWith(feDir + "/")) throw new Error("Invalid filename");
-            writeFileSync(destPath, payload.content, "utf8");
+            mkdirSync(USER_FE_DIR, { recursive: true });
+            writeFileSync(join(USER_FE_DIR, safeName), payload.content, "utf8");
             return { filename: safeName, size_bytes: payload.content.length };
+        },
+
+        // Write an export to ~/Downloads and reveal it. The webview can't do
+        // this itself: Electrobun's WKWebView/WebKitGTK have no download
+        // handler, so an <a download> on a blob URL is silently dropped.
+        saveExport: async (payload: { filename: string; content: string }) => {
+            if (!payload.filename || typeof payload.content !== "string")
+                throw new Error("filename and content are required");
+            const safeName = basename(payload.filename).replace(/[^a-zA-Z0-9._-]/g, "_");
+            const dir = join(homedir(), "Downloads");
+            mkdirSync(dir, { recursive: true });
+            // Avoid clobbering: foo.dmp, foo (1).dmp, foo (2).dmp, ...
+            const dot  = safeName.lastIndexOf(".");
+            const stem = dot > 0 ? safeName.slice(0, dot) : safeName;
+            const ext  = dot > 0 ? safeName.slice(dot) : "";
+            let dest = join(dir, safeName);
+            for (let i = 1; existsSync(dest); i++) dest = join(dir, `${stem} (${i})${ext}`);
+            writeFileSync(dest, payload.content, "utf8");
+            try { Utils.showItemInFolder(dest); } catch { /* reveal is best-effort */ }
+            return { path: dest };
         },
 
         setScale: async (payload: { sessionId: string; scale: number }) => {

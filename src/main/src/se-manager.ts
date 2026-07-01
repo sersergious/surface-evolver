@@ -92,9 +92,14 @@ class WorkerHandle {
   async recvResult(): Promise<WorkerMsg> {
     while (true) {
       const { value, done } = await this.lineGen.next();
-      if (done) throw new Error("SE worker process terminated unexpectedly");
+      if (done)
+        throw new Error("SE engine process crashed — reload the file to continue");
       const msg = JSON.parse(value!) as WorkerMsg;
       if (msg.type === "result") return msg;
+      // Startup failure (dlopen / se_init) — surface the real cause, don't let
+      // it degrade into a generic "process terminated" when the stream ends.
+      if (msg.type === "fatal")
+        throw new Error(`SE engine failed to start: ${msg.error ?? "unknown error"}`);
     }
   }
 

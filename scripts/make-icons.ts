@@ -3,17 +3,24 @@
  *   - assets/icon.iconset/  (macOS; electrobun runs iconutil → .icns)
  *   - assets/icon.png       (Linux; desktop entry / window icon)
  *
- * Uses macOS `sips` to rasterize + resize. Re-run after editing icon.svg.
+ * Uses macOS `sips` to rasterize + resize, so this only runs on a Mac.
+ * Outputs are committed — CI/Linux builds never regenerate icons.
+ * Re-run after editing icon.svg:  bun run icons
  */
 import { $ } from "bun";
-import { mkdirSync, rmSync } from "fs";
+import { mkdirSync, rmSync, existsSync, statSync } from "fs";
 import { join } from "path";
+
+if (process.platform !== "darwin")
+  throw new Error("make-icons needs macOS (sips). Icons are committed; regenerate on a Mac.");
 
 const SVG = "assets/icon.svg";
 const MASTER = "/tmp/se-icon-1024.png";
 
 // 1. Rasterize the SVG to a 1024 master PNG.
 await $`sips -s format png -Z 1024 ${SVG} --out ${MASTER}`.quiet();
+if (!existsSync(MASTER) || statSync(MASTER).size === 0)
+  throw new Error(`make-icons: sips produced no output for ${SVG}`);
 
 async function resize(size: number, out: string) {
   await $`sips -z ${size} ${size} ${MASTER} --out ${out}`.quiet();
