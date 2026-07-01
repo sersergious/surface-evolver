@@ -12,8 +12,8 @@ import { existsSync } from "fs";
 
 if (!process.env.SE_LIB_PATH) {
   const R    = Electrobun.PATHS.RESOURCES_FOLDER;
-  const ext  = process.platform === "win32" ? "dll" : process.platform === "darwin" ? "dylib" : "so";
-  const os   = process.platform === "win32" ? "win" : process.platform === "darwin" ? "macos" : "linux";
+  const ext  = process.platform === "darwin" ? "dylib" : "so";
+  const os   = process.platform === "darwin" ? "macos" : "linux";
   const arch = process.arch === "arm64" ? "arm64" : "x64";
   const lib  = `libse-${os}-${arch}.${ext}`;
 

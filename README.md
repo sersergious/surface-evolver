@@ -48,7 +48,7 @@ The C facade (`engine/bindings/c/se_api.h`) exposes structured getters/setters �
 | Core engine | C — parser, gradient descent, mesh topology (~100 files) |
 | C API | `engine/bindings/c/se_api.{h,c}` — ~45-function facade with stdout/stderr capture |
 | Native binding | `bun:ffi` `dlopen` in a worker subprocess |
-| Desktop shell | Electrobun (Bun runtime, native WKWebView / WebView2) |
+| Desktop shell | Electrobun (Bun runtime, native WKWebView / GTK-WebKit) |
 | 3D rendering | Three.js + @react-three/fiber + drei |
 | Frontend | React + Vite, Zustand store, Tailwind + daisyUI, heroicons |
 | Build | CMake (`libse` shared lib + `surface_evolver` CLI); Electrobun bundler |
@@ -80,7 +80,7 @@ surface-evolver/
 ├── scripts/build-native.ts     # Builds + stages libse per platform (CI preBuild)
 ├── electrobun.config.ts        # App bundle config
 ├── CMakeLists.txt              # Builds surface_evolver CLI + libse shared lib
-└── .github/workflows/build.yml # macOS + Windows build matrix
+└── .github/workflows/build.yml # macOS + Linux build matrix
 ```
 
 ## Build & run
@@ -108,9 +108,10 @@ bun run build:canary    # → artifacts/…-<os>-<arch>-…dmg (+ update bundle)
 bun run build:stable    # release channel
 ```
 
-Cross-platform builds run in CI (`.github/workflows/build.yml`): a macOS + Windows
+Cross-platform builds run in CI (`.github/workflows/build.yml`): a macOS + Linux
 matrix builds the native library on each runner and uploads the bundled app.
 Artifacts are currently **unsigned** — public distribution would add code-signing.
+Windows isn't targeted (the C engine needs a POSIX-ish toolchain) — run under WSL.
 
 ## Tests
 

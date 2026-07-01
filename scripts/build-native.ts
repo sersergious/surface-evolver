@@ -9,9 +9,9 @@ import { $ } from "bun";
 import { mkdirSync, copyFileSync } from "fs";
 import { join } from "path";
 
-const os   = process.platform === "win32" ? "win" : process.platform === "darwin" ? "macos" : "linux";
+const os   = process.platform === "darwin" ? "macos" : "linux";
 const arch = process.arch === "arm64" ? "arm64" : "x64";
-const ext  = process.platform === "win32" ? "dll" : process.platform === "darwin" ? "dylib" : "so";
+const ext  = process.platform === "darwin" ? "dylib" : "so";
 const BUILD = "cmake-build-release";
 
 await $`cmake -B ${BUILD} -DSE_HEADLESS=ON -DCMAKE_BUILD_TYPE=Release`;

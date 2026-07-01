@@ -1,7 +1,8 @@
 // Evaluated on each build runner, so process.platform/arch reflect the target.
-const os   = process.platform === "win32" ? "win" : process.platform === "darwin" ? "macos" : "linux";
+// macOS + Linux only (Windows users: run under WSL).
+const os   = process.platform === "darwin" ? "macos" : "linux";
 const arch = process.arch === "arm64" ? "arm64" : "x64";
-const ext  = process.platform === "win32" ? "dll" : process.platform === "darwin" ? "dylib" : "so";
+const ext  = process.platform === "darwin" ? "dylib" : "so";
 const lib  = `libse-${os}-${arch}.${ext}`;   // staged by scripts/build-native.ts (preBuild)
 
 export default {
@@ -33,8 +34,8 @@ export default {
       createDmg: true,
       icons: "assets/icon.iconset",   // electrobun converts → .icns via iconutil
     },
-    win: {
-      icon: "assets/icon.ico",
+    linux: {
+      icon: "assets/icon.png",
     },
   },
   // Builds the headless libse for the current runner before bundling.
