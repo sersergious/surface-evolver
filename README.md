@@ -8,16 +8,6 @@ Surface Evolver minimizes the energy of surfaces subject to constraints — volu
 
 This project drives the original C engine directly through `bun:ffi`, so you get the full Surface Evolver command language in the CLI pane, plus first-class UI for the common workflow (load → evolve → refine → inspect → export) and a WebGL viewer that renders the mesh as it evolves.
 
-```
-┌─────────────────┬──────────────────────┬─────────────────────┐
-│   Open files    │   Editor / CLI       │   3D viewer         │
-├─────────────────┼──────────────────────┼─────────────────────┤
-│  cube.fe   #a1b │  > g 5               │    ◄ WebGL mesh ►    │
-│  sphere.fe      │  Energy: 2.4508      │    orbit · inspect  │
-│  + Add .fe      │  > r; g 5            │    native SE colors │
-└─────────────────┴──────────────────────┴─────────────────────┘
-```
-
 ## Overall architecture
 
 One worker subprocess owns exactly one `libse` instance per session — `libse` can't be initialized twice in the same process, so loading a new file spawns a fresh worker.
@@ -145,8 +135,8 @@ own upload). Examples: `cube.fe`, `sphere.fe`, `octa.fe`, `mound.fe`, `knotty.fe
 
 This is a **hobby project** — built for fun and curiosity, not backed by any company
 or roadmap. The heavy lifting is all Ken Brakke's original Surface Evolver engine;
-this repo just gives it a modern desktop skin.
+this repo is just the result of my work for capstone and personal interest.
 
 If any of it is useful to you, please help yourself. **Anyone is welcome to pick it
 up, fork it, or take it further** — no permission needed. If you build something neat
-on top of it, that's the whole point. 🫧
+on top of it, that's the whole point.
