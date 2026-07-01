@@ -1,4 +1,4 @@
-import client from './client'
+import { rpc } from './client'
 
 export interface MeshData {
   vertices: number[][]
@@ -23,17 +23,17 @@ export interface Physics { gravflag: boolean; grav_const: number; pressflag: boo
 export interface Settings { mesh_params: MeshParams; physics: Physics; total_time: number }
 
 export async function getSettings(id: string): Promise<Settings> {
-  return client.get<Settings>(`/sessions/${id}/settings`)
+  return rpc<Settings>('settings', { sessionId: id })
 }
 
 export async function setSettings(
   id: string, patch: { mesh_params?: MeshParams; physics?: Physics },
 ): Promise<Settings & { energy: number; area: number }> {
-  return client.post<Settings & { energy: number; area: number }>(`/sessions/${id}/settings`, patch)
+  return rpc<Settings & { energy: number; area: number }>('setSettings', { sessionId: id, ...patch })
 }
 
 export async function runCommand(id: string, command: string): Promise<RunCommandResponse> {
-  return client.post<RunCommandResponse>(`/sessions/${id}/run`, { command })
+  return rpc<RunCommandResponse>('runCommand', { sessionId: id, command })
 }
 
 export type TopoOp = 'refine' | 'equi' | 'vertex_avg' | 'pop'
@@ -48,12 +48,12 @@ export interface TopoResponse {
 }
 
 export async function runTopo(id: string, op: TopoOp, n?: number): Promise<TopoResponse> {
-  return client.post<TopoResponse>(`/sessions/${id}/topo`, { op, ...(n ? { n } : {}) })
+  return rpc<TopoResponse>('topo', { sessionId: id, op, ...(n ? { n } : {}) })
 }
 
 // Always requests native SE per-element colours alongside the geometry.
 export async function getMesh(id: string): Promise<MeshData> {
-  return client.get<MeshData>(`/sessions/${id}/mesh?colors=true`)
+  return rpc<MeshData>('getMesh', { sessionId: id, colors: true })
 }
 
 // flags bits (se_api.h): Q_ENERGY=1, Q_FIXED=2, Q_INFO=4
@@ -77,7 +77,7 @@ export interface QuantitiesData {
 }
 
 export async function getQuantities(id: string): Promise<QuantitiesData> {
-  return client.get<QuantitiesData>(`/sessions/${id}/quantities`)
+  return rpc<QuantitiesData>('quantities', { sessionId: id })
 }
 
 // attr bits (se_api.h): FIXED=0x40, BOUNDARY=0x80, CONSTRAINT=0x400
@@ -89,5 +89,5 @@ export interface VertexInfo {
 }
 
 export async function getVertexInfo(id: string, vpos: number): Promise<VertexInfo> {
-  return client.get<VertexInfo>(`/sessions/${id}/vertex/${vpos}`)
+  return rpc<VertexInfo>('vertexInfo', { sessionId: id, vpos })
 }

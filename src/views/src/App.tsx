@@ -5,7 +5,7 @@ import CliPane       from './components/CliPane/CliPane'
 import EditorPane    from './components/EditorPane/EditorPane'
 import ViewerPane    from './components/ViewerPane/ViewerPane'
 import { useMenuAction } from './hooks/useMenuAction'
-import { useAppState } from './store/AppContext'
+import { useStore } from './store/useStore'
 
 // ── Theme ─────────────────────────────────────────────────────────────────────
 
@@ -50,7 +50,7 @@ function Navbar({ sidebarOpen, onToggleSidebar }: {
   sidebarOpen: boolean
   onToggleSidebar: () => void
 }) {
-  const { sessionId, activeFile, energy, area, totalTime } = useAppState()
+  const { sessionId, activeFile, energy, area, totalTime } = useStore()
 
   return (
     <div className="navbar min-h-0 h-11 bg-base-200 border-b border-base-300 px-2 gap-0 shrink-0 electrobun-webkit-app-region-drag">

@@ -7,7 +7,7 @@ import { useMesh } from '../../hooks/useMesh'
 import { useQuantities } from '../../hooks/useQuantities'
 import { useMenuAction } from '../../hooks/useMenuAction'
 import { useThemeColors } from '../../hooks/useThemeColors'
-import { useAppState } from '../../store/AppContext'
+import { useStore } from '../../store/useStore'
 import { getVertexInfo, type MeshData, type VertexInfo } from '../../api/simulation'
 import MeshGeometry, {
   EdgeLines, PickPoints, VertexMarker, BodyMarkers, RaycasterConfig, type RenderMode,
@@ -46,7 +46,7 @@ function FitCamera({ mesh }: { mesh: MeshData | null }) {
 }
 
 export default function ViewerPane() {
-  const { sessionId, setStats, setTotalTime, bumpMeshVersion } = useAppState()
+  const { sessionId, setStats, setTotalTime, bumpMeshVersion } = useStore()
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const controlsRef = useRef<any>(null)

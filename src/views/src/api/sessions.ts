@@ -1,4 +1,4 @@
-import client from './client'
+import { rpc } from './client'
 
 export interface SessionState {
   session_id:   string
@@ -14,10 +14,10 @@ export interface SessionState {
 }
 
 export async function createSession(feFile: string): Promise<SessionState> {
-  return client.post<SessionState>('/sessions', { fe_file: feFile })
+  return rpc<SessionState>('createSession', { fe_file: feFile })
 }
 
 // The surface restored from the previous run's auto-saved snapshot, or null.
 export async function getRestore(): Promise<SessionState | null> {
-  return client.get<SessionState | null>('/restore')
+  return rpc<SessionState | null>('getRestore')
 }

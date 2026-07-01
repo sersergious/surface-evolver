@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react'
 import { getMesh, type MeshData } from '../api/simulation'
-import { useAppState } from '../store/AppContext'
+import { useStore } from '../store/useStore'
 
 // Fetches the mesh (with native SE per-element colours) for the active session,
 // refetching whenever the surface changes (meshVersion bump).
 export function useMesh() {
-  const { sessionId, meshVersion } = useAppState()
+  const { sessionId, meshVersion } = useStore()
   const [data, setData]             = useState<MeshData | null>(null)
   const [isFetching, setIsFetching] = useState(false)
 
