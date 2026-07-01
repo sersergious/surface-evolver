@@ -246,13 +246,16 @@ int se_get_vertices(double *out, int max_count)
     if (!se_initialized || !out || max_count <= 0)
         return -1;
 
+    /* Always emit exactly 3 components per vertex so the stride-3 caller is
+       correct for any space dimension: pad z=0 for sdim<3 (2-D models render
+       flat), keep the first 3 coords for sdim>3 (e.g. simplex sdim=4). */
     FOR_ALL_VERTICES(v_id) {
         REAL *x = get_coord(v_id);
         int j;
         if (n >= max_count)
             break;
-        for (j = 0; j < sdim; j++)
-            out[n * sdim + j] = (double)x[j];
+        for (j = 0; j < 3; j++)
+            out[n * 3 + j] = (j < sdim) ? (double)x[j] : 0.0;
         n++;
     }
     return n;
@@ -1151,7 +1154,7 @@ int se_get_vertex_info(int vpos, int *out_id, double *out_xyz, int *out_attr,
         return -1;
 
     if (out_id)  *out_id  = ordinal(v_id) + 1;
-    if (out_xyz) { REAL *x = get_coord(v_id); for (j = 0; j < sdim; j++) out_xyz[j] = (double)x[j]; }
+    if (out_xyz) { REAL *x = get_coord(v_id); for (j = 0; j < 3; j++) out_xyz[j] = (j < sdim) ? (double)x[j] : 0.0; }
     if (out_attr) *out_attr = (int)get_attr(v_id);
 
     cm    = get_v_constraint_map(v_id);
