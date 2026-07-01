@@ -167,5 +167,4 @@ or roadmap. The heavy lifting is all Ken Brakke's original Surface Evolver engin
 this repo is just the result of my work for capstone and personal interest.
 
 If any of it is useful to you, please help yourself. **Anyone is welcome to pick it
-up, fork it, or take it further** — no permission needed. If you build something neat
-on top of it, that's the whole point.
+up, fork it, or take it further** — no permission needed.
