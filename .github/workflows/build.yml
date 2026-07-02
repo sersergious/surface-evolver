@@ -3,6 +3,14 @@ name: Build
 # Builds the native headless libse on each OS runner (via the electrobun
 # preBuild hook → scripts/build-native.ts) and bundles a distributable app.
 # macOS + Linux only. Trigger on version tags, or manually.
+#
+# Electrobun's own artifacts (self-extractor DMG + .tar.zst + update.json) are
+# for its hosted-updater flow, which we don't run. Worse, the DMG's app is
+# unsigned — quarantined unsigned apps on Apple Silicon fail Gatekeeper with
+# "app is damaged". So we repackage the original bundle ourselves:
+#   macOS: extract → ad-hoc codesign → ditto zip (preserves symlinks/exec bits;
+#          upload-artifact's own zip strips them, which also "corrupts" .apps)
+#   Linux: recompress .tar.zst → standard .tar.gz (no zstd needed to install)
 on:
   push:
     tags: ["v*"]
@@ -19,8 +27,10 @@ jobs:
           - os: ubuntu-latest   # → linux-x64
             artifact: linux-x64
     runs-on: ${{ matrix.os }}
+    permissions:
+      contents: write   # create/update the GitHub Release on tag pushes
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: oven-sh/setup-bun@v2
         with:
@@ -32,8 +42,8 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libgtk-3-0 libwebkit2gtk-4.1-0 || \
-          sudo apt-get install -y libgtk-3-0 libwebkit2gtk-4.0-37
+          sudo apt-get install -y zstd libgtk-3-0 libwebkit2gtk-4.1-0 || \
+          sudo apt-get install -y zstd libgtk-3-0 libwebkit2gtk-4.0-37
 
       - name: Install dependencies
         run: bun install
@@ -41,12 +51,44 @@ jobs:
       - name: Build native lib + bundle app
         run: bun run build:canary
 
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+      - name: Package macOS app (ad-hoc sign + ditto zip)
+        if: runner.os == 'macOS'
+        run: |
+          set -euo pipefail
+          mkdir -p dist unpack
+          zstd -d artifacts/*.app.tar.zst -o unpack/app.tar
+          tar -xf unpack/app.tar -C unpack
+          APP=$(find unpack -maxdepth 1 -name "*.app" -print -quit)
+          [ -n "$APP" ] || { echo "no .app found in tarball"; exit 1; }
+          codesign --force --deep --sign - "$APP"
+          codesign --verify --verbose "$APP"
+          ditto -c -k --keepParent "$APP" "dist/SurfaceEvolver-${{ matrix.artifact }}.zip"
+
+      - name: Package Linux app (tar.gz)
+        if: runner.os == 'Linux'
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          TARZST=$(ls artifacts/*.tar.zst | head -1)
+          zstd -dc "$TARZST" | gzip > "dist/SurfaceEvolver-${{ matrix.artifact }}.tar.gz"
+
+      - name: Upload workflow artifacts
+        uses: actions/upload-artifact@v7
         with:
           name: surface-evolver-${{ matrix.artifact }}
-          path: artifacts/*
+          path: dist/*
           if-no-files-found: error
 
-# Artifacts are UNSIGNED (codesign/notarization skipped). Windows is intentionally
-# not built — run under WSL if needed.
+      # On a version-tag push, attach the packaged app to the GitHub Release for
+      # that tag. Both matrix jobs target the same release; the action creates it
+      # if missing and appends each platform's file.
+      - name: Publish to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          fail_on_unmatched_files: true
+
+# Artifacts are AD-HOC signed only (no Developer ID / notarization).
+# macOS first launch: right-click → Open, or `xattr -dr com.apple.quarantine`.
+# Windows is intentionally not built — run under WSL if needed.

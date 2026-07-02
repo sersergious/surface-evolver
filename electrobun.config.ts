@@ -9,7 +9,7 @@ export default {
   app: {
     name: "Surface Evolver",
     identifier: "com.skuzmin.surfaceevolver",
-    version: "0.1.0",
+    version: "0.1.1",
   },
   build: {
     bun: {

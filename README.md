@@ -26,7 +26,7 @@ This project drives the original C engine directly through `bun:ffi`, so you get
 - **Defining** quantities / constraints / methods happens in the CLI or the `.fe` file — the panels are view-only.
 - **No scalar heat-map colormaps** (curvature/valence/…); the viewer shows native SE colours only.
 - **No native graphics window or PostScript export** — the WebGL viewer replaces them.
-- **Windows isn't supported** — run under WSL.
+- **Windows isn't supported natively** — try it via WSL (see [Linux / WSL launch](#linux--wsl-launch) below); no guarantees.
 
 ## Known issues
 
@@ -34,7 +34,8 @@ This project drives the original C engine directly through `bun:ffi`, so you get
 - **Curved (Lagrange/quadratic) patches render as straight edges** — you'll see a warning in the log; the geometry is approximate.
 - **Attributes defined in a datafile's *command* section** don't appear in the colour/inspector lists until the file is reloaded (header-defined attributes are fine).
 - **Closing the active tab clears the viewer** — it doesn't auto-switch to another open file.
-- **Distributables are unsigned** — macOS Gatekeeper will warn on first open (right-click → Open); Linux artifact is pending its first CI build.
+- **Distributables are ad-hoc signed, not notarized** — on first open macOS warns it "cannot verify the app is free of malware": right-click → Open, or `xattr -dr com.apple.quarantine "/Applications/Surface Evolver-canary.app"`. (Never use the raw Electrobun DMG from a CI run — its unsigned self-extractor fails Gatekeeper outright with "app is damaged".)
+- **WSL rendering is unverified** — WebGL (the mesh viewer) depends on WSLg's GPU passthrough, which varies by Windows build/driver. If the window opens but the viewer stays black, retry with `LIBGL_ALWAYS_SOFTWARE=1`.
 
 ## Overall architecture
 
@@ -132,14 +133,63 @@ bun run dev
 `fe/` library and the worker script.
 
 ```bash
-bun run build:canary    # → artifacts/…-<os>-<arch>-…dmg (+ update bundle)
+bun run build:canary    # → artifacts/…-<os>-<arch>-…  (Electrobun's own update bundle/DMG)
 bun run build:stable    # release channel
 ```
 
 Cross-platform builds run in CI (`.github/workflows/build.yml`): a macOS + Linux
-matrix builds the native library on each runner and uploads the bundled app.
-Artifacts are currently **unsigned** — public distribution would add code-signing.
-Windows isn't targeted (the C engine needs a POSIX-ish toolchain) — run under WSL.
+matrix builds the native library on each runner, then **repackages** Electrobun's
+raw output into plain, launchable archives (Electrobun's own DMG/tar.zst are for
+its hosted-updater flow and the DMG's app is unsigned, which Gatekeeper on Apple
+Silicon rejects outright as "damaged"):
+
+- macOS → ad-hoc `codesign` + `ditto` zip → `SurfaceEvolver-macos-arm64.zip`
+- Linux → recompressed → `SurfaceEvolver-linux-x64.tar.gz`
+
+Grab both from the [Actions run](../../actions/workflows/build.yml) artifacts
+(or a tagged release, if one exists). Artifacts are **ad-hoc signed, not
+notarized** — see Known issues above for the macOS Gatekeeper prompt.
+
+### Linux / WSL launch
+
+**Native Linux:**
+
+```bash
+tar -xzf SurfaceEvolver-linux-x64.tar.gz
+cd "SurfaceEvolver-canary"        # or whatever channel you built
+chmod +x bin/launcher             # tar preserves the exec bit, but just in case
+./bin/launcher
+```
+
+You need GTK3 + WebKitGTK installed (same libs CI installs before building):
+
+```bash
+sudo apt-get install -y libgtk-3-0 libwebkit2gtk-4.1-0 || \
+sudo apt-get install -y libgtk-3-0 libwebkit2gtk-4.0-37
+```
+
+**Windows via WSL** (not officially supported — Electrobun/the C engine target
+macOS + Linux only, this is "try it and see"):
+
+1. Windows 11 (or updated Windows 10) with **WSLg** — gives WSL2 GUI apps a
+   window automatically, no X server to set up. `wsl --install` if you don't
+   have a distro yet.
+2. Inside the WSL Ubuntu shell, install the same libs as native Linux above,
+   plus `cmake build-essential` if you're building from source instead of
+   using a prebuilt artifact.
+3. Either unpack the `linux-x64` artifact as above and run `./bin/launcher`,
+   or build from source:
+   ```bash
+   cmake -B cmake-build-debug -DSE_HEADLESS=ON && cmake --build cmake-build-debug
+   bun install && bun run dev
+   ```
+4. If the window opens but the 3D viewer is blank, WSLg's GPU passthrough
+   likely isn't working for WebGL — retry with:
+   ```bash
+   LIBGL_ALWAYS_SOFTWARE=1 ./bin/launcher
+   ```
+
+Windows isn't targeted directly (the C engine needs a POSIX-ish toolchain).
 
 ## Tests
 
