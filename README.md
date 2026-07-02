@@ -216,5 +216,9 @@ This is a **hobby project** — built for fun and curiosity, not backed by any c
 or roadmap. The heavy lifting is all Ken Brakke's original Surface Evolver engine;
 this repo is just the result of my work for capstone and personal interest.
 
+There can be bugs that have not been identified or tested when running the app. Additionally,
+the code is not meant to be production grade. So, if you would like to use in a serious research environment,
+please make sure to test all the functionality beforehand.
+
 If any of it is useful to you, please help yourself. **Anyone is welcome to pick it
 up, fork it, or take it further** — no permission needed.
