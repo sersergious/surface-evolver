@@ -1,6 +1,6 @@
 # Surface Evolver
 
-A native **desktop app** that wraps the [Surface Evolver](https://facstaff.susqu.edu/brakke/evolver/evolver.html) C engine in an interactive three-pane interface: a file browser, a command line, and a live 3D viewer. It runs as a real desktop window via [Electrobun](https://blackboard.sh/electrobun/) (a Bun-based Electron alternative) — no browser, no server, no HTTP.
+A native **desktop app** for Mac and Linux that wraps the [Surface Evolver](https://facstaff.susqu.edu/brakke/evolver/evolver.html) C engine in an interactive three-pane interface: a file browser, a command line, and a live 3D viewer. It runs as a real desktop window via [Electrobun](https://blackboard.sh/electrobun/) (a Bun-based Electron alternative) — no browser, no server, no HTTP.
 
 ## What it does
 
@@ -150,7 +150,7 @@ Grab both from the [Actions run](../../actions/workflows/build.yml) artifacts
 (or a tagged release, if one exists). Artifacts are **ad-hoc signed, not
 notarized** — see Known issues above for the macOS Gatekeeper prompt.
 
-### Linux / WSL launch
+### Linux
 
 **Native Linux:**
 
@@ -168,28 +168,8 @@ sudo apt-get install -y libgtk-3-0 libwebkit2gtk-4.1-0 || \
 sudo apt-get install -y libgtk-3-0 libwebkit2gtk-4.0-37
 ```
 
-**Windows via WSL** (not officially supported — Electrobun/the C engine target
-macOS + Linux only, this is "try it and see"):
-
-1. Windows 11 (or updated Windows 10) with **WSLg** — gives WSL2 GUI apps a
-   window automatically, no X server to set up. `wsl --install` if you don't
-   have a distro yet.
-2. Inside the WSL Ubuntu shell, install the same libs as native Linux above,
-   plus `cmake build-essential` if you're building from source instead of
-   using a prebuilt artifact.
-3. Either unpack the `linux-x64` artifact as above and run `./bin/launcher`,
-   or build from source:
-   ```bash
-   cmake -B cmake-build-debug -DSE_HEADLESS=ON && cmake --build cmake-build-debug
-   bun install && bun run dev
-   ```
-4. If the window opens but the 3D viewer is blank, WSLg's GPU passthrough
-   likely isn't working for WebGL — retry with:
-   ```bash
-   LIBGL_ALWAYS_SOFTWARE=1 ./bin/launcher
-   ```
-
-Windows isn't targeted directly (the C engine needs a POSIX-ish toolchain).
+**Windows** 
+Use a dedicated GUI tool like SE-FIT which offers a more polished and comprehensive solution for the Surface Evolver.
 
 ## Tests
 
