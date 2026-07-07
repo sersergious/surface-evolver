@@ -46,8 +46,9 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
+          # libfuse2: linuxdeploy (AppImage bundler) needs FUSE; absent on ubuntu-24.04 runners
           sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev \
-            libayatana-appindicator3-dev librsvg2-dev libxdo-dev libssl-dev
+            libayatana-appindicator3-dev librsvg2-dev libxdo-dev libssl-dev libfuse2
 
       # Windows: build libse with MinGW inside MSYS2, stage it, and let
       # tauri-before.ts skip the native rebuild (SE_SKIP_NATIVE below).
