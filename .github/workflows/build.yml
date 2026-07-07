@@ -77,7 +77,11 @@ jobs:
 
       - name: Build app (Linux → .deb + .AppImage)
         if: runner.os == 'Linux'
-        run: bunx tauri build --bundles deb,appimage
+        env:
+          # linuxdeploy strips every AppDir executable; strip corrupts the
+          # bun-compiled se-worker (embedded JS blob after the ELF sections)
+          NO_STRIP: "true"
+        run: bunx tauri build --verbose --bundles deb,appimage
 
       - name: Build app (Windows → NSIS installer)
         if: runner.os == 'Windows'
