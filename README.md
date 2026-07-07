@@ -1,6 +1,6 @@
 # Surface Evolver
 
-A native **desktop app** for Mac and Linux that wraps the [Surface Evolver](https://facstaff.susqu.edu/brakke/evolver/evolver.html) C engine in an interactive three-pane interface: a file browser, a command line, and a live 3D viewer. It runs as a real desktop window via [Electrobun](https://blackboard.sh/electrobun/) (a Bun-based Electron alternative) — no browser, no server, no HTTP.
+A native **desktop app** for Mac, Linux, and Windows that wraps the [Surface Evolver](https://facstaff.susqu.edu/brakke/evolver/evolver.html) C engine in an interactive three-pane interface: a file browser, a command line, and a live 3D viewer. It runs as a real desktop window via [Tauri](https://tauri.app/) (Rust backend + system webview) — no browser, no server, no HTTP.
 
 ## What it does
 
@@ -26,7 +26,6 @@ This project drives the original C engine directly through `bun:ffi`, so you get
 - **Defining** quantities / constraints / methods happens in the CLI or the `.fe` file — the panels are view-only.
 - **No scalar heat-map colormaps** (curvature/valence/…); the viewer shows native SE colours only.
 - **No native graphics window or PostScript export** — the WebGL viewer replaces them.
-- **Windows isn't supported natively** — try it via WSL (see [Linux / WSL launch](#linux--wsl-launch) below); no guarantees.
 
 ## Known issues
 
@@ -34,8 +33,7 @@ This project drives the original C engine directly through `bun:ffi`, so you get
 - **Curved (Lagrange/quadratic) patches render as straight edges** — you'll see a warning in the log; the geometry is approximate.
 - **Attributes defined in a datafile's *command* section** don't appear in the colour/inspector lists until the file is reloaded (header-defined attributes are fine).
 - **Closing the active tab clears the viewer** — it doesn't auto-switch to another open file.
-- **Distributables are ad-hoc signed, not notarized** — on first open macOS warns it "cannot verify the app is free of malware": right-click → Open, or `xattr -dr com.apple.quarantine "/Applications/Surface Evolver-canary.app"`. (Never use the raw Electrobun DMG from a CI run — its unsigned self-extractor fails Gatekeeper outright with "app is damaged".)
-- **WSL rendering is unverified** — WebGL (the mesh viewer) depends on WSLg's GPU passthrough, which varies by Windows build/driver. If the window opens but the viewer stays black, retry with `LIBGL_ALWAYS_SOFTWARE=1`.
+- **Distributables are ad-hoc signed, not notarized** — on first open macOS warns it "cannot verify the app is free of malware": right-click → Open, or `xattr -dr com.apple.quarantine "/Applications/Surface Evolver.app"`.
 
 ## Overall architecture
 
@@ -43,15 +41,15 @@ One worker subprocess owns exactly one `libse` instance per session — `libse` 
 
 ```mermaid
 flowchart TD
-    subgraph win["Electrobun desktop window"]
+    subgraph win["Tauri desktop window"]
         UI["React + Three.js views<br/>FilePane · Editor/CLI · 3D Viewer"]
     end
-    UI <-->|"native IPC — Electrobun RPC"| Main["Main process<br/>src/main/src/index.ts"]
-    Main -->|"spawn per session"| Mgr["se-manager<br/>worker lifecycle + mutex"]
-    Mgr <-->|"line-delimited JSON<br/>over stdin/stdout"| Worker["se-worker (subprocess)<br/>owns one libse instance"]
+    UI <-->|"Tauri invoke — rpc(method, params)"| Main["Rust backend<br/>src-tauri/src/rpc.rs"]
+    Main -->|"spawn per session"| Mgr["worker.rs<br/>worker lifecycle + mutex"]
+    Mgr <-->|"line-delimited JSON<br/>over stdin/stdout"| Worker["se-worker sidecar<br/>owns one libse instance"]
     Worker <-->|"bun:ffi dlopen"| Lib["libse<br/>(headless shared library)"]
-    Lib --> Engine["Surface Evolver C engine<br/>engine/src — ~100 files"]
-    Main -->|"auto-snapshot / restore"| Persist["persistence.ts<br/>~/.surface-evolver"]
+    Lib --> Engine["Surface Evolver C engine<br/>engine/src — ~117 files"]
+    Main -->|"auto-snapshot / restore"| Persist["last-session.json<br/>~/.surface-evolver"]
 ```
 
 ## API architecture
@@ -60,9 +58,9 @@ The frontend "API client" uses HTTP-style call paths purely as a naming conventi
 
 ```mermaid
 flowchart LR
-    View["client.ts<br/>HTTP-style paths"] -->|"Electroview RPC request"| RPC["RPC handlers<br/>index.ts"]
-    RPC --> Mgr["se-manager.ts<br/>mutex-serialized"]
-    Mgr -->|"cmd: load · run · mesh · topo …"| Worker["se-worker.ts"]
+    View["client.ts<br/>rpc(method, params)"] -->|"Tauri invoke"| RPC["RPC dispatch<br/>src-tauri/src/rpc.rs"]
+    RPC --> Mgr["worker.rs<br/>mutex-serialized"]
+    Mgr -->|"cmd: load · run · mesh · topo …"| Worker["se-worker sidecar"]
     Worker -->|"bun:ffi"| Facade["se_api.c / se_api.h<br/>C facade (~45 functions)"]
     Facade --> Core["engine/src/core<br/>parser · command loop"]
     Facade --> Surf["engine/src/surface<br/>gradient descent · topology"]
@@ -76,11 +74,11 @@ The C facade (`engine/bindings/c/se_api.h`) exposes structured getters/setters �
 |---|---|
 | Core engine | C — parser, gradient descent, mesh topology (~100 files) |
 | C API | `engine/bindings/c/se_api.{h,c}` — ~45-function facade with stdout/stderr capture |
-| Native binding | `bun:ffi` `dlopen` in a worker subprocess |
-| Desktop shell | Electrobun (Bun runtime, native WKWebView / GTK-WebKit) |
+| Native binding | `bun:ffi` `dlopen` in a bun-compiled worker sidecar |
+| Desktop shell | Tauri v2 (Rust, native WKWebView / WebKitGTK / WebView2) |
 | 3D rendering | Three.js + @react-three/fiber + drei |
 | Frontend | React + Vite, Zustand store, Tailwind + daisyUI, heroicons |
-| Build | CMake (`libse` shared lib + `surface_evolver` CLI); Electrobun bundler |
+| Build | CMake (`libse` shared lib + `surface_evolver` CLI); Tauri bundler |
 
 ## Repository layout
 
@@ -88,28 +86,24 @@ The C facade (`engine/bindings/c/se_api.h`) exposes structured getters/setters �
 surface-evolver/
 ├── engine/
 │   ├── src/                    # Surface Evolver C engine
-│   │   ├── core/               # Parser, expression evaluator, command loop
-│   │   ├── surface/            # Gradient descent, topology, hessian
-│   │   └── graphics/           # Display backends (excluded from headless libse)
+│   │                           # (flat upstream layout, ~117 files)
 │   └── bindings/c/             # se_api.h / se_api.c — C facade
-├── src/
-│   ├── main/src/               # Electrobun main process (Bun)
-│   │   ├── index.ts            # App entry, RPC handlers
-│   │   ├── se-manager.ts       # Worker lifecycle + mutex
-│   │   ├── se-worker.ts        # Subprocess: owns libse via bun:ffi
-│   │   ├── bootstrap-paths.ts  # Resolves bundled resources in a packaged app
-│   │   ├── persistence.ts      # Auto-save / restore the evolved surface
-│   │   └── config.ts           # Env-var configuration
-│   └── views/src/              # React + Vite frontend
-│       ├── components/         # FilePane, CliPane, EditorPane, ViewerPane
-│       ├── store/              # Zustand store (single source of truth)
-│       └── api/                # RPC client + per-resource modules
+├── src-tauri/                  # Tauri (Rust) backend
+│   ├── src/main.rs             # App entry: window, menu, state
+│   ├── src/rpc.rs              # RPC dispatch (sessions, files, persistence)
+│   ├── src/worker.rs           # Worker lifecycle + mutex
+│   ├── src/menu.rs             # Native menu bar
+│   └── tauri.conf.json         # Bundle config (resources, sidecar, window)
+├── worker/se-worker.ts         # Worker: owns libse via bun:ffi (ships bun-compiled)
+├── ui/src/                     # React + Vite frontend
+│   ├── components/             # FilePane, CliPane, EditorPane, ViewerPane
+│   ├── store/                  # Zustand store (single source of truth)
+│   └── api/                    # RPC client + per-resource modules
 ├── fe/                         # Bundled .fe datafiles (cube, sphere, octa, …)
 ├── tests/c/                    # CTest integration tests for the C API
-├── scripts/build-native.ts     # Builds + stages libse per platform (CI preBuild)
-├── electrobun.config.ts        # App bundle config
+├── scripts/tauri-before.ts     # Stages libse + worker sidecar + CSS (dev/build hook)
 ├── CMakeLists.txt              # Builds surface_evolver CLI + libse shared lib
-└── .github/workflows/build.yml # macOS + Linux build matrix
+└── .github/workflows/build.yml # macOS + Linux + Windows build matrix
 ```
 
 ## Build & run
@@ -128,48 +122,39 @@ bun run dev
 
 ### Package a distributable
 
-`electrobun build` runs a preBuild hook (`scripts/build-native.ts`) that compiles
-`libse` for the current platform and stages it into the bundle alongside the
-`fe/` library and the worker script.
+`tauri build` runs `scripts/tauri-before.ts`, which compiles `libse` for the
+current platform, bun-compiles the `se-worker` sidecar, and builds the CSS;
+the Tauri bundler then packages everything with the `fe/` library.
 
 ```bash
-bun run build:canary    # → artifacts/…-<os>-<arch>-…  (Electrobun's own update bundle/DMG)
-bun run build:stable    # release channel
+bun run build    # → src-tauri/target/release/bundle/{macos,dmg}/
 ```
 
-Cross-platform builds run in CI (`.github/workflows/build.yml`): a macOS + Linux
-matrix builds the native library on each runner, then **repackages** Electrobun's
-raw output into plain, launchable archives (Electrobun's own DMG/tar.zst are for
-its hosted-updater flow and the DMG's app is unsigned, which Gatekeeper on Apple
-Silicon rejects outright as "damaged"):
+Cross-platform builds run in CI (`.github/workflows/build.yml`) on a macOS +
+Linux + Windows matrix:
 
-- macOS → ad-hoc `codesign` + `ditto` zip → `SurfaceEvolver-macos-arm64.zip`
-- Linux → recompressed → `SurfaceEvolver-linux-x64.tar.gz`
+- macOS → ad-hoc-signed `SurfaceEvolver-macos-arm64.dmg`
+- Linux → `SurfaceEvolver-linux-x64.deb` + `.AppImage`
+- Windows → `SurfaceEvolver-windows-x64-setup.exe` (libse built with MinGW/MSYS2)
 
 Grab both from the [Actions run](../../actions/workflows/build.yml) artifacts
 (or a tagged release, if one exists). Artifacts are **ad-hoc signed, not
 notarized** — see Known issues above for the macOS Gatekeeper prompt.
 
-### Linux
-
-**Native Linux:**
+### Linux launch
 
 ```bash
-tar -xzf SurfaceEvolver-linux-x64.tar.gz
-cd "SurfaceEvolver-canary"        # or whatever channel you built
-chmod +x bin/launcher             # tar preserves the exec bit, but just in case
-./bin/launcher
+sudo apt install ./SurfaceEvolver-linux-x64.deb   # or run the .AppImage directly
+surface-evolver
 ```
 
-You need GTK3 + WebKitGTK installed (same libs CI installs before building):
+The `.deb` declares its GTK3/WebKitGTK dependencies; the `.AppImage` bundles them.
 
-```bash
-sudo apt-get install -y libgtk-3-0 libwebkit2gtk-4.1-0 || \
-sudo apt-get install -y libgtk-3-0 libwebkit2gtk-4.0-37
-```
+### Windows launch
 
-**Windows** 
-Use a dedicated GUI tool like SE-FIT which offers a more polished and comprehensive solution for the Surface Evolver.
+Run `SurfaceEvolver-windows-x64-setup.exe` (NSIS installer). The engine DLL is
+built with MinGW; the app itself uses WebView2 (preinstalled on Windows 10/11).
+Unsigned — SmartScreen will warn on first run: More info → Run anyway.
 
 ## Tests
 
@@ -178,7 +163,7 @@ Use a dedicated GUI tool like SE-FIT which offers a more polished and comprehens
 ctest --test-dir cmake-build-debug --output-on-failure
 
 # Frontend type-check
-cd src/views && bunx tsc --noEmit
+cd ui && bunx tsc --noEmit
 ```
 
 ## Data files

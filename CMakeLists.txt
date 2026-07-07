@@ -11,118 +11,118 @@ add_compile_options(-O3)
 add_compile_definitions(GENERIC)
 
 # ── Include paths ───────────────────────────────────────────────────────────
-include_directories(engine/src engine/src/core)
+include_directories(engine/src)
 
 # ── Source lists ────────────────────────────────────────────────────────────
 set(SE_CORE_SOURCES
-    engine/src/core/alloca.c
-    engine/src/core/check.c
-    engine/src/core/command.c
-    engine/src/core/dump.c
-    engine/src/core/eval_all.c
-    engine/src/core/eval_sec.c
-    engine/src/core/evalmore.c
-    engine/src/core/evaltree.c
-    engine/src/core/exprint.c
-    engine/src/core/help.c
-    engine/src/core/lexinit.c
-    engine/src/core/lexinit2.c
-    engine/src/core/lexyy.c
-    engine/src/core/machine.c
-    engine/src/core/modify.c
-    engine/src/core/odrv.c
-    engine/src/core/quantity.c
-    engine/src/core/query.c
-    engine/src/core/registry.c
-    engine/src/core/sdrv.c
-    engine/src/core/stringl.c
-    engine/src/core/stringq.c
-    engine/src/core/symtable.c
-    engine/src/core/tmain.c
-    engine/src/core/userfunc.c
-    engine/src/core/userio.c
-    engine/src/core/utility.c
-    engine/src/core/variable.c
-    engine/src/core/yexparse.c
-    engine/src/core/ytab.c
+    engine/src/alloca.c
+    engine/src/check.c
+    engine/src/command.c
+    engine/src/dump.c
+    engine/src/eval_all.c
+    engine/src/eval_sec.c
+    engine/src/evalmore.c
+    engine/src/evaltree.c
+    engine/src/exprint.c
+    engine/src/help.c
+    engine/src/lexinit.c
+    engine/src/lexinit2.c
+    engine/src/lexyy.c
+    engine/src/machine.c
+    engine/src/modify.c
+    engine/src/odrv.c
+    engine/src/quantity.c
+    engine/src/query.c
+    engine/src/registry.c
+    engine/src/sdrv.c
+    engine/src/stringl.c
+    engine/src/stringq.c
+    engine/src/symtable.c
+    engine/src/tmain.c
+    engine/src/userfunc.c
+    engine/src/userio.c
+    engine/src/utility.c
+    engine/src/variable.c
+    engine/src/yexparse.c
+    engine/src/ytab.c
 )
 
 set(SE_SURFACE_SOURCES
-    engine/src/surface/alice.c
-    engine/src/surface/bk.c
-    engine/src/surface/boundary.c
-    engine/src/surface/calcforc.c
-    engine/src/surface/cnstrnt.c
-    engine/src/surface/curtest.c
-    engine/src/surface/diffuse.c
-    engine/src/surface/dodecGroup.c
-    engine/src/surface/filml.c
-    engine/src/surface/filmq.c
-    engine/src/surface/fixvol.c
-    engine/src/surface/gauss.c
-    engine/src/surface/hessian.c
-    engine/src/surface/hessian2.c
-    engine/src/surface/hessian3.c
-    engine/src/surface/hidim.c
-    engine/src/surface/iterate.c
-    engine/src/surface/khyp.c
-    engine/src/surface/klein.c
-    engine/src/surface/knot1.c
-    engine/src/surface/knot2.c
-    engine/src/surface/knot3.c
-    engine/src/surface/kusner.c
-    engine/src/surface/lagrange.c
-    engine/src/surface/matrix.c
-    engine/src/surface/meanint.c
-    engine/src/surface/method1.c
-    engine/src/surface/method2.c
-    engine/src/surface/method3.c
-    engine/src/surface/method4.c
-    engine/src/surface/method5.c
-    engine/src/surface/metis.c
-    engine/src/surface/metric.c
-    engine/src/surface/mindeg.c
-    engine/src/surface/model.c
-    engine/src/surface/popfilm.c
-    engine/src/surface/quotient.c
-    engine/src/surface/simequi2.c
-    engine/src/surface/simplex.c
-    engine/src/surface/skeleton.c
-    engine/src/surface/sqcurve.c
-    engine/src/surface/sqcurve2.c
-    engine/src/surface/sqcurve3.c
-    engine/src/surface/storage.c
-    engine/src/surface/teix.c
-    engine/src/surface/tordup.c
-    engine/src/surface/torus.c
-    engine/src/surface/torvol.c
-    engine/src/surface/trirevis.c
-    engine/src/surface/veravg.c
-    engine/src/surface/verpopst.c
-    engine/src/surface/wulff.c
+    engine/src/alice.c
+    engine/src/bk.c
+    engine/src/boundary.c
+    engine/src/calcforc.c
+    engine/src/cnstrnt.c
+    engine/src/curtest.c
+    engine/src/diffuse.c
+    engine/src/dodecGroup.c
+    engine/src/filml.c
+    engine/src/filmq.c
+    engine/src/fixvol.c
+    engine/src/gauss.c
+    engine/src/hessian.c
+    engine/src/hessian2.c
+    engine/src/hessian3.c
+    engine/src/hidim.c
+    engine/src/iterate.c
+    engine/src/khyp.c
+    engine/src/klein.c
+    engine/src/knot1.c
+    engine/src/knot2.c
+    engine/src/knot3.c
+    engine/src/kusner.c
+    engine/src/lagrange.c
+    engine/src/matrix.c
+    engine/src/meanint.c
+    engine/src/method1.c
+    engine/src/method2.c
+    engine/src/method3.c
+    engine/src/method4.c
+    engine/src/method5.c
+    engine/src/metis.c
+    engine/src/metric.c
+    engine/src/mindeg.c
+    engine/src/model.c
+    engine/src/popfilm.c
+    engine/src/quotient.c
+    engine/src/simequi2.c
+    engine/src/simplex.c
+    engine/src/skeleton.c
+    engine/src/sqcurve.c
+    engine/src/sqcurve2.c
+    engine/src/sqcurve3.c
+    engine/src/storage.c
+    engine/src/teix.c
+    engine/src/tordup.c
+    engine/src/torus.c
+    engine/src/torvol.c
+    engine/src/trirevis.c
+    engine/src/veravg.c
+    engine/src/verpopst.c
+    engine/src/wulff.c
 )
 
 set(SE_GRAPHICS_COMMON
-    engine/src/graphics/display.c
-    engine/src/graphics/filgraph.c
-    engine/src/graphics/geomgraph.c
-    engine/src/graphics/grapher.c
-    engine/src/graphics/graphgen.c
-    engine/src/graphics/mvgraph.c
-    engine/src/graphics/painter.c
-    engine/src/graphics/pixgraph.c
-    engine/src/graphics/psgraph.c
-    engine/src/graphics/softimag.c
-    engine/src/graphics/zoom.c
+    engine/src/display.c
+    engine/src/filgraph.c
+    engine/src/geomgraph.c
+    engine/src/grapher.c
+    engine/src/graphgen.c
+    engine/src/mvgraph.c
+    engine/src/painter.c
+    engine/src/pixgraph.c
+    engine/src/psgraph.c
+    engine/src/softimag.c
+    engine/src/zoom.c
 )
 
 # ── Graphics backend ────────────────────────────────────────────────────────
 if(SE_HEADLESS)
-    set(SE_GRAPH_SOURCE engine/src/graphics/nulgraph.c)
+    set(SE_GRAPH_SOURCE engine/src/nulgraph.c)
     set(SE_GRAPH_LIBS "")
 else()
     find_package(X11 REQUIRED)
-    set(SE_GRAPH_SOURCE engine/src/graphics/xgraph.c)
+    set(SE_GRAPH_SOURCE engine/src/xgraph.c)
     set(SE_GRAPH_LIBS X11::X11)
 endif()
 
@@ -141,13 +141,13 @@ add_library(se SHARED
     ${SE_CORE_SOURCES}
     ${SE_SURFACE_SOURCES}
     ${SE_GRAPHICS_COMMON}
-    engine/src/graphics/nulgraph.c
-    engine/src/graphics/psgraph.c
-    engine/src/graphics/painter.c
-    engine/src/graphics/geomgraph.c
+    engine/src/nulgraph.c
+    engine/src/psgraph.c
+    engine/src/painter.c
+    engine/src/geomgraph.c
     engine/bindings/c/se_api.c
 )
-target_include_directories(se PRIVATE engine/src engine/src/core engine/bindings/c)
+target_include_directories(se PRIVATE engine/src engine/bindings/c)
 target_link_libraries(se PRIVATE m)
 
 # ── Tests ────────────────────────────────────────────────────────────────────

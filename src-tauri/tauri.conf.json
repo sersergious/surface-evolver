@@ -1,0 +1,47 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Surface Evolver",
+  "version": "0.1.1",
+  "identifier": "com.skuzmin.surfaceevolver",
+  "build": {
+    "beforeDevCommand": "bun scripts/tauri-before.ts && bun run --cwd ui dev",
+    "beforeBuildCommand": "bun scripts/tauri-before.ts --release && bun run --cwd ui build",
+    "devUrl": "http://localhost:5173",
+    "frontendDist": "../ui/dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Surface Evolver",
+        "width": 1280,
+        "height": 800,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true,
+        "trafficLightPosition": { "x": 12, "y": 22 }
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["app", "dmg"],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "externalBin": ["binaries/se-worker"],
+    "resources": {
+      "../build-native/": "native/",
+      "../fe/": "fe/"
+    },
+    "macOS": {
+      "signingIdentity": "-",
+      "hardenedRuntime": false
+    }
+  }
+}

@@ -27,6 +27,12 @@
 #include <setjmp.h>
 
 /* ── output capture ───────────────────────────────────────────────────── */
+/*
+ * POSIX: open_memstream gives us an in-memory FILE* whose buffer/size we can
+ * read directly.  Windows (MinGW) has no open_memstream, so we capture into a
+ * tmpfile() instead and read it back through cap_size()/cap_copy() — the rest
+ * of the code only ever touches the streams through those two helpers.
+ */
 
 static char   *cap_out_buf  = NULL;
 static size_t  cap_out_size = 0;
@@ -35,6 +41,54 @@ static FILE   *cap_out_fd   = NULL;
 static char   *cap_err_buf  = NULL;
 static size_t  cap_err_size = 0;
 static FILE   *cap_err_fd   = NULL;
+
+#ifdef _WIN32
+static FILE *cap_open(char **buf, size_t *size)
+{
+    (void)buf;
+    *size = 0;
+    return tmpfile();
+}
+static size_t cap_size(FILE *fd, size_t memsize)
+{
+    long p;
+    (void)memsize;
+    fflush(fd);
+    p = ftell(fd);
+    return p < 0 ? 0 : (size_t)p;
+}
+/* Copy up to outmax captured bytes into out; leaves the stream position at
+ * the end so subsequent writes keep appending. */
+static size_t cap_copy(FILE *fd, const char *membuf, size_t memsize,
+                       char *out, size_t outmax)
+{
+    size_t n = cap_size(fd, memsize);
+    (void)membuf;
+    if (n > outmax) n = outmax;
+    rewind(fd);
+    n = fread(out, 1, n, fd);
+    fseek(fd, 0, SEEK_END);
+    return n;
+}
+#else
+static FILE *cap_open(char **buf, size_t *size)
+{
+    return open_memstream(buf, size);
+}
+static size_t cap_size(FILE *fd, size_t memsize)
+{
+    fflush(fd);
+    return memsize;
+}
+static size_t cap_copy(FILE *fd, const char *membuf, size_t memsize,
+                       char *out, size_t outmax)
+{
+    size_t n = cap_size(fd, memsize);
+    if (n > outmax) n = outmax;
+    memcpy(out, membuf, n);
+    return n;
+}
+#endif
 
 /* Last API-level error description (not the same as SE's errmsg). */
 static char se_errmsg_buf[4096];
@@ -45,8 +99,8 @@ static int se_initialized = 0;
  * pointers at them. */
 static void open_capture_streams(void)
 {
-    cap_out_fd = open_memstream(&cap_out_buf, &cap_out_size);
-    cap_err_fd = open_memstream(&cap_err_buf, &cap_err_size);
+    cap_out_fd = cap_open(&cap_out_buf, &cap_out_size);
+    cap_err_fd = cap_open(&cap_err_buf, &cap_err_size);
     outfd    = cap_out_fd;
     erroutfd = cap_err_fd;
 }
@@ -56,11 +110,11 @@ static void open_capture_streams(void)
 static void reset_cap(FILE **fd, char **buf, size_t *sz, FILE **global_fd)
 {
     fflush(*fd);
-    fclose(*fd);
-    free(*buf);
+    fclose(*fd);        /* tmpfile() auto-deletes on close (Windows path) */
+    free(*buf);         /* no-op on Windows: buf stays NULL */
     *buf = NULL;
     *sz  = 0;
-    *fd  = open_memstream(buf, sz);
+    *fd  = cap_open(buf, sz);
     if (global_fd)
         *global_fd = *fd;
 }
@@ -159,11 +213,9 @@ int se_load(const char *filename)
     recalc();
 
     /* If startup produced error output and loaded no vertices, report failure */
-    fflush(cap_err_fd);
-    if (cap_err_size > 0 && web.skel[VERTEX].count == 0) {
-        int n = (int)(cap_err_size < sizeof(se_errmsg_buf) - 1
-                      ? cap_err_size : sizeof(se_errmsg_buf) - 1);
-        memcpy(se_errmsg_buf, cap_err_buf, n);
+    if (cap_size(cap_err_fd, cap_err_size) > 0 && web.skel[VERTEX].count == 0) {
+        int n = (int)cap_copy(cap_err_fd, cap_err_buf, cap_err_size,
+                              se_errmsg_buf, sizeof(se_errmsg_buf) - 1);
         while (n > 0 && (se_errmsg_buf[n-1] == '\n' || se_errmsg_buf[n-1] == '\r'))
             n--;
         se_errmsg_buf[n] = '\0';
@@ -191,11 +243,9 @@ int se_run(const char *cmd)
         /* A RECOVERABLE error escaped command()'s cmdbuf handler.
          * Flush and save errout content BEFORE reopening streams (which
          * would discard it), so the caller can see the actual SE error. */
-        fflush(cap_err_fd);
-        if (cap_err_size > 0) {
-            int n = (int)(cap_err_size < sizeof(se_errmsg_buf) - 1
-                          ? cap_err_size : sizeof(se_errmsg_buf) - 1);
-            memcpy(se_errmsg_buf, cap_err_buf, n);
+        if (cap_size(cap_err_fd, cap_err_size) > 0) {
+            int n = (int)cap_copy(cap_err_fd, cap_err_buf, cap_err_size,
+                                  se_errmsg_buf, sizeof(se_errmsg_buf) - 1);
             /* strip trailing newline for cleaner messages */
             while (n > 0 && (se_errmsg_buf[n-1] == '\n' ||
                              se_errmsg_buf[n-1] == '\r'))
@@ -1268,11 +1318,8 @@ int se_pop_output(char *buf, int bufsize)
     int n;
     if (!buf || bufsize <= 0)
         return -1;
-    fflush(cap_out_fd);
-    n = (int)(cap_out_size < (size_t)(bufsize - 1)
-              ? cap_out_size : (size_t)(bufsize - 1));
-    if (n > 0)
-        memcpy(buf, cap_out_buf, n);
+    n = (int)cap_copy(cap_out_fd, cap_out_buf, cap_out_size,
+                      buf, (size_t)(bufsize - 1));
     buf[n] = '\0';
     reset_cap(&cap_out_fd, &cap_out_buf, &cap_out_size, &outfd);
     return n;
@@ -1283,11 +1330,8 @@ int se_pop_errout(char *buf, int bufsize)
     int n;
     if (!buf || bufsize <= 0)
         return -1;
-    fflush(cap_err_fd);
-    n = (int)(cap_err_size < (size_t)(bufsize - 1)
-              ? cap_err_size : (size_t)(bufsize - 1));
-    if (n > 0)
-        memcpy(buf, cap_err_buf, n);
+    n = (int)cap_copy(cap_err_fd, cap_err_buf, cap_err_size,
+                      buf, (size_t)(bufsize - 1));
     buf[n] = '\0';
     reset_cap(&cap_err_fd, &cap_err_buf, &cap_err_size, &erroutfd);
     return n;

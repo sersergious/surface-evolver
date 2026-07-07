@@ -1,16 +1,12 @@
 name: Build
 
-# Builds the native headless libse on each OS runner (via the electrobun
-# preBuild hook → scripts/build-native.ts) and bundles a distributable app.
-# macOS + Linux only. Trigger on version tags, or manually.
+# Builds the native headless libse on each OS runner (scripts/tauri-before.ts
+# → build-native.ts + the compiled se-worker sidecar) and bundles the Tauri
+# app. macOS + Linux + Windows (MinGW libse). Trigger on version tags, or manually.
 #
-# Electrobun's own artifacts (self-extractor DMG + .tar.zst + update.json) are
-# for its hosted-updater flow, which we don't run. Worse, the DMG's app is
-# unsigned — quarantined unsigned apps on Apple Silicon fail Gatekeeper with
-# "app is damaged". So we repackage the original bundle ourselves:
-#   macOS: extract → ad-hoc codesign → ditto zip (preserves symlinks/exec bits;
-#          upload-artifact's own zip strips them, which also "corrupts" .apps)
-#   Linux: recompress .tar.zst → standard .tar.gz (no zstd needed to install)
+# The macOS app is AD-HOC signed (bundle.macOS.signingIdentity "-" in
+# tauri.conf.json) — no Developer ID / notarization. First launch:
+# right-click → Open, or `xattr -dr com.apple.quarantine`.
 on:
   push:
     tags: ["v*"]
@@ -26,6 +22,8 @@ jobs:
             artifact: macos-arm64
           - os: ubuntu-latest   # → linux-x64
             artifact: linux-x64
+          - os: windows-latest  # → windows-x64 (libse via MinGW/MSYS2)
+            artifact: windows-x64
     runs-on: ${{ matrix.os }}
     permissions:
       contents: write   # create/update the GitHub Release on tag pushes
@@ -36,41 +34,69 @@ jobs:
         with:
           bun-version: latest
 
-      # Electrobun's Linux renderer is GTK-WebKit; provide the system libs.
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      # Tauri v2 Linux build deps (webkit2gtk renderer).
       # (cmake + a C toolchain are preinstalled on GitHub runners.)
       - name: Linux system deps
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y zstd libgtk-3-0 libwebkit2gtk-4.1-0 || \
-          sudo apt-get install -y zstd libgtk-3-0 libwebkit2gtk-4.0-37
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev \
+            libayatana-appindicator3-dev librsvg2-dev libxdo-dev libssl-dev
+
+      # Windows: build libse with MinGW inside MSYS2, stage it, and let
+      # tauri-before.ts skip the native rebuild (SE_SKIP_NATIVE below).
+      - uses: msys2/setup-msys2@v2
+        if: runner.os == 'Windows'
+        with:
+          msystem: MINGW64
+          install: mingw-w64-x86_64-gcc mingw-w64-x86_64-cmake mingw-w64-x86_64-ninja
+
+      - name: Build libse (MinGW)
+        if: runner.os == 'Windows'
+        shell: msys2 {0}
+        run: |
+          set -euo pipefail
+          cmake -B cmake-build-release -G Ninja -DSE_HEADLESS=ON -DBUILD_TESTS=OFF -DCMAKE_BUILD_TYPE=Release
+          cmake --build cmake-build-release
+          mkdir -p build-native
+          cp cmake-build-release/libse.dll build-native/libse-windows-x64.dll
 
       - name: Install dependencies
         run: bun install
 
-      - name: Build native lib + bundle app
-        run: bun run build:canary
-
-      - name: Package macOS app (ad-hoc sign + ditto zip)
+      - name: Build app (macOS → .dmg)
         if: runner.os == 'macOS'
-        run: |
-          set -euo pipefail
-          mkdir -p dist unpack
-          zstd -d artifacts/*.app.tar.zst -o unpack/app.tar
-          tar -xf unpack/app.tar -C unpack
-          APP=$(find unpack -maxdepth 1 -name "*.app" -print -quit)
-          [ -n "$APP" ] || { echo "no .app found in tarball"; exit 1; }
-          codesign --force --deep --sign - "$APP"
-          codesign --verify --verbose "$APP"
-          ditto -c -k --keepParent "$APP" "dist/SurfaceEvolver-${{ matrix.artifact }}.zip"
+        run: bunx tauri build
 
-      - name: Package Linux app (tar.gz)
+      - name: Build app (Linux → .deb + .AppImage)
         if: runner.os == 'Linux'
+        run: bunx tauri build --bundles deb,appimage
+
+      - name: Build app (Windows → NSIS installer)
+        if: runner.os == 'Windows'
+        env:
+          SE_SKIP_NATIVE: "1"
+        run: bunx tauri build --bundles nsis
+
+      - name: Collect artifacts
+        shell: bash
         run: |
           set -euo pipefail
           mkdir -p dist
-          TARZST=$(ls artifacts/*.tar.zst | head -1)
-          zstd -dc "$TARZST" | gzip > "dist/SurfaceEvolver-${{ matrix.artifact }}.tar.gz"
+          if [ "$RUNNER_OS" = "macOS" ]; then
+            cp src-tauri/target/release/bundle/dmg/*.dmg "dist/SurfaceEvolver-${{ matrix.artifact }}.dmg"
+          elif [ "$RUNNER_OS" = "Windows" ]; then
+            cp src-tauri/target/release/bundle/nsis/*.exe "dist/SurfaceEvolver-${{ matrix.artifact }}-setup.exe"
+          else
+            cp src-tauri/target/release/bundle/deb/*.deb "dist/SurfaceEvolver-${{ matrix.artifact }}.deb"
+            cp src-tauri/target/release/bundle/appimage/*.AppImage "dist/SurfaceEvolver-${{ matrix.artifact }}.AppImage"
+          fi
 
       - name: Upload workflow artifacts
         uses: actions/upload-artifact@v7
@@ -88,7 +114,3 @@ jobs:
         with:
           files: dist/*
           fail_on_unmatched_files: true
-
-# Artifacts are AD-HOC signed only (no Developer ID / notarization).
-# macOS first launch: right-click → Open, or `xattr -dr com.apple.quarantine`.
-# Windows is intentionally not built — run under WSL if needed.

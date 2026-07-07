@@ -1,6 +1,6 @@
 /**
  * Generate app icons from assets/icon.svg:
- *   - assets/icon.iconset/  (macOS; electrobun runs iconutil → .icns)
+ *   - assets/icon.iconset/  (macOS iconset source)
  *   - assets/icon.png       (Linux; desktop entry / window icon)
  *
  * Uses macOS `sips` to rasterize + resize, so this only runs on a Mac.
