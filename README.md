@@ -61,9 +61,9 @@ flowchart LR
     View["client.ts<br/>rpc(method, params)"] -->|"Tauri invoke"| RPC["RPC dispatch<br/>src-tauri/src/rpc.rs"]
     RPC --> Mgr["worker.rs<br/>mutex-serialized"]
     Mgr -->|"cmd: load · run · mesh · topo …"| Worker["se-worker sidecar"]
-    Worker -->|"bun:ffi"| Facade["se_api.c / se_api.h<br/>C facade (~45 functions)"]
-    Facade --> Core["engine/src/core<br/>parser · command loop"]
-    Facade --> Surf["engine/src/surface<br/>gradient descent · topology"]
+    Worker -->|"bun:ffi"| Facade["se_api.c / se_api.h<br/>C facade (~50 functions)"]
+    Facade --> Core["engine/src<br/>parser · command loop"]
+    Facade --> Surf["engine/src<br/>gradient descent · topology"]
 ```
 
 The C facade (`engine/bindings/c/se_api.h`) exposes structured getters/setters — geometry (vertices/edges/facets/normals), energy/area, quantities + energy methods, physics, mesh params, body volumes + centre-of-mass, per-vertex scalar fields, constraints, attributes — plus a universal `se_run` escape hatch that gives the CLI pane the entire command language. Graphics-only engine globals excluded from the headless build (bounding box, normals, body CM) are recomputed inside the facade.
@@ -72,8 +72,8 @@ The C facade (`engine/bindings/c/se_api.h`) exposes structured getters/setters �
 
 | Layer | Technology |
 |---|---|
-| Core engine | C — parser, gradient descent, mesh topology (~100 files) |
-| C API | `engine/bindings/c/se_api.{h,c}` — ~45-function facade with stdout/stderr capture |
+| Core engine | C — parser, gradient descent, mesh topology (~117 files, flat upstream layout) |
+| C API | `engine/bindings/c/se_api.{h,c}` — ~50-function facade with stdout/stderr capture |
 | Native binding | `bun:ffi` `dlopen` in a bun-compiled worker sidecar |
 | Desktop shell | Tauri v2 (Rust, native WKWebView / WebKitGTK / WebView2) |
 | 3D rendering | Three.js + @react-three/fiber + drei |
@@ -137,9 +137,9 @@ Linux + Windows matrix:
 - Linux → `SurfaceEvolver-linux-x64.deb`
 - Windows → `SurfaceEvolver-windows-x64-setup.exe` (libse built with MinGW/MSYS2)
 
-Grab both from the [Actions run](../../actions/workflows/build.yml) artifacts
-(or a tagged release, if one exists). Artifacts are **ad-hoc signed, not
-notarized** — see Known issues above for the macOS Gatekeeper prompt.
+Grab them from the [Actions run](../../actions/workflows/build.yml) artifacts
+(or a tagged release, if one exists). The macOS build is **ad-hoc signed, not
+notarized** — see Known issues above for the Gatekeeper prompt.
 
 ### Linux launch
 
