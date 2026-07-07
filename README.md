@@ -134,7 +134,7 @@ Cross-platform builds run in CI (`.github/workflows/build.yml`) on a macOS +
 Linux + Windows matrix:
 
 - macOS → ad-hoc-signed `SurfaceEvolver-macos-arm64.dmg`
-- Linux → `SurfaceEvolver-linux-x64.deb` + `.AppImage`
+- Linux → `SurfaceEvolver-linux-x64.deb`
 - Windows → `SurfaceEvolver-windows-x64-setup.exe` (libse built with MinGW/MSYS2)
 
 Grab both from the [Actions run](../../actions/workflows/build.yml) artifacts
@@ -144,11 +144,11 @@ notarized** — see Known issues above for the macOS Gatekeeper prompt.
 ### Linux launch
 
 ```bash
-sudo apt install ./SurfaceEvolver-linux-x64.deb   # or run the .AppImage directly
+sudo apt install ./SurfaceEvolver-linux-x64.deb
 surface-evolver
 ```
 
-The `.deb` declares its GTK3/WebKitGTK dependencies; the `.AppImage` bundles them.
+The `.deb` declares its GTK3/WebKitGTK dependencies.
 
 ### Windows launch
 
