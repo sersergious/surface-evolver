@@ -1,18 +1,27 @@
 /**
- * electrobun preBuild hook — build the headless libse for the current platform
- * and stage it at build-native/libse-<os>-<arch>.<ext> so electrobun.config.ts
- * can copy it into the app bundle. Runs on each CI runner (macOS/Windows/Linux).
+ * Builds the headless libse for the current platform
+ * and stage it at build-native/libse-<os>-<arch>.<ext> so the Tauri bundle
+ * resources can copy it into the app bundle. Runs on each CI runner (macOS/Windows/Linux).
  *
  * Requires cmake + a C toolchain on PATH (the runner provides them).
  */
 import { $ } from "bun";
-import { mkdirSync, copyFileSync } from "fs";
+import { mkdirSync, copyFileSync, existsSync } from "fs";
 import { join } from "path";
 
-const os   = process.platform === "darwin" ? "macos" : "linux";
+const os   = process.platform === "darwin" ? "macos"
+           : process.platform === "win32"  ? "windows" : "linux";
 const arch = process.arch === "arm64" ? "arm64" : "x64";
-const ext  = process.platform === "darwin" ? "dylib" : "so";
+const ext  = process.platform === "darwin" ? "dylib"
+           : process.platform === "win32"  ? "dll" : "so";
 const BUILD = "cmake-build-release";
+
+// CI (Windows) builds libse in an MSYS2 shell and stages it before tauri runs;
+// don't rebuild with whatever generator/toolchain this shell would pick.
+if (process.env.SE_SKIP_NATIVE && existsSync(join("build-native", `libse-${os}-${arch}.${ext}`))) {
+  console.log("build-native: SE_SKIP_NATIVE set and staged lib exists — skipping");
+  process.exit(0);
+}
 
 await $`cmake -B ${BUILD} -DSE_HEADLESS=ON -DCMAKE_BUILD_TYPE=Release`;
 await $`cmake --build ${BUILD} --config Release`;

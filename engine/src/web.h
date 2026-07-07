@@ -68,9 +68,8 @@ struct webstruct {
      int vol_flag;         /* whether body volumes up to date */
      int jiggle_flag;     /* whether to jiggle vertices at each move */
      int homothety;        /* flag for homothety adjustment each iteration */
-      int wulff_flag;      /* whether we are using wulff shapes for energy */
-      int hide_flag;       /* when set, only draw facets that are not CLEAR/UNSHOWN */
-      int wulff_count;     /* number of Wulff vectors read in */
+     int wulff_flag;      /* whether we are using wulff shapes for energy */
+     int wulff_count;     /* number of Wulff vectors read in */
      char wulff_name[60]; /* Wulff file or keyword */
      vertex_id  zoom_v;    /* vertex to zoom on */
      REAL zoom_radius;     /* current zoom radius */

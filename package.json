@@ -4,21 +4,18 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "bun run --cwd src/views css && concurrently \"bun run --cwd src/views css:watch\" \"electrobun dev\"",
-    "build": "bun run --cwd src/views css && electrobun build",
-    "build:canary": "bun run --cwd src/views css && electrobun build --env=canary",
-    "build:stable": "bun run --cwd src/views css && electrobun build --env=stable",
+    "dev": "tauri dev",
+    "build": "tauri build",
+    "tauri": "tauri",
     "icons": "bun scripts/make-icons.ts"
   },
   "workspaces": [
-    "src/main",
-    "src/views"
+    "ui"
   ],
   "dependencies": {
-    "@heroicons/react": "^2.2.0",
-    "electrobun": "^1.18.1"
+    "@heroicons/react": "^2.2.0"
   },
   "devDependencies": {
-    "concurrently": "^10.0.3"
+    "@tauri-apps/cli": "^2.11.4"
   }
 }

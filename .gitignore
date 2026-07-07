@@ -22,12 +22,14 @@ compile_commands.json
 
 # ── Node / Bun ───────────────────────────────────────────────────────────────
 node_modules/
-src/views/dist/
+ui/dist/
 src/views/.vite/
 src/views/src/styles/compiled.css
 
-# ── Electrobun ───────────────────────────────────────────────────────────────
-dist-electrobun/
+# ── Tauri ────────────────────────────────────────────────────────────────────
+src-tauri/target/
+src-tauri/binaries/
+src-tauri/gen/
 out/
 artifacts/
 
@@ -48,3 +50,6 @@ docs/
 
 system-design.md
 test-design.md
+
+# Bun compiled scratch binaries
+.*.bun-build
