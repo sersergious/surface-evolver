@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Surface Evolver",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "identifier": "com.skuzmin.surfaceevolver",
   "build": {
     "beforeDevCommand": "bun scripts/tauri-before.ts && bun run --cwd ui dev",
