@@ -21,6 +21,11 @@ const SE_LIB_PATH = process.env.SE_LIB_PATH ?? "/app/libse.so";
 
 let lib: ReturnType<typeof dlopen<typeof SYMBOLS>>["symbols"];
 
+// NOTE: several symbols below are declared but not yet called (colormap/scalar-
+// field plumbing). Keep them: removing entries changes the compiled binary
+// layout and bun 1.3.14's output can become unsignable (codesign "internal
+// error") — verify `codesign --remove-signature` works on the sidecar if you
+// edit this file. See scripts/tauri-before.ts.
 const SYMBOLS = {
   se_init:             { returns: FFIType.int,     args: [] },
   se_load:             { returns: FFIType.int,     args: [FFIType.ptr] },

@@ -14,13 +14,11 @@ interface AppState {
 
 interface AppActions {
   setSession:      (id: string, file: string) => void
-  clearSession:    () => void
   removeOpenFile:  (file: string) => void
   setFileContent:  (content: string | null) => void
   setStats:        (energy: number | null, area: number | null) => void
   setTotalTime:    (t: number | null) => void
   appendLog:       (line: string) => void
-  clearLog:        () => void
   bumpMeshVersion: () => void
 }
 
@@ -39,7 +37,6 @@ export const useStore = create<AppState & AppActions>((set) => ({
     sessionId: id, activeFile: file, totalTime: 0,
     openFiles: s.openFiles.includes(file) ? s.openFiles : [...s.openFiles, file],
   })),
-  clearSession:    ()         => set({ sessionId: null, activeFile: null, energy: null, area: null, totalTime: null, fileContent: null }),
   // Close a tab. If it's the live one, also tear down the active session.
   removeOpenFile:  (file)     => set((s) => {
     const openFiles = s.openFiles.filter(f => f !== file)
@@ -55,6 +52,5 @@ export const useStore = create<AppState & AppActions>((set) => ({
       const next = [...s.outputLog, line]
       return { outputLog: next.length > 1000 ? next.slice(-1000) : next }
     }),
-  clearLog:        () => set({ outputLog: [] }),
   bumpMeshVersion: () => set((s) => ({ meshVersion: s.meshVersion + 1 })),
 }))

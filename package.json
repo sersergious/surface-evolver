@@ -1,6 +1,6 @@
 {
   "name": "surface-evolver",
-  "version": "1.0.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -12,9 +12,6 @@
   "workspaces": [
     "ui"
   ],
-  "dependencies": {
-    "@heroicons/react": "^2.2.0"
-  },
   "devDependencies": {
     "@tauri-apps/cli": "^2.11.4"
   }
