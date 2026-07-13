@@ -64,13 +64,14 @@ jobs:
           sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev \
             libayatana-appindicator3-dev librsvg2-dev libxdo-dev libssl-dev
 
-      # tauri-build's script validates that externalBin exists; a type-check
-      # doesn't need the real bun-compiled sidecar — stage a placeholder.
-      - name: Stage sidecar placeholder
+      # tauri-build's script validates that externalBin + resource paths exist;
+      # a type-check doesn't need the real artifacts — stage placeholders.
+      - name: Stage sidecar + resource placeholders
         run: |
-          mkdir -p src-tauri/binaries
+          mkdir -p src-tauri/binaries build-native
           touch src-tauri/binaries/se-worker-x86_64-unknown-linux-gnu
           chmod +x src-tauri/binaries/se-worker-x86_64-unknown-linux-gnu
+          touch build-native/libse-linux-x64.so
 
       - name: cargo check
         working-directory: src-tauri
