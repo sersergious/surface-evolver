@@ -30,8 +30,6 @@ src/views/src/styles/compiled.css
 src-tauri/target/
 src-tauri/binaries/
 src-tauri/gen/
-out/
-artifacts/
 
 # ── Surface Evolver runtime files ────────────────────────────────────────────
 fe/*.dmp

@@ -4,9 +4,6 @@
   "workspaces": {
     "": {
       "name": "surface-evolver",
-      "dependencies": {
-        "@heroicons/react": "^2.2.0",
-      },
       "devDependencies": {
         "@tauri-apps/cli": "^2.11.4",
       },
@@ -19,6 +16,7 @@
         "@codemirror/language": "^6.12.4",
         "@codemirror/state": "^6.7.0",
         "@codemirror/view": "^6.43.4",
+        "@heroicons/react": "^2.2.0",
         "@lezer/highlight": "^1.2.3",
         "@react-three/drei": "^9.105.4",
         "@react-three/fiber": "^8.16.8",

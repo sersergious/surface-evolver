@@ -5,7 +5,7 @@
   "identifier": "com.skuzmin.surfaceevolver",
   "build": {
     "beforeDevCommand": "bun scripts/tauri-before.ts && bun run --cwd ui dev",
-    "beforeBuildCommand": "bun scripts/tauri-before.ts --release && bun run --cwd ui build",
+    "beforeBuildCommand": "bun scripts/tauri-before.ts && bun run --cwd ui build",
     "devUrl": "http://localhost:5173",
     "frontendDist": "../ui/dist"
   },

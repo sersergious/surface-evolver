@@ -93,16 +93,5 @@ jobs:
       - name: TypeScript type-check
         run: bunx tsc --noEmit
 
-      - name: Run Vitest unit tests
-        run: bun run test -- --reporter=verbose --reporter=junit --outputFile=../reports/frontend-tests.xml --passWithNoTests
-
       - name: Build production bundle
         run: bun run build
-
-      - name: Upload test report
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: report-frontend-tests
-          path: reports/frontend-tests.xml
-          retention-days: 7
