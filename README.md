@@ -63,8 +63,7 @@ flowchart LR
     RPC --> Mgr["worker.rs<br/>mutex-serialized"]
     Mgr -->|"cmd: load · run · mesh · topo …"| Worker["se-worker sidecar"]
     Worker -->|"bun:ffi"| Facade["se_api.c / se_api.h<br/>C facade (~50 functions)"]
-    Facade --> Core["engine/src<br/>parser · command loop"]
-    Facade --> Surf["engine/src<br/>gradient descent · topology"]
+    Facade --> Core["engine/src<br/>parser · command loop<br/>gradient descent · topology"]
 ```
 
 The C facade (`engine/bindings/c/se_api.h`) exposes structured getters/setters — geometry (vertices/edges/facets/normals), energy/area, quantities + energy methods, physics, mesh params, body volumes + centre-of-mass, per-vertex scalar fields, constraints, attributes — plus a universal `se_run` escape hatch that gives the CLI pane the entire command language. Graphics-only engine globals excluded from the headless build (bounding box, normals, body CM) are recomputed inside the facade.
@@ -94,6 +93,7 @@ surface-evolver/
 │   ├── src/rpc.rs              # RPC dispatch (sessions, files, persistence)
 │   ├── src/worker.rs           # Worker lifecycle + mutex
 │   ├── src/menu.rs             # Native menu bar
+│   ├── capabilities/           # Tauri ACL (window drag, events, opener)
 │   └── tauri.conf.json         # Bundle config (resources, sidecar, window)
 ├── worker/se-worker.ts         # Worker: owns libse via bun:ffi (ships bun-compiled)
 ├── ui/src/                     # React + Vite frontend
@@ -163,9 +163,15 @@ Unsigned — SmartScreen will warn on first run: More info → Run anyway.
 # C API tests (requires built libse)
 ctest --test-dir cmake-build-debug --output-on-failure
 
+# Rust backend check
+cd src-tauri && cargo check
+
 # Frontend type-check
 cd ui && bunx tsc --noEmit
 ```
+
+CI (`.github/workflows/ci.yml`) runs all three on every push: the C API suite on
+macOS + Linux, `cargo check`, and the frontend type-check + production build.
 
 ## Data files
 
