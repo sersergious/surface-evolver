@@ -105,10 +105,22 @@ impl Manager {
         *io = Some(WorkerIo { stdin, stdout, active_session: session_id.to_string() });
 
         let w = io.as_mut().unwrap();
-        send(&mut w.stdin, &json!({ "cmd": "load", "path": fe_path }))?;
-        let msg = read_result(&mut w.stdout)?;
-        check_result(&msg)?;
-        Ok(msg)
+        let result = (|| {
+            send(&mut w.stdin, &json!({ "cmd": "load", "path": fe_path }))?;
+            let msg = read_result(&mut w.stdout)?;
+            check_result(&msg)?;
+            Ok(msg)
+        })();
+        if result.is_err() {
+            // Engine state after a failed se_load is undefined — don't leave
+            // this worker registered as the active session.
+            *io = None;
+            if let Some(mut child) = self.proc.lock().unwrap().take() {
+                let _ = child.kill();
+                let _ = child.wait();
+            }
+        }
+        result
     }
 
     /// Send `req` to the active worker for `session_id`, await its result line.

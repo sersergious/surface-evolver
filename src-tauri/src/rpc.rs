@@ -162,29 +162,43 @@ fn persist_file() -> PathBuf {
     state_dir().join("last-session.json")
 }
 
+/// Snapshot the surface off the command path: the dump is a full worker
+/// round-trip (MBs on a refined mesh), so blocking the RPC response on it
+/// would add visible latency to every command. The background thread still
+/// serialises against other worker I/O via the manager's io mutex.
 fn persist(app: &AppHandle, sid: &str) {
-    let state: State<AppState> = app.state();
-    let fe_file = {
-        let sessions = state.sessions.lock().unwrap();
-        match sessions.get(sid) {
-            Some(s) => s.clone(),
-            None => return,
+    let app = app.clone();
+    let sid = sid.to_string();
+    std::thread::spawn(move || {
+        let state: State<AppState> = app.state();
+        let fe_file = {
+            let sessions = state.sessions.lock().unwrap();
+            match sessions.get(&sid) {
+                Some(s) => s.clone(),
+                None => return,
+            }
+        };
+        if let Ok(dump) = state.manager.request(&sid, json!({ "cmd": "dump" })) {
+            let saved = json!({
+                "fe_file": fe_file["fe_file"],
+                "energy": fe_file["energy"],
+                "area": fe_file["area"],
+                "dmp": dump["content"],
+                "saved_at": now_iso(),
+            });
+            let _ = fs::create_dir_all(state_dir());
+            let _ = fs::write(persist_file(), saved.to_string());
         }
-    };
-    if let Ok(dump) = state.manager.request(sid, json!({ "cmd": "dump" })) {
-        let saved = json!({
-            "fe_file": fe_file["fe_file"],
-            "energy": fe_file["energy"],
-            "area": fe_file["area"],
-            "dmp": dump["content"],
-            "saved_at": now_iso(),
-        });
-        let _ = fs::create_dir_all(state_dir());
-        let _ = fs::write(persist_file(), saved.to_string());
-    }
+    });
 }
 
 fn try_restore(app: &AppHandle, state: &AppState) -> Value {
+    // Restore is lazy (first getRestore call). If the user already loaded a
+    // file, restoring now would kill their fresh worker and leave the UI
+    // holding a session id the worker no longer serves — bail instead.
+    if !state.sessions.lock().unwrap().is_empty() {
+        return Value::Null;
+    }
     let Ok(raw) = fs::read_to_string(persist_file()) else { return Value::Null };
     let Ok(saved) = serde_json::from_str::<Value>(&raw) else { return Value::Null };
     let (Some(dmp), Some(fe_file)) = (saved["dmp"].as_str(), saved["fe_file"].as_str()) else {
@@ -259,6 +273,14 @@ fn dispatch(app: &AppHandle, method: &str, params: Value) -> Result<Value, Strin
             let fe_path = resolve_fe_path(app, fe_file);
             if !fe_path.exists() {
                 return Err(format!("File not found: {}", sanitize(fe_file)));
+            }
+            // A user-initiated load supersedes startup restore: mark it
+            // consumed so a late getRestore can't kill this session's worker.
+            {
+                let mut memo = state.restore.lock().unwrap();
+                if memo.is_none() {
+                    *memo = Some(Value::Null);
+                }
             }
             let sid = uuid::Uuid::new_v4().to_string();
             let stats = state
