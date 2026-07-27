@@ -23,6 +23,9 @@ export default function FilePane() {
     let cancelled = false
     getRestore().then(s => {
       if (cancelled || !s) return
+      // User already opened a file while restore was loading — their session
+      // wins (the backend also guards this; see try_restore in rpc.rs).
+      if (useStore.getState().sessionId) return
       setSession(s.session_id, s.fe_file)
       setStats(s.energy, s.area)
       appendLog(`Restored previous session: ${s.fe_file}`)

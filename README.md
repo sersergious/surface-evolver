@@ -17,7 +17,7 @@ This project drives the original C engine directly through `bun:ffi`, so you get
 - **Inspect**: click a vertex for its id, coordinates, constraints and flags; body centre-of-mass markers.
 - **Panels**: named quantities + energy breakdown; mesh-quality and physics settings (min area/length, gravity, pressure).
 - **Export** the current surface as `.fe` or an exact-state `.dmp`.
-- **Auto-restore** — your evolved surface comes back after a restart.
+- **Auto-restore** — the surface is snapshotted in the background after every mutating command, and your evolved state comes back after a restart (opening a file first always wins over the restored session).
 
 ## What you can't do (yet)
 
@@ -33,6 +33,7 @@ This project drives the original C engine directly through `bun:ffi`, so you get
 - **Curved (Lagrange/quadratic) patches render as straight edges** — you'll see a warning in the log; the geometry is approximate.
 - **Attributes defined in a datafile's *command* section** don't appear in the colour/inspector lists until the file is reloaded (header-defined attributes are fine).
 - **Closing the active tab clears the viewer** — it doesn't auto-switch to another open file.
+- **Interactive commands can hang the engine** — bare single-letter commands that prompt for keyboard input (`f`, `G`, …) are rejected with a clear error, but a compound like `f; g` slips through and blocks the worker. Recover by reloading the file (each load spawns a fresh engine process).
 - **Distributables are ad-hoc signed, not notarized** — on first open macOS warns it "cannot verify the app is free of malware": right-click → Open, or `xattr -dr com.apple.quarantine "/Applications/Surface Evolver.app"`.
 
 ## Overall architecture
