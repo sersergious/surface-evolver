@@ -49,11 +49,14 @@ int se_get_body_count(void);
 
 /* ── mesh geometry ────────────────────────────────────────────────────── */
 
-/* Fill out[0..n*sdim-1] with vertex coordinates packed as
+/* Fill out[0..n*3-1] with vertex coordinates packed as
  *   [x0,y0,z0,  x1,y1,z1, ...]
- * where sdim = se_get_sdim() and n = min(vertex_count, max_count).
+ * where n = min(vertex_count, max_count).
+ * The stride is ALWAYS 3, independent of se_get_sdim(): coordinates beyond
+ * sdim are zero-padded (2-D models render flat) and only the first 3 are kept
+ * for sdim > 3 (e.g. simplex sdim=4). Callers therefore get a uniform layout.
  * Returns number of vertices written, or -1 on error.
- * Caller must allocate: double out[max_count * se_get_sdim()]. */
+ * Caller must allocate: double out[max_count * 3]. */
 int se_get_vertices(double *out, int max_count);
 
 /* Fill ids[0..n-1] with the 1-based SE ordinal for each vertex in the
@@ -153,9 +156,10 @@ int se_get_body_cm(int body_idx, double *out_xyz);
 /* ── element inspector ────────────────────────────────────────────────── */
 
 /* Detail for the vertex at sequential position `vpos` (se_get_vertices order).
- * out_id/out_xyz/out_attr/out_cons may be NULL. attr bits: FIXED 0x40,
- * BOUNDARY 0x80, CONSTRAINT 0x400. Returns the number of constraints on the
- * vertex (may exceed cons_max), or -1 on error / out-of-range. */
+ * out_id/out_xyz/out_attr/out_cons may be NULL. out_xyz takes ALWAYS 3 doubles
+ * (same fixed stride and zero-padding as se_get_vertices, not sdim).
+ * attr bits: FIXED 0x40, BOUNDARY 0x80, CONSTRAINT 0x400. Returns the number of
+ * constraints on the vertex (may exceed cons_max), or -1 on error / out-of-range. */
 int se_get_vertex_info(int vpos, int *out_id, double *out_xyz, int *out_attr,
                        int *out_cons, int cons_max);
 

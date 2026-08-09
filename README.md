@@ -6,7 +6,7 @@ A native **desktop app** for Mac, Linux, and Windows that wraps the [Surface Evo
 
 Surface Evolver minimizes the energy of surfaces subject to constraints — volumes, pressures, boundary conditions — using gradient descent and other methods. It's widely used in physics, materials science, and computational geometry.
 
-This project drives the original C engine directly through `bun:ffi`, so you get the full Surface Evolver command language in the CLI pane, plus first-class UI for the common workflow (load → evolve → refine → inspect → export) and a WebGL viewer that renders the mesh as it evolves.
+This project drives the original C engine directly over FFI from a small Rust sidecar, so you get the full Surface Evolver command language in the CLI pane, plus first-class UI for the common workflow (load → evolve → refine → inspect → export) and a WebGL viewer that renders the mesh as it evolves.
 
 ## What you can do
 
@@ -49,8 +49,8 @@ flowchart TD
     end
     UI <-->|"Tauri invoke — rpc(method, params)"| Main["Rust backend<br/>src-tauri/src/rpc.rs"]
     Main -->|"spawn per session"| Mgr["worker.rs<br/>worker lifecycle + mutex"]
-    Mgr <-->|"line-delimited JSON<br/>over stdin/stdout"| Worker["se-worker sidecar<br/>owns one libse instance"]
-    Worker <-->|"bun:ffi dlopen"| Lib["libse<br/>(headless shared library)"]
+    Mgr <-->|"line-delimited JSON<br/>over stdin/stdout"| Worker["se-worker sidecar (Rust)<br/>owns one libse instance"]
+    Worker <-->|"dlopen (libloading)"| Lib["libse<br/>(headless shared library)"]
     Lib --> Engine["Surface Evolver C engine<br/>engine/src — ~117 files"]
     Main -->|"auto-snapshot / restore"| Persist["last-session.json<br/>~/.surface-evolver"]
 ```
@@ -64,7 +64,7 @@ flowchart LR
     View["client.ts<br/>rpc(method, params)"] -->|"Tauri invoke"| RPC["RPC dispatch<br/>src-tauri/src/rpc.rs"]
     RPC --> Mgr["worker.rs<br/>mutex-serialized"]
     Mgr -->|"cmd: load · run · mesh · topo …"| Worker["se-worker sidecar"]
-    Worker -->|"bun:ffi"| Facade["se_api.c / se_api.h<br/>C facade (37 functions)"]
+    Worker -->|"FFI"| Facade["se_api.c / se_api.h<br/>C facade (37 functions)"]
     Facade --> Core["engine/src<br/>parser · command loop<br/>gradient descent · topology"]
 ```
 
@@ -76,7 +76,7 @@ The C facade (`engine/bindings/c/se_api.h`) exposes structured getters/setters �
 |---|---|
 | Core engine | C — parser, gradient descent, mesh topology (~117 files, flat upstream layout) |
 | C API | `engine/bindings/c/se_api.{h,c}` — 37-function facade with stdout/stderr capture |
-| Native binding | `bun:ffi` `dlopen` in a bun-compiled worker sidecar |
+| Native binding | `dlopen` via `libloading`, in a 345 KB Rust worker sidecar |
 | Desktop shell | Tauri v2 (Rust, native WKWebView / WebKitGTK / WebView2) |
 | 3D rendering | Three.js + @react-three/fiber + drei |
 | Frontend | React + Vite, Zustand store, Tailwind + daisyUI, heroicons |
@@ -97,7 +97,7 @@ surface-evolver/
 │   ├── src/menu.rs             # Native menu bar
 │   ├── capabilities/           # Tauri ACL (window drag, events, opener)
 │   └── tauri.conf.json         # Bundle config (resources, sidecar, window)
-├── worker/se-worker.ts         # Worker: owns libse via bun:ffi (ships bun-compiled)
+├── worker-rs/                  # Rust worker sidecar: owns one libse instance over FFI
 ├── ui/src/                     # React + Vite frontend
 │   ├── components/             # FilePane, CliPane, EditorPane, ViewerPane
 │   ├── store/                  # Zustand store (single source of truth)
