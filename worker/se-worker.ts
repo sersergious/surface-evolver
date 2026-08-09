@@ -21,11 +21,19 @@ const SE_LIB_PATH = process.env.SE_LIB_PATH ?? "/app/libse.so";
 
 let lib: ReturnType<typeof dlopen<typeof SYMBOLS>>["symbols"];
 
-// NOTE: several symbols below are declared but not yet called (colormap/scalar-
-// field plumbing). Keep them: removing entries changes the compiled binary
-// layout and bun 1.3.14's output can become unsignable (codesign "internal
-// error") — verify `codesign --remove-signature` works on the sidecar if you
-// edit this file. See scripts/tauri-before.ts.
+// Every symbol here must exist in libse: bun:ffi `dlopen` throws on the first
+// missing one, so this table and engine/bindings/c/se_api.h have to stay in
+// lockstep — deleting a C accessor means deleting its entry here too.
+//
+// CODESIGN HAZARD: editing this file changes the compiled sidecar's binary
+// layout, and bun 1.3.14 can emit output that fails codesign strict validation
+// ("internal error in Code Signing subsystem"), which breaks the whole macOS
+// bundle build. scripts/tauri-before.ts strips and re-signs to compensate, but
+// that cannot rescue an already-bad layout. After ANY edit here, verify:
+//     bun build --compile --outfile /tmp/probe worker/se-worker.ts
+//     codesign --remove-signature /tmp/probe && codesign --force -s - /tmp/probe
+// If it errors, nudge this file's content (whitespace/comment length) until it
+// signs. This is a bun bug, not a problem with the table below.
 const SYMBOLS = {
   se_init:             { returns: FFIType.int,     args: [] },
   se_load:             { returns: FFIType.int,     args: [FFIType.ptr] },
@@ -58,21 +66,9 @@ const SYMBOLS = {
   se_get_method_instance:           { returns: FFIType.int, args: [FFIType.int, FFIType.ptr, FFIType.int, FFIType.ptr, FFIType.ptr] },
   se_get_body_cm:                   { returns: FFIType.int, args: [FFIType.int, FFIType.ptr] },
   se_get_facet_colors:              { returns: FFIType.int, args: [FFIType.ptr, FFIType.ptr, FFIType.int] },
-  se_get_facet_normals:             { returns: FFIType.int, args: [FFIType.ptr, FFIType.int] },
   se_get_edge_colors:               { returns: FFIType.int, args: [FFIType.ptr, FFIType.int] },
-  se_get_edge_lengths:              { returns: FFIType.int, args: [FFIType.ptr, FFIType.int] },
-  se_get_edge_densities:            { returns: FFIType.int, args: [FFIType.ptr, FFIType.int] },
-  se_get_attribute_count:           { returns: FFIType.int, args: [FFIType.int] },
-  se_get_attribute_info:            { returns: FFIType.int, args: [FFIType.int, FFIType.int, FFIType.ptr, FFIType.int, FFIType.ptr] },
-  se_get_attribute_values:          { returns: FFIType.int, args: [FFIType.int, FFIType.int, FFIType.ptr, FFIType.int] },
   se_get_vertex_info:               { returns: FFIType.int, args: [FFIType.int, FFIType.ptr, FFIType.ptr, FFIType.ptr, FFIType.ptr, FFIType.int] },
   se_get_constraint_name:           { returns: FFIType.int, args: [FFIType.int, FFIType.ptr, FFIType.int] },
-  se_get_vertex_mean_curvatures:    { returns: FFIType.int, args: [FFIType.ptr, FFIType.int] },
-  se_get_vertex_valences:           { returns: FFIType.int, args: [FFIType.ptr, FFIType.int] },
-  se_get_vertex_star_areas:         { returns: FFIType.int, args: [FFIType.ptr, FFIType.int] },
-  se_get_vertex_force_mags:         { returns: FFIType.int, args: [FFIType.ptr, FFIType.int] },
-  se_get_vertex_energy_density:     { returns: FFIType.int, args: [FFIType.ptr, FFIType.int] },
-  se_get_vertex_gaussian_curvatures:{ returns: FFIType.int, args: [FFIType.ptr, FFIType.int] },
   se_pop_output:       { returns: FFIType.int,     args: [FFIType.ptr, FFIType.int] },
   se_pop_errout:       { returns: FFIType.int,     args: [FFIType.ptr, FFIType.int] },
   se_last_error:       { returns: FFIType.cstring, args: [] },

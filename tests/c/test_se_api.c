@@ -305,75 +305,6 @@ static void test_run_error(void)
     CHECK(rc != 0 || strlen(err) > 0);
 }
 
-static void test_mean_curvatures(void)
-{
-    SECTION("se_get_vertex_mean_curvatures — basic sanity");
-    int n = se_get_vertex_count();
-    CHECK(n > 0);
-
-    double *H = malloc((size_t)n * sizeof(double));
-    int written = se_get_vertex_mean_curvatures(H, n);
-    CHECK(written == n);
-
-    int all_finite = 1, all_nonneg = 1;
-    for (int i = 0; i < written; i++) {
-        if (!isfinite(H[i])) { all_finite  = 0; break; }
-        if (H[i] < 0.0)      { all_nonneg  = 0; break; }
-    }
-    CHECK(all_finite);
-    CHECK(all_nonneg);
-
-    free(H);
-}
-
-static void test_vertex_scalars(void)
-{
-    SECTION("Phase 1 vertex scalar fields");
-    int n = se_get_vertex_count();
-    CHECK(n > 0);
-
-    int    *val = malloc((size_t)n * sizeof(int));
-    double *buf = malloc((size_t)n * sizeof(double));
-
-    /* valence: counted from edges, every vertex in a closed mesh has >= 3 */
-    int vn = se_get_vertex_valences(val, n);
-    CHECK(vn == n);
-    int valence_ok = 1;
-    for (int i = 0; i < vn; i++) if (val[i] < 1) { valence_ok = 0; break; }
-    CHECK(valence_ok);
-
-    /* star area: finite and strictly positive */
-    int sn = se_get_vertex_star_areas(buf, n);
-    CHECK(sn == n);
-    int star_ok = 1;
-    for (int i = 0; i < sn; i++) if (!isfinite(buf[i]) || buf[i] <= 0.0) { star_ok = 0; break; }
-    CHECK(star_ok);
-
-    /* force magnitude: finite, non-negative (zero before iterating is fine) */
-    int fn = se_get_vertex_force_mags(buf, n);
-    CHECK(fn == n);
-    int force_ok = 1;
-    for (int i = 0; i < fn; i++) if (!isfinite(buf[i]) || buf[i] < 0.0) { force_ok = 0; break; }
-    CHECK(force_ok);
-
-    /* energy density: finite, non-negative */
-    int en = se_get_vertex_energy_density(buf, n);
-    CHECK(en == n);
-    int energy_ok = 1;
-    for (int i = 0; i < en; i++) if (!isfinite(buf[i]) || buf[i] < 0.0) { energy_ok = 0; break; }
-    CHECK(energy_ok);
-
-    /* gaussian curvature: finite (sign may be either) */
-    int gn = se_get_vertex_gaussian_curvatures(buf, n);
-    CHECK(gn == n);
-    int gauss_ok = 1;
-    for (int i = 0; i < gn; i++) if (!isfinite(buf[i])) { gauss_ok = 0; break; }
-    CHECK(gauss_ok);
-
-    free(val);
-    free(buf);
-}
-
 static void test_topo_and_params(void)
 {
     SECTION("topo counts / mesh params / total_time");
@@ -476,57 +407,17 @@ static void test_physics_and_params(void)
     CHECK(fabs(mp[1] - 0.2) < 1e-9 && fabs(mp[2] - 0.9) < 1e-9 && fabs(mp[3] - 0.1) < 1e-9);
 }
 
-static void test_colors_normals_attrs(void)
+static void test_element_colors(void)
 {
-    SECTION("element colours / normals / edge metrics / attributes");
+    SECTION("element colours");
 
     /* phelanc.fe assigns facet colours. */
     if (se_load(FE_DIR "/phelanc.fe") == 0) {
         drain();
-        int nf = se_get_facet_count(), ne = se_get_edge_count();
+        int nf = se_get_facet_count();
         int *fc = malloc((size_t)nf * sizeof(int));
         CHECK(se_get_facet_colors(fc, NULL, nf) == nf);
-
-        double *nrm = malloc((size_t)nf * 3 * sizeof(double));
-        int nn = se_get_facet_normals(nrm, nf);
-        CHECK(nn == nf);
-        int unit_ok = nn > 0;
-        for (int i = 0; i < nn; i++) {
-            double m = sqrt(nrm[i*3]*nrm[i*3] + nrm[i*3+1]*nrm[i*3+1] + nrm[i*3+2]*nrm[i*3+2]);
-            if (fabs(m - 1.0) > 1e-6) { unit_ok = 0; break; }
-        }
-        CHECK(unit_ok);   /* normals must be unit length */
-
-        double *el = malloc((size_t)ne * sizeof(double));
-        int en = se_get_edge_lengths(el, ne);
-        CHECK(en == ne);
-        int len_ok = en > 0;
-        for (int i = 0; i < en; i++) if (!isfinite(el[i]) || el[i] <= 0) { len_ok = 0; break; }
-        CHECK(len_ok);
-        free(fc); free(nrm); free(el);
-    }
-
-    /* addload_example.fe: user `define edge attribute angle real`; built-in
-     * `density` must be filtered out (it reads garbage at a naive offset). */
-    if (se_load(FE_DIR "/addload_example.fe") == 0) {
-        drain();
-        int ne = se_get_edge_count();
-        int ac = se_get_attribute_count(1);     /* EDGE = 1 */
-        CHECK(ac > 0);
-        int found_angle = 0, found_density_readable = 0;
-        for (int i = 0; i < ac; i++) {
-            char nm[128] = {0}; int ty = 0;
-            int r = se_get_attribute_info(1, i, nm, sizeof(nm), &ty);
-            if (strcmp(nm, "angle") == 0 && r == 0) {
-                found_angle = 1;
-                double *v = malloc((size_t)(ne + 1) * sizeof(double));
-                CHECK(se_get_attribute_values(1, i, v, ne) == ne);   /* count matches */
-                free(v);
-            }
-            if (strcmp(nm, "density") == 0 && r == 0) found_density_readable = 1;
-        }
-        CHECK(found_angle);                 /* user attr exposed */
-        CHECK(!found_density_readable);     /* built-in filtered */
+        free(fc);
     }
 }
 
@@ -554,12 +445,10 @@ int main(void)
     test_body_cm_and_inspector();
     test_output_capture();
     test_run_error();
-    test_mean_curvatures();
-    test_vertex_scalars();
     test_topo_and_params();   /* mutates the mesh (refine) */
     test_quantities();        /* loads a different datafile */
     test_physics_and_params();
-    test_colors_normals_attrs();
+    test_element_colors();
 
     printf("\n=================================\n");
     printf("Results: %d/%d passed\n", g_run - g_failed, g_run);

@@ -22,11 +22,16 @@ See the Foam section.
 
 Full commit history in `git log`. Headline:
 
-- **Engine API** (`se_api`): geometry (verts/edges/facets), normals, edge
-  length/density, counts, energy/area/scale/sdim, bounding box, body
-  volumes/pressure/CM, quantities + energy methods, physics, mesh params, vertex
-  info + constraints, generic attributes, topo counters, curvatures/valence.
-  Headless-excluded globals (bbox, normals, CM) self-recomputed in `se_api.c`.
+- **Engine API** (`se_api`): geometry (verts/edges/facets), element colours,
+  counts, energy/area/scale/sdim, bounding box, body volumes/pressure/CM,
+  quantities + energy methods, physics, mesh params, vertex info + constraints,
+  topo counters. Headless-excluded globals (bbox, CM) self-recomputed in
+  `se_api.c`. **Trimmed 2026-08-07** to the 37 accessors the app actually calls
+  — 12 never-called ones (facet normals, edge length/density, generic
+  attributes, and the six vertex scalar fields) were deleted, taking `se_api.c`
+  from 1343 → 856 lines. Restore any of them from git history if a feature needs
+  one; deleting a C accessor also requires deleting its `SYMBOLS` entry in
+  `worker/se-worker.ts` (`dlopen` throws on a missing symbol).
 - **App**: open-files tabs + modal file browser; CLI (full command access) +
   Run-menu topology (refine/equi/vertex-avg/pop) + iterate; 3D viewer with
   render modes, **native SE per-element colours**, all-edge overlay, inspect/pick,
@@ -160,15 +165,19 @@ surface irreversibly — warn before running. **S–M**
    defining needs CLI/`.fe`. Form → command string. **L**
 
 ### P3 — low / niche
-7. **Element-colour render path for edge/facet/body attributes** — these attrs
+7. **Element-colour render path for edge/facet/body attributes** — ⚠ the
+   `se_get_attribute_*` accessors were **deleted** in the 2026-08-07 trim;
+   restore them from git history before building this. These attrs
    are readable in C but only the (removed) vertex-colormap path consumed them;
    a categorical per-element render path would surface them + fixed/constraint
    vertex colouring at a glance. Note `edge_colors` is already computed and sent
    and simply not read by the UI, and facet *back* colours are computed in C then
    dropped by the worker. See F4 — the body case additionally needs new C. **M**
-8. **Engine facet normals → optional flat-shaded overlay** — `se_get_facet_normals`
-   exists but isn't wired to shading (would regress the smooth default). Make it
-   an opt-in toggle. **S**
+8. **Engine facet normals → optional flat-shaded overlay** — ⚠
+   `se_get_facet_normals` was **deleted** in the 2026-08-07 trim; restore from
+   git history first (it was a thin wrapper over the engine's
+   `get_facet_normal`, ~29 lines). Then wire it as an opt-in toggle — making it
+   the default would regress the smooth shading. **S**
 9. **Refresh attribute list after `recalc`** — attrs defined in a datafile's
    command section aren't in the load-time list (header-defined only). **S**
 10. **SIMPLEX geometry rendering** — `SIMPLEX_REPRESENTATION` files (e.g.

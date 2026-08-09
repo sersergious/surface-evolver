@@ -81,29 +81,8 @@ int se_get_edges(int *out, int max_count);
  * Either array may be NULL. Returns count, or -1. CLEAR = -1. */
 int se_get_facet_colors(int *front, int *back, int max_count);
 
-/* Engine outward normal per facet, packed [nx,ny,nz,...] in se_get_facets row
- * order (SOAPFILM + sdim 3). Returns count, or -1. */
-int se_get_facet_normals(double *out, int max_count);
-
-/* Per-edge colour index / length / line-density, in se_get_edges row order.
- * Returns count, or -1. */
+/* Per-edge colour index, in se_get_edges row order. Returns count, or -1. */
 int se_get_edge_colors(int *out, int max_count);
-int se_get_edge_lengths(double *out, int max_count);
-int se_get_edge_densities(double *out, int max_count);
-
-/* ── generic user-defined attributes ──────────────────────────────────── */
-/* elem_type: VERTEX=0 EDGE=1 FACET=2 BODY=3. */
-
-/* Number of attribute slots for an element type, or -1. */
-int se_get_attribute_count(int elem_type);
-
-/* name/type of attribute `idx`. Returns 0 if a readable numeric scalar, 1 to
- * skip (internal/array/function/non-numeric), -1 on error. */
-int se_get_attribute_info(int elem_type, int idx, char *name, int name_size, int *type_out);
-
-/* Per-element scalar value (cast to double) in element row order. Returns
- * count, or -1 if not a readable numeric scalar. */
-int se_get_attribute_values(int elem_type, int idx, double *out, int max_count);
 
 /* Axis-aligned bounds over sdim coords, computed from vertex positions.
  * out_min[] / out_max[] must hold se_get_sdim() doubles each.
@@ -114,32 +93,6 @@ int se_get_bounding_box(double *out_min, double *out_max);
  * control vertices exist and the linear render is wrong — UI should warn.
  * Returns the order, or -1 if uninitialised. */
 int se_get_lagrange_order(void);
-
-/* ── vertex scalar fields ─────────────────────────────────────────────── */
-
-/* Fill out[0..n-1] with the discrete mean curvature at each vertex
- * (cotangent-Laplacian formula, unsigned scalar |H|).
- * n = min(vertex_count, max_count).
- * Returns number of vertices written, or -1 on error / unsupported surface. */
-int se_get_vertex_mean_curvatures(double *out, int max_count);
-
-/* Incident-edge count per vertex (one int each). Returns count or -1. */
-int se_get_vertex_valences(int *out, int max_count);
-
-/* Barycentric facet-star area per vertex (one double each). Returns count or -1. */
-int se_get_vertex_star_areas(double *out, int max_count);
-
-/* Magnitude of the per-vertex force vector (zero until an iteration runs).
- * Returns count or -1. */
-int se_get_vertex_force_mags(double *out, int max_count);
-
-/* Vertex-averaged surface energy (Σ incident facet area×density ÷ 3).
- * SOAPFILM only; returns count, 0 for other representations, -1 on error. */
-int se_get_vertex_energy_density(double *out, int max_count);
-
-/* Discrete Gaussian curvature per vertex, (2π − Σ angles) / star_area.
- * SOAPFILM + sdim 3; returns count or -1. */
-int se_get_vertex_gaussian_curvatures(double *out, int max_count);
 
 /* ── topology counters & mesh params ──────────────────────────────────── */
 
