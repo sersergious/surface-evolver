@@ -51,3 +51,4 @@ test-design.md
 
 # Bun compiled scratch binaries
 .*.bun-build
+worker-rs/target/
