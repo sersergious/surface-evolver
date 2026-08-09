@@ -168,6 +168,9 @@ ctest --test-dir cmake-build-debug --output-on-failure
 # Rust backend check
 cd src-tauri && cargo check
 
+# Worker sidecar tests (needs a built libse; smoke tests skip without it)
+cd worker-rs && SE_LIB_PATH=$PWD/../cmake-build-debug/libse.dylib cargo test
+
 # Frontend type-check
 cd ui && bunx tsc --noEmit
 ```

@@ -1,6 +1,6 @@
 # Backlog
 
-Branch `main`. Last reorg 2026-08-07 (foam audit; ported to Tauri since the
+Branch `main`. Last reorg 2026-08-09 (foam audit, se_api trim, Rust worker port; ported to Tauri since the
 previous pass — the app is no longer Electrobun and `src/main/src/index.ts` is
 gone, its handlers now live in `src-tauri/src/rpc.rs`).
 
@@ -26,14 +26,16 @@ Full commit history in `git log`. Headline:
   counts, energy/area/scale/sdim, bounding box, body volumes/pressure/CM,
   quantities + energy methods, physics, mesh params, vertex info + constraints,
   topo counters. Headless-excluded globals (bbox, CM) self-recomputed in
-  `se_api.c`. **Trimmed 2026-08-07** to the 37 accessors the app actually calls
+  `se_api.c`. **Trimmed 2026-08-08** to the 37 accessors the app actually calls
   — 12 never-called ones (facet normals, edge length/density, generic
   attributes, and the six vertex scalar fields) were deleted, taking `se_api.c`
   from 1343 → 856 lines. Restore any of them from git history if a feature needs
   one; deleting a C accessor also requires deleting its declaration in
   `worker-rs/src/ffi.rs`, which must stay in lockstep with `se_api.h`.
 - **Worker**: ported from the bun:ffi sidecar to a Rust one (`worker-rs/`)
-  on 2026-08-07 — 58 MB → 345 KB, and the bun codesign workaround is gone.
+  on 2026-08-08 — 58 MB → 345 KB, and the bun codesign workaround is gone.
+  Guarded by `worker-rs/tests/` (FFI-signature drift + a stdin/stdout smoke
+  suite); the worker previously had no tests at all.
 - **App**: open-files tabs + modal file browser; CLI (full command access) +
   Run-menu topology (refine/equi/vertex-avg/pop) + iterate; 3D viewer with
   render modes, **native SE per-element colours**, all-edge overlay, inspect/pick,
@@ -168,7 +170,7 @@ surface irreversibly — warn before running. **S–M**
 
 ### P3 — low / niche
 7. **Element-colour render path for edge/facet/body attributes** — ⚠ the
-   `se_get_attribute_*` accessors were **deleted** in the 2026-08-07 trim;
+   `se_get_attribute_*` accessors were **deleted** in the 2026-08-08 trim;
    restore them from git history before building this. These attrs
    are readable in C but only the (removed) vertex-colormap path consumed them;
    a categorical per-element render path would surface them + fixed/constraint
@@ -176,7 +178,7 @@ surface irreversibly — warn before running. **S–M**
    and simply not read by the UI, and facet *back* colours are computed in C then
    dropped by the worker. See F4 — the body case additionally needs new C. **M**
 8. **Engine facet normals → optional flat-shaded overlay** — ⚠
-   `se_get_facet_normals` was **deleted** in the 2026-08-07 trim; restore from
+   `se_get_facet_normals` was **deleted** in the 2026-08-08 trim; restore from
    git history first (it was a thin wrapper over the engine's
    `get_facet_normal`, ~29 lines). Then wire it as an opt-in toggle — making it
    the default would regress the smooth shading. **S**
@@ -201,8 +203,9 @@ surface irreversibly — warn before running. **S–M**
 
 - **`server.ts` HTTP/WS parity** — dead code; nothing launches or imports it.
 - **Worker heartbeat for long `se_run`** — a blocking FFI call can't emit
-  progress on the worker's single JS thread. The first half of that assessment
-  stands; the old "`iterate` batch-chunking covers it" claim does **not** — there
+  progress while it is blocked (this was true of the old single-threaded JS
+  worker and is equally true of the Rust one, which handles requests serially).
+  The first half of that assessment stands; the old "`iterate` batch-chunking covers it" claim does **not** — there
   is no `iterate` command in the worker (cmds are `load`, `run`, `mesh`,
   `set_scale`, `topo`, `quantities`, `vertex_info`, `settings`, `set_settings`,
   `dump`), and nothing emits the `{"type":"progress"}` message the protocol
