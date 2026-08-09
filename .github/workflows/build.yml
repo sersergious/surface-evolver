@@ -38,7 +38,9 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: src-tauri
+          workspaces: |
+            src-tauri
+            worker-rs
 
       # Tauri v2 Linux build deps (webkit2gtk renderer).
       # (cmake + a C toolchain are preinstalled on GitHub runners.)
@@ -74,8 +76,12 @@ jobs:
         if: runner.os == 'macOS'
         run: bunx tauri build
 
-      # AppImage is off: linuxdeploy's gtk plugin ldd's every AppDir executable
-      # and aborts on the statically-linked bun-compiled se-worker sidecar.
+      # AppImage is off. The original cause was linuxdeploy's gtk plugin running
+      # ldd over every AppDir executable and aborting on the statically-linked
+      # bun-compiled sidecar. That sidecar is gone — the Rust one is a normal
+      # dynamically-linked binary that ldd handles — so this is very likely
+      # fixable now by adding `appimage` back to --bundles. Left off until
+      # someone verifies it on a Linux runner rather than flipping it blind.
       - name: Build app (Linux → .deb)
         if: runner.os == 'Linux'
         run: bunx tauri build --bundles deb
