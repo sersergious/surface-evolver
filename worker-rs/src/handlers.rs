@@ -173,7 +173,10 @@ impl Worker {
         if vcount > 0 {
             let mut vbuf = vec![0f64; vcount as usize * 3];
             let mut idbuf = vec![0i32; vcount as usize];
-            let vn = unsafe { (self.se.get_vertices)(vbuf.as_mut_ptr(), vcount) };
+            // Clamp: the loop indexes vbuf, so trust the buffer size over the
+            // C return value. se_api.c never exceeds max_count, but an
+            // out-of-range return here would be an abort (panic = "abort").
+            let vn = unsafe { (self.se.get_vertices)(vbuf.as_mut_ptr(), vcount) }.clamp(0, vcount);
             unsafe { (self.se.get_vertex_ids)(idbuf.as_mut_ptr(), vcount) };
             for i in 0..vn.max(0) as usize {
                 vertices.push(json!([vbuf[i * 3], vbuf[i * 3 + 1], vbuf[i * 3 + 2]]));
@@ -185,7 +188,7 @@ impl Worker {
         let mut facets: Vec<Value> = Vec::new();
         if fcount > 0 {
             let mut fbuf = vec![0i32; fcount as usize * 3];
-            let fn_ = unsafe { (self.se.get_facets)(fbuf.as_mut_ptr(), fcount) };
+            let fn_ = unsafe { (self.se.get_facets)(fbuf.as_mut_ptr(), fcount) }.clamp(0, fcount);
             for i in 0..fn_.max(0) as usize {
                 facets.push(json!([fbuf[i * 3], fbuf[i * 3 + 1], fbuf[i * 3 + 2]]));
             }
@@ -195,7 +198,7 @@ impl Worker {
         let mut edges: Vec<Value> = Vec::new();
         if ecount > 0 {
             let mut ebuf = vec![0i32; ecount as usize * 2];
-            let en = unsafe { (self.se.get_edges)(ebuf.as_mut_ptr(), ecount) };
+            let en = unsafe { (self.se.get_edges)(ebuf.as_mut_ptr(), ecount) }.clamp(0, ecount);
             for i in 0..en.max(0) as usize {
                 edges.push(json!([ebuf[i * 2], ebuf[i * 2 + 1]]));
             }
@@ -243,12 +246,12 @@ impl Worker {
                 let cn = unsafe {
                     (self.se.get_facet_colors)(front.as_mut_ptr(), back.as_mut_ptr(), fcount)
                 };
-                facet_colors.extend_from_slice(&front[..cn.max(0) as usize]);
+                facet_colors.extend_from_slice(&front[..cn.clamp(0, fcount) as usize]);
             }
             if ecount > 0 {
                 let mut ec = vec![0i32; ecount as usize];
                 let cn = unsafe { (self.se.get_edge_colors)(ec.as_mut_ptr(), ecount) };
-                edge_colors.extend_from_slice(&ec[..cn.max(0) as usize]);
+                edge_colors.extend_from_slice(&ec[..cn.clamp(0, ecount) as usize]);
             }
             out.insert("facet_colors".into(), json!(facet_colors));
             out.insert("edge_colors".into(), json!(edge_colors));
@@ -430,19 +433,14 @@ impl Worker {
         if let Some(m) = req["mesh_params"].as_object() {
             // Validate in the declared field order so the error names the same
             // field the TS would have named.
-            for k in ["min_area", "min_length", "max_len", "temperature"] {
-                let v = m.get(k).and_then(|v| v.as_f64());
-                match v {
-                    Some(v) if v.is_finite() && v > 0.0 => {}
+            let mut vals = [0f64; 4];
+            for (i, k) in ["min_area", "min_length", "max_len", "temperature"].iter().enumerate() {
+                match m.get(*k).and_then(|v| v.as_f64()) {
+                    Some(v) if v.is_finite() && v > 0.0 => vals[i] = v,
                     _ => return json!({ "ok": false, "error": format!("invalid {k}: must be a positive finite number") }),
                 }
             }
-            unsafe {
-                (self.se.set_mesh_params)(
-                    m["min_area"].as_f64().unwrap(), m["min_length"].as_f64().unwrap(),
-                    m["max_len"].as_f64().unwrap(), m["temperature"].as_f64().unwrap(),
-                )
-            };
+            unsafe { (self.se.set_mesh_params)(vals[0], vals[1], vals[2], vals[3]) };
         }
         if let Some(p) = req["physics"].as_object() {
             // grav/pressure may legitimately be negative or zero -> finite only.

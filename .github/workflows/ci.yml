@@ -44,7 +44,7 @@ jobs:
       - name: Run C API tests (ctest)
         run: ctest --test-dir build --output-on-failure --timeout 120
 
-  # ── Rust backend: type-check the Tauri app crate ─────────────────────────────
+  # ── Rust: type-check the Tauri app crate + test the worker sidecar ───────────
   backend-tests:
     name: Rust backend check
     runs-on: ubuntu-latest
@@ -56,7 +56,9 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: src-tauri
+          workspaces: |
+            src-tauri
+            worker-rs
 
       - name: Tauri v2 Linux build deps
         run: |
@@ -76,6 +78,20 @@ jobs:
       - name: cargo check
         working-directory: src-tauri
         run: cargo check --locked
+
+      # The worker's tests need a real libse: the signature guard reads the C
+      # header, and the smoke tests drive the built binary against the engine.
+      - name: Build libse (headless) for the worker tests
+        run: |
+          sudo apt-get install -y --no-install-recommends cmake build-essential
+          cmake -B build -DCMAKE_BUILD_TYPE=Release -DSE_HEADLESS=ON -DBUILD_TESTS=OFF
+          cmake --build build --parallel 4
+
+      - name: Worker tests (ffi signature guard + smoke)
+        working-directory: worker-rs
+        env:
+          SE_LIB_PATH: ${{ github.workspace }}/build/libse.so
+        run: cargo test --locked
 
   # ── Frontend type-check, unit tests, production build ────────────────────────
   frontend-tests:
