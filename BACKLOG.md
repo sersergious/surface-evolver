@@ -30,8 +30,10 @@ Full commit history in `git log`. Headline:
   — 12 never-called ones (facet normals, edge length/density, generic
   attributes, and the six vertex scalar fields) were deleted, taking `se_api.c`
   from 1343 → 856 lines. Restore any of them from git history if a feature needs
-  one; deleting a C accessor also requires deleting its `SYMBOLS` entry in
-  `worker/se-worker.ts` (`dlopen` throws on a missing symbol).
+  one; deleting a C accessor also requires deleting its declaration in
+  `worker-rs/src/ffi.rs`, which must stay in lockstep with `se_api.h`.
+- **Worker**: ported from the bun:ffi sidecar to a Rust one (`worker-rs/`)
+  on 2026-08-07 — 58 MB → 345 KB, and the bun codesign workaround is gone.
 - **App**: open-files tabs + modal file browser; CLI (full command access) +
   Run-menu topology (refine/equi/vertex-avg/pop) + iterate; 3D viewer with
   render modes, **native SE per-element colours**, all-edge overlay, inspect/pick,
