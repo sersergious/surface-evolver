@@ -49,7 +49,25 @@ Full commit history in `git log`. Headline:
 - **Platform**: ported to Tauri v2 (Rust backend + `se-worker` sidecar);
   macOS/Linux/Windows CI (libse on Windows via MinGW/MSYS2).
 - **Removed this cycle** (intentional, not gaps): scalar heatmap colormaps,
-  quick-command button bar, Docs feature, `react-router-dom`.
+  quick-command button bar, Docs feature, `react-router-dom`, and the
+  `worker/se-worker.ts` bun sidecar (superseded by `worker-rs/`).
+
+### Accepted risks (assessed, deliberately not fixed)
+
+- **`panic = "abort"` in the worker.** A genuine bug kills the sidecar instead
+  of returning `{ok:false}`. `worker.rs` recovers ("engine process crashed —
+  reload"), but the session is lost. The old TS catch-all kept the process
+  alive with the engine in an undefined state, which is not clearly better.
+- **`se_get_edge_colors` has no C test.** It is used by `mesh` and is covered
+  indirectly by `worker-rs/tests/smoke.rs`, but not at the C layer. **S** to fix.
+- **Stricter-than-TS input handling in the Rust worker**, both unreachable from
+  our own frontend: a partial `mesh_params` now errors instead of passing
+  `undefined` into C, and a non-boolean `colors` is ignored rather than treated
+  as truthy.
+- **AppImage is still disabled** — but the original cause (linuxdeploy `ldd`-ing
+  the statically-linked bun binary) is gone with that binary. Adding `appimage`
+  back to `--bundles` in `build.yml` is likely all that is needed; it just has
+  to be verified on a Linux runner. **S**
 
 ---
 
@@ -79,9 +97,47 @@ unless noted.
    `saddle`. Reuse the existing `runTopo`/Run-menu pattern; each is a button +
    `se_run`. **S**
 
+### P2 — medium
+4. **Macros (gogo-style)** — store `{name, body}` app-side, run by sending the
+   body via `runCommand` (survives file switches, no engine re-registration).
+   Panel with Run/edit/delete + "save last CLI command". **M**
+5. **Structured `list` / `print` / `histogram`** — today raw text in the log;
+   parse `se_pop_output` into a table/chart. **S–M**
+6. **Define quantities / constraints / methods UI** — currently view-only;
+   defining needs CLI/`.fe`. Form → command string. **L**
+
+### P3 — low / niche
+7. **Element-colour render path for edge/facet/body attributes** — ⚠ the
+   `se_get_attribute_*` accessors were **deleted** in the 2026-08-08 trim;
+   restore them from git history before building this. These attrs
+   are readable in C but only the (removed) vertex-colormap path consumed them;
+   a categorical per-element render path would surface them + fixed/constraint
+   vertex colouring at a glance. Note `edge_colors` is already computed and sent
+   and simply not read by the UI, and facet *back* colours are computed in C then
+   dropped by the worker. See F4 — the body case additionally needs new C. **M**
+8. **Engine facet normals → optional flat-shaded overlay** — ⚠
+   `se_get_facet_normals` was **deleted** in the 2026-08-08 trim; restore from
+   git history first (it was a thin wrapper over the engine's
+   `get_facet_normal`, ~29 lines). Then wire it as an opt-in toggle — making it
+   the default would regress the smooth shading. **S**
+9. **Refresh attribute list after `recalc`** — attrs defined in a datafile's
+   command section aren't in the load-time list (header-defined only). **S**
+10. **SIMPLEX geometry rendering** — `SIMPLEX_REPRESENTATION` files (e.g.
+    `simplex3.fe`, sdim=4) load + run but render empty: `se_get_facets` is
+    SOAPFILM-only, so simplex cells aren't exposed. Needs a simplex→triangle
+    accessor. Currently quarantined from the picker. **M**, niche.
+    Same root cause as F2 (STRING cells) — if the mesh accessor is taught to
+    speak non-SOAPFILM representations, do both at once.
+11. **Fix or replace `slidestr.fe`** — bundled STRING datafile with an open face
+    edge loop the engine rejects at load. Quarantined. Fixing needs the intended
+    geometry (don't guess); may just be a bad bundled copy. **S**, niche
+12. **Lagrange / curved-patch rendering** — quadratic patches render as straight
+    edges; we only warn. High effort, niche files. Defer unless a target file
+    needs it. **L**
+
 ---
 
-## Foam / cellular models — audit 2026-08-07
+## Foam / cellular models — audit 2026-08-08
 
 Driver: a materials-science user working on soap-foam and grain-growth models.
 Everything here was **measured** by loading the bundled foam files through the
@@ -159,43 +215,64 @@ surface irreversibly — warn before running. **S–M**
 
 ---
 
-### P2 — medium
-4. **Macros (gogo-style)** — store `{name, body}` app-side, run by sending the
-   body via `runCommand` (survives file switches, no engine re-registration).
-   Panel with Run/edit/delete + "save last CLI command". **M**
-5. **Structured `list` / `print` / `histogram`** — today raw text in the log;
-   parse `se_pop_output` into a table/chart. **S–M**
-6. **Define quantities / constraints / methods UI** — currently view-only;
-   defining needs CLI/`.fe`. Form → command string. **L**
+## Architecture — assessment 2026-08-09
 
-### P3 — low / niche
-7. **Element-colour render path for edge/facet/body attributes** — ⚠ the
-   `se_get_attribute_*` accessors were **deleted** in the 2026-08-08 trim;
-   restore them from git history before building this. These attrs
-   are readable in C but only the (removed) vertex-colormap path consumed them;
-   a categorical per-element render path would surface them + fixed/constraint
-   vertex colouring at a glance. Note `edge_colors` is already computed and sent
-   and simply not read by the UI, and facet *back* colours are computed in C then
-   dropped by the worker. See F4 — the body case additionally needs new C. **M**
-8. **Engine facet normals → optional flat-shaded overlay** — ⚠
-   `se_get_facet_normals` was **deleted** in the 2026-08-08 trim; restore from
-   git history first (it was a thin wrapper over the engine's
-   `get_facet_normal`, ~29 lines). Then wire it as an opt-in toggle — making it
-   the default would regress the smooth shading. **S**
-9. **Refresh attribute list after `recalc`** — attrs defined in a datafile's
-   command section aren't in the load-time list (header-defined only). **S**
-10. **SIMPLEX geometry rendering** — `SIMPLEX_REPRESENTATION` files (e.g.
-    `simplex3.fe`, sdim=4) load + run but render empty: `se_get_facets` is
-    SOAPFILM-only, so simplex cells aren't exposed. Needs a simplex→triangle
-    accessor. Currently quarantined from the picker. **M**, niche.
-    Same root cause as F2 (STRING cells) — if the mesh accessor is taught to
-    speak non-SOAPFILM representations, do both at once.
-11. **Fix or replace `slidestr.fe`** — bundled STRING datafile with an open face
-    edge loop the engine rejects at load. Quarantined. Fixing needs the intended
-    geometry (don't guess); may just be a bad bundled copy. **S**, niche
-12. **Lagrange / curved-patch rendering** — quadratic patches render as straight
-    edges; we only warn. High effort, niche files. Defer unless a target file
-    needs it. **L**
+Measured, not estimated. Reproduce the payload numbers with the sidecar
+directly: `{"cmd":"load"}` then N x `{"cmd":"run","command":"r"}` then
+`{"cmd":"mesh"}`, with `SE_LIB_PATH` set.
+
+**Shape.** ~4,900 lines of app code over a ~190,000-line C engine. That 40:1
+ratio explains most design choices: they are answers to "how do we not own
+190K lines of 1990s C". A mesh fetch crosses five hops (React -> Tauri invoke
+-> rpc.rs -> worker.rs mutex -> stdio JSON -> se-worker -> FFI -> se_api.c).
+
+**What is genuinely good** (keep these in any rewrite): one-worker-per-session
+turns a hard engine constraint into a clean process boundary that also buys
+crash isolation and cancel-by-kill; the narrow `rpc(method, params)` waist meant
+a whole desktop-framework migration touched one 17-line frontend file; `se_run`
+as a deliberate escape hatch means UI gaps never block capability.
+
+**A1. Mesh payload is the ceiling.** *Measured on cube.fe:* 4 refines =
+3,074 v / 6,144 f = **272 KB** of JSON; 6 refines = 49,154 v / 98,304 f =
+**5.26 MB**. Each refine is ~4x. That payload crosses two IPC boundaries with
+roughly four serialise/parse passes, and a `serde_json::Value` intermediate in
+Rust that allocates per number. Worse, it moves on **every** mutating action:
+`bumpMeshVersion()` fires from 4 sites and `useMesh` refetches the whole mesh
+each time. Typed arrays exist at both ends (C fills them, Three.js wants them)
+and are destroyed into boxed arrays in between. **Fix:** binary transport —
+`tauri::ipc::Response::new(InvokeResponseBody::Raw(..))` and
+`invoke<ArrayBuffer>` are both supported (verified against tauri 2.11.5). The
+Rust worker makes this much easier than the old bun one did. **M**
+
+**A2. Only refetch what changed.** `g N` moves vertex *positions*; facets and
+edges are invariant unless a topology op ran. `se_get_topo_counts` already
+exists, so the worker can detect topology changes and let the frontend reuse
+its index buffer. With A1 this is the difference between usable and unusable at
+research scale. **M**
+
+**A3. No typed contract at any seam.** `rpc.rs` has **0** typed request structs
+— everything is `serde_json::Value`, and the frontend's 11 payload types are
+unchecked assertions on `invoke<T>`. Drift has already shipped: the worker
+emits `body_pressures` that no frontend type declares; `body_volumes` is typed
+`Record<number, number>` while the worker writes string keys; `MeshParams` /
+`Physics` were declared byte-for-byte twice. This is the bug class that bit us
+mid-session (worker takes `path`, caller sent `file`, nothing caught it).
+**Fix:** generate TS from Rust (`ts-rs`/`specta`), or at minimum share one
+definition. **M**
+
+**A4. Zero render discipline in the store.** 8 subscribers, all destructuring
+the whole store, **0 selectors**, no `useShallow`, no `memo`. Zustand v5
+subscribes each to the root object and every `set` returns a new one — so every
+`appendLog` line re-renders Navbar, FilePane, FileBrowserModal, EditorPane,
+CliPane and ViewerPane, and re-runs both data hooks. Nearly free to fix. **S**
+
+**A5. `dispatch` is at its structural limit.** One 200-line `match`, 27 arms;
+`get_session` repeated 10x, `update_session` 4x, `persist` 4x. Fine at this
+size, wrong shape at 2x. Do it when the method count next grows. **S**
+
+**A6. Test coverage stops where the risk starts.** The C facade has 72
+assertions and the worker now has 6 tests, but `rpc.rs` and `worker.rs` have
+none, and the UI has none. **M**
 
 ---
 
