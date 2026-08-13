@@ -1,0 +1,44 @@
+[package]
+name = "se-worker"
+version = "0.2.0"
+edition = "2021"
+description = "Surface Evolver worker sidecar — owns one libse instance, speaks line-delimited JSON on stdin/stdout"
+
+# Deliberately a standalone crate, NOT a workspace member of src-tauri, even
+# though it now lives inside that directory. Two reasons, the second decisive:
+#
+#  1. A workspace root would relocate src-tauri/target/, which the CI artifact
+#     paths and tauri's own bundle output hard-code.
+#  2. Cargo ignores [profile] in workspace members — only the root's profiles
+#     apply. Per-package overrides ([profile.release.package.se-worker]) can
+#     carry opt-level/codegen-units/strip, but NOT lto or panic, which are
+#     whole-artifact settings. Sharing a workspace would therefore force
+#     panic="abort" onto the Tauri app (a panicking RPC would kill the whole
+#     application instead of returning Err, and src-tauri's mutex poison
+#     recovery would become dead code), or strip lto/opt-level="z" from this
+#     binary and inflate it well past 345 KB.
+#
+# The bare [workspace] table below is what keeps that true: it stops Cargo
+# walking up to a parent workspace. Nothing above declares one today, so it is
+# insurance — without it, adding [workspace] to src-tauri/Cargo.toml later
+# would silently absorb this crate and drop the profile.
+#
+# Must NOT depend on tauri — this binary is spawned once per session and wants
+# to stay small (the bun sidecar it replaces was 58 MB).
+
+[workspace]
+
+[[bin]]
+name = "se-worker"
+path = "src/main.rs"
+
+[dependencies]
+libloading = "0.8"
+serde_json = { version = "1", features = ["preserve_order"] }
+
+[profile.release]
+strip = true
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"

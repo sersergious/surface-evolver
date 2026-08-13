@@ -40,7 +40,7 @@ jobs:
         with:
           workspaces: |
             src-tauri
-            worker-rs
+            src-tauri/worker
 
       # Tauri v2 Linux build deps (webkit2gtk renderer).
       # (cmake + a C toolchain are preinstalled on GitHub runners.)
