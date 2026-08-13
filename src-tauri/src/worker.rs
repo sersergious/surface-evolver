@@ -25,6 +25,13 @@ pub struct Manager {
     pub proc: Mutex<Option<Child>>,
 }
 
+/// Poison here means an earlier RPC panicked while holding the guard. Every
+/// thing we lock is an `Option` or a map that stays structurally valid, so
+/// recovering the inner value beats `unwrap()` bricking every later call.
+pub fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
+    m.lock().unwrap_or_else(|e| e.into_inner())
+}
+
 fn read_result(stdout: &mut BufReader<ChildStdout>) -> Result<Value, String> {
     loop {
         let mut line = String::new();
@@ -67,7 +74,7 @@ fn check_result(msg: &Value) -> Result<(), String> {
 
 impl Manager {
     pub fn kill(&self) {
-        if let Some(mut child) = self.proc.lock().unwrap().take() {
+        if let Some(mut child) = lock(&self.proc).take() {
             let _ = child.kill();
             let _ = child.wait(); // reap; blocked reader gets EOF and errors out
         }
@@ -83,7 +90,7 @@ impl Manager {
         // Kill BEFORE taking `io`: a hung command holds `io` until its blocked
         // read fails, so killing first breaks the deadlock (se-manager.ts note).
         self.kill();
-        let mut io = self.io.lock().unwrap();
+        let mut io = lock(&self.io);
         *io = None;
 
         let mut cmd = Command::new(worker_bin);
@@ -101,7 +108,7 @@ impl Manager {
             .map_err(|e| format!("failed to spawn SE worker ({}): {e}", worker_bin.display()))?;
         let stdin = child.stdin.take().unwrap();
         let stdout = BufReader::new(child.stdout.take().unwrap());
-        *self.proc.lock().unwrap() = Some(child);
+        *lock(&self.proc) = Some(child);
         *io = Some(WorkerIo { stdin, stdout, active_session: session_id.to_string() });
 
         let w = io.as_mut().unwrap();
@@ -115,17 +122,14 @@ impl Manager {
             // Engine state after a failed se_load is undefined — don't leave
             // this worker registered as the active session.
             *io = None;
-            if let Some(mut child) = self.proc.lock().unwrap().take() {
-                let _ = child.kill();
-                let _ = child.wait();
-            }
+            self.kill();
         }
         result
     }
 
     /// Send `req` to the active worker for `session_id`, await its result line.
     pub fn request(&self, session_id: &str, req: Value) -> Result<Value, String> {
-        let mut io = self.io.lock().unwrap();
+        let mut io = lock(&self.io);
         let w = io.as_mut().ok_or_else(|| {
             format!("No active SE worker for session {session_id}")
         })?;
@@ -142,7 +146,11 @@ impl Manager {
                 Ok(msg)
             }
             Err(e) => {
-                *io = None; // worker died mid-request — clean slate for next load
+                // Only an EOF read means the worker actually died — a pipe error
+                // or a bad JSON line leaves it running. Reap it either way, or it
+                // holds libse until the next load (or forever, if there isn't one).
+                *io = None;
+                self.kill();
                 Err(e)
             }
         }

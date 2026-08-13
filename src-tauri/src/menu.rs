@@ -77,8 +77,6 @@ pub fn build(app: &App) -> tauri::Result<Menu<Wry>> {
         .separator()
         .item(&render)
         .separator()
-        .item(&item("panel:quants", "Quantities & Energy", None)?)
-        .item(&item("panel:settings", "Mesh & Physics Settings", None)?)
         .item(&item("panel:inspect", "Inspect / Pick", None)?)
         .build()?;
 

@@ -64,14 +64,11 @@ fn every_command_round_trips() {
         cube(),
         r#"{"cmd":"run","command":"r; g 20"}"#.into(),
         r#"{"cmd":"mesh","colors":true}"#.into(),
-        r#"{"cmd":"quantities"}"#.into(),
-        r#"{"cmd":"settings"}"#.into(),
         r#"{"cmd":"topo","op":"refine"}"#.into(),
         r#"{"cmd":"vertex_info","vpos":0}"#.into(),
-        r#"{"cmd":"set_scale","scale":0.05}"#.into(),
         r#"{"cmd":"dump"}"#.into(),
     ]);
-    assert_eq!(msgs.len(), 9, "one reply per command");
+    assert_eq!(msgs.len(), 6, "one reply per command");
     for (i, m) in msgs.iter().enumerate() {
         assert_eq!(m["type"], "result", "msg{i} missing type");
         assert_eq!(m["ok"], true, "msg{i} not ok: {m}");
@@ -105,11 +102,11 @@ fn every_command_round_trips() {
     assert!(mesh["body_volumes"].is_object());
 
     // topo reports deltas
-    assert!(msgs[5]["counts"].is_object());
-    assert!(msgs[5]["energy_delta"].is_f64());
+    assert!(msgs[3]["counts"].is_object());
+    assert!(msgs[3]["energy_delta"].is_f64());
 
     // dump returns a reloadable datafile
-    let content = msgs[8]["content"].as_str().unwrap();
+    let content = msgs[5]["content"].as_str().unwrap();
     assert!(content.contains("vertices"), "dump does not look like a datafile");
 }
 
@@ -124,24 +121,31 @@ fn mesh_omits_colours_unless_requested() {
 }
 
 #[test]
-fn string_model_2d_loads_and_reports_bodies() {
+fn string_model_is_rejected_at_load() {
     if skip() { return }
-    // 100grain.fe is sdim=2 STRING: 0 facets, but 100 bodies and real edges.
-    // Regression guard for the fixed-stride-3 vertex buffer.
-    let path = repo().join("fe/100grain.fe");
-    let msgs = drive(&[
-        format!(r#"{{"cmd":"load","path":"{}"}}"#, path.display()),
-        r#"{"cmd":"mesh","colors":true}"#.into(),
-    ]);
-    assert_eq!(msgs[0]["ok"], true);
-    assert_eq!(msgs[0]["sdim"], 2);
-    let mesh = &msgs[1];
-    assert_eq!(mesh["facets"].as_array().unwrap().len(), 0, "STRING model has no facets");
-    assert!(!mesh["edges"].as_array().unwrap().is_empty());
-    assert_eq!(mesh["body_volumes"].as_object().unwrap().len(), 100);
-    for v in mesh["vertices"].as_array().unwrap() {
-        assert_eq!(v.as_array().unwrap().len(), 3, "2-D verts still emit 3 comps (z padded)");
-    }
+    // se_load accepts SOAPFILM only: STRING facets are arbitrary polygons, so
+    // se_get_facets() reports none and the surface would draw as a bare edge
+    // web. The bundled STRING datafiles were removed alongside that gate, so
+    // this writes its own — the point is the contract, not any one file.
+    let dir = std::env::temp_dir().join(format!("se-smoke-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("string_tri.fe");
+    std::fs::write(&path, concat!(
+        "STRING\n",
+        "space_dimension 2\n\n",
+        "vertices\n1  0.0 0.0\n2  1.0 0.0\n3  0.5 1.0\n\n",
+        "edges\n1   1 2\n2   2 3\n3   3 1\n",
+    )).unwrap();
+
+    let msgs = drive(&[format!(r#"{{"cmd":"load","path":"{}"}}"#, path.display())]);
+    let _ = std::fs::remove_dir_all(&dir);
+
+    assert_eq!(msgs[0]["ok"], false, "STRING datafile must not load");
+    let err = msgs[0]["se_error"].as_str().unwrap_or_default().to_lowercase();
+    assert!(
+        err.contains("soapfilm") && err.contains("string"),
+        "error must name both the supported model and the rejected one, got: {err}"
+    );
 }
 
 #[test]
@@ -151,7 +155,7 @@ fn bad_input_is_reported_not_fatal() {
         "{ not json".into(),
         r#"{"cmd":"totally_unknown"}"#.into(),
         cube(),
-        r#"{"cmd":"set_scale","scale":0}"#.into(),
+        r#"{"cmd":"topo","op":"nonsense"}"#.into(),
         r#"{"cmd":"run","command":"f"}"#.into(),
         r#"{"cmd":"vertex_info","vpos":99999999}"#.into(),
         r#"{"cmd":"mesh"}"#.into(),   // still alive afterwards
@@ -159,7 +163,9 @@ fn bad_input_is_reported_not_fatal() {
     assert_eq!(msgs.len(), 7, "worker must answer every line and stay up");
     assert_eq!(msgs[0]["error"], "invalid JSON");
     assert!(msgs[1]["error"].as_str().unwrap().starts_with("unknown cmd:"));
+    // bad *parameter* to a known command — distinct from the unknown-cmd case
     assert_eq!(msgs[3]["ok"], false);
+    assert!(msgs[3]["error"].as_str().unwrap().starts_with("unknown topology op:"));
     // interactive commands report via se_error, which the manager surfaces
     assert!(msgs[4]["se_error"].as_str().unwrap().contains("interactive"));
     assert_eq!(msgs[5]["ok"], false);
@@ -171,4 +177,58 @@ fn blank_lines_get_no_reply() {
     if skip() { return }
     let msgs = drive(&["".into(), "   ".into(), cube()]);
     assert_eq!(msgs.len(), 1, "blank lines must not produce a response");
+}
+
+#[test]
+fn periodic_wrap_edges_are_hidden() {
+    if skip() { return }
+    // phelanc.fe is TORUS_FILLED. An edge crossing a period boundary has no
+    // honest straight-line form — drawn as-is it spans the domain, which is
+    // what BACKLOG F1 measured (103 of 368 edges). The mesh must omit those
+    // and report how many, without mutating the surface (no `detorus`).
+    let path = repo().join("fe/phelanc.fe");
+    let msgs = drive(&[
+        format!(r#"{{"cmd":"load","path":"{}"}}"#, path.display()),
+        r#"{"cmd":"mesh","colors":true}"#.into(),
+    ]);
+    let total = msgs[0]["edge_count"].as_u64().unwrap();
+    let mesh = &msgs[1];
+
+    let hidden = mesh["wrapped_edges_hidden"].as_u64().expect("periodic file must report it");
+    let edges = mesh["edges"].as_array().unwrap();
+    assert!(hidden > 0);
+    assert_eq!(edges.len() as u64 + hidden, total, "drawn + hidden must equal every edge");
+    assert_eq!(
+        mesh["edge_colors"].as_array().unwrap().len(),
+        edges.len(),
+        "edge_colors must stay index-aligned with the filtered edges"
+    );
+
+    // The actual defect: wrap-around edges render as lines across the whole
+    // domain. What remains must be uniform — no edge many times the median.
+    let verts: Vec<Vec<f64>> = mesh["vertices"].as_array().unwrap().iter()
+        .map(|v| v.as_array().unwrap().iter().map(|c| c.as_f64().unwrap()).collect())
+        .collect();
+    let mut lens: Vec<f64> = edges.iter().map(|e| {
+        let (a, b) = (e[0].as_u64().unwrap() as usize, e[1].as_u64().unwrap() as usize);
+        (0..3).map(|k| (verts[a][k] - verts[b][k]).powi(2)).sum::<f64>().sqrt()
+    }).collect();
+    lens.sort_by(|a, b| a.partial_cmp(b).unwrap());
+    let (median, max) = (lens[lens.len() / 2], *lens.last().unwrap());
+    assert!(max < median * 5.0, "edge spanning the domain still drawn: max {max} vs median {median}");
+}
+
+#[test]
+fn non_periodic_mesh_hides_nothing() {
+    if skip() { return }
+    // The same code path must be a no-op on a plain surface — and must not
+    // touch E_WRAP_ATTR, which has no storage without a symmetry group.
+    let msgs = drive(&[cube(), r#"{"cmd":"mesh","colors":true}"#.into()]);
+    let mesh = &msgs[1];
+    assert!(mesh.get("wrapped_edges_hidden").is_none(), "key must be absent, not 0");
+    assert_eq!(
+        mesh["edges"].as_array().unwrap().len() as u64,
+        msgs[0]["edge_count"].as_u64().unwrap(),
+        "no edge may be dropped from a non-periodic surface"
+    );
 }

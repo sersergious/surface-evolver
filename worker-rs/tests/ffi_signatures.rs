@@ -107,7 +107,10 @@ fn ffi_signatures_match_the_c_header() {
     let header = parse_header(&repo_file("engine/bindings/c/se_api.h"));
     let rust = parse_rust(&repo_file("worker-rs/src/ffi.rs"));
 
-    assert!(header.len() > 30, "header parse produced only {} decls — parser is broken", header.len());
+    // Floor, not a count: catches a parser that silently matches nothing. Raise
+    // it if the facade grows; it was 30 when se_api.h exported 37, and dropped
+    // to 20 when the physics/named-quantity accessors were cut (37 → 27).
+    assert!(header.len() > 20, "header parse produced only {} decls — parser is broken", header.len());
 
     let mut problems = Vec::new();
 

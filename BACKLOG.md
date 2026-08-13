@@ -154,7 +154,16 @@ uses `SYMMETRY_GROUP "torus"`), `octa.fe`. The heavy foam machinery lives in
 constraints, boundaries or attributes, so the Quantities panel is largely
 irrelevant to them.
 
-**F1. Periodic (torus) geometry renders wrong.** *Measured:* wrap-around edges
+**F1. Periodic (torus) geometry renders wrong.** ✅ **Resolved 2026-08-13.**
+`se_get_edge_wraps` (new, read-only, gated on `web.symmetry_flag`) reports each
+edge's wrap code in `se_get_edges` order; the worker drops wrapped edges and
+reports `wrapped_edges_hidden`, which ViewerPane shows in the stat badge. No
+`detorus`, no mutation. *Measured after:* `phelanc.fe` 103 of 368 hidden,
+remaining max/median edge length **1.49**; `symtest.fe` / `twointor.fe` 41
+hidden each, max/median **1.00**. `100grain.fe` — the fourth periodic file —
+went with the STRING cut instead, being doubly broken.
+
+*Original finding:* wrap-around edges
 are drawn as straight lines across the whole view — **103 of 368 edges (28%) in
 `phelanc.fe`**, 25 of 300 in `100grain.fe` (max edge 1.27 vs median 0.066). No
 layer — `se_api`, worker, `rpc.rs`, `ui` — has any notion of periodicity.
@@ -197,9 +206,12 @@ use: `o` (pop edges *and* vertices), `O` (edges only), `t x` (remove tiny edges)
 plus engine-level `t1_edgeswap`, `dissolve`, `pop_tri_to_edge`,
 `pop_edge_to_tri`, `pop_quad_to_quad`, `edgeswap`. Extends P1 item 3. **S**
 
-**F7. `n` is never passed to `runTopo`.** `CliPane.tsx:60` calls
-`runTopo(sessionId, op)` with no count, so Equiangulate is permanently `u 1`
-despite the API and worker both supporting `n`. Plain bug. **S**
+**F7. `n` is never passed to `runTopo`.** ✅ **Resolved 2026-08-13 by deletion,
+not by wiring.** Only `equi` ever consumed `n` (`handlers.rs:293` →
+`format!("u {n}")`); `refine`, `vertex_avg` and `pop` ignored it. One menu click
+= one pass is honest behaviour, and repeated passes are `u 5` in the CLI pane —
+so the unused parameter came out of `runTopo` and the `rpc.rs` topo arm rather
+than having a count invented for it. The worker still accepts `n` (defaults 1).
 
 **F8. Quantity `target` / `modulus` are dropped.** Transported by the worker,
 typed in `simulation.ts`, never rendered by `QuantitiesPanel`. For

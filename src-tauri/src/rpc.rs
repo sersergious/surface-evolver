@@ -2,25 +2,27 @@
 //! The webview calls invoke("rpc", { method, params }); one command keeps the
 //! frontend client a single function, matching the old Electroview.rpc shape.
 
-use crate::worker::Manager;
+use crate::worker::{lock, Manager};
 use serde_json::{json, Value};
-use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
+use std::sync::{mpsc, Mutex};
 use tauri::{AppHandle, Manager as TauriManager, State};
 use tauri_plugin_opener::OpenerExt;
 
 const MAX_UPLOAD_BYTES: usize = 5 * 1024 * 1024;
-// Datafiles hidden from the picker (see index.ts for the why).
-const QUARANTINED_FE: [&str; 2] = ["slidestr.fe", "simplex3.fe"];
 
 #[derive(Default)]
 pub struct AppState {
     pub manager: Manager,
-    pub sessions: Mutex<HashMap<String, Value>>,
+    /// At most one session exists: `Manager` owns a single worker at a time and
+    /// a load kills the previous one. A map here would only ever accumulate ids
+    /// that no worker serves.
+    pub session: Mutex<Option<Value>>,
     /// None = restore not attempted yet; Some(v) = memoized result (v may be null).
     pub restore: Mutex<Option<Value>>,
+    /// Lazily started on the first snapshot — see `persist`.
+    persist_tx: Mutex<Option<mpsc::Sender<()>>>,
 }
 
 // ── path resolution (port of bootstrap-paths.ts + config.ts) ───────────────
@@ -134,26 +136,30 @@ fn session_from_stats(session_id: &str, fe_file: &str, stats: &Value) -> Value {
     })
 }
 
+/// One worker means one live session id. Anything else is a stale handle the UI
+/// is still holding after a load replaced the worker underneath it.
 fn get_session(state: &AppState, params: &Value) -> Result<(String, Value), String> {
-    let sid = params["sessionId"]
-        .as_str()
-        .ok_or("sessionId is required")?
-        .to_string();
-    let sessions = state.sessions.lock().unwrap();
-    let s = sessions.get(&sid).ok_or("Session not found")?.clone();
-    Ok((sid, s))
+    let sid = params["sessionId"].as_str().ok_or("sessionId is required")?;
+    let session = lock(&state.session).clone().ok_or("No file is loaded")?;
+    if session["session_id"].as_str() != Some(sid) {
+        return Err("This session is no longer loaded — reopen the file".into());
+    }
+    Ok((sid.to_string(), session))
 }
 
+/// No-op if the session was replaced while the command was in flight — those
+/// stats describe a surface that is already gone.
 fn update_session(state: &AppState, sid: &str, result: &Value) {
-    let mut sessions = state.sessions.lock().unwrap();
-    if let Some(s) = sessions.get_mut(sid) {
-        for k in ["energy", "area", "scale"] {
-            if !result[k].is_null() {
-                s[k] = result[k].clone();
-            }
+    let mut guard = lock(&state.session);
+    let Some(s) = guard.as_mut().filter(|s| s["session_id"].as_str() == Some(sid)) else {
+        return;
+    };
+    for k in ["energy", "area", "scale"] {
+        if !result[k].is_null() {
+            s[k] = result[k].clone();
         }
-        s["last_accessed"] = json!(now_iso());
     }
+    s["last_accessed"] = json!(now_iso());
 }
 
 // ── persistence (port of persistence.ts — best-effort, never surfaces) ─────
@@ -162,41 +168,55 @@ fn persist_file() -> PathBuf {
     state_dir().join("last-session.json")
 }
 
-/// Snapshot the surface off the command path: the dump is a full worker
-/// round-trip (MBs on a refined mesh), so blocking the RPC response on it
-/// would add visible latency to every command. The background thread still
-/// serialises against other worker I/O via the manager's io mutex.
-fn persist(app: &AppHandle, sid: &str) {
-    let app = app.clone();
-    let sid = sid.to_string();
-    std::thread::spawn(move || {
-        let state: State<AppState> = app.state();
-        let fe_file = {
-            let sessions = state.sessions.lock().unwrap();
-            match sessions.get(&sid) {
-                Some(s) => s.clone(),
-                None => return,
+/// Request a snapshot. Kept off the command path: the dump is a full worker
+/// round-trip (MBs on a refined mesh), so blocking the RPC response on it would
+/// add visible latency to every command.
+///
+/// One long-lived thread, not one per command. Every snapshot has to take the
+/// manager's io mutex, so a thread per command stacks them up behind a long
+/// `g N` and then lets an older dump land after a newer one. The consumer
+/// drains the channel first and keeps only the newest request — that is the
+/// only snapshot anyone wants anyway.
+fn persist(app: &AppHandle, state: &AppState) {
+    let mut guard = lock(&state.persist_tx);
+    let tx = guard.get_or_insert_with(|| {
+        let (tx, rx) = mpsc::channel::<()>();
+        let app = app.clone();
+        std::thread::spawn(move || {
+            while rx.recv().is_ok() {
+                while rx.try_recv().is_ok() {} // coalesce anything queued behind us
+                snapshot(&app.state());
             }
-        };
-        if let Ok(dump) = state.manager.request(&sid, json!({ "cmd": "dump" })) {
-            let saved = json!({
-                "fe_file": fe_file["fe_file"],
-                "energy": fe_file["energy"],
-                "area": fe_file["area"],
-                "dmp": dump["content"],
-                "saved_at": now_iso(),
-            });
-            let _ = fs::create_dir_all(state_dir());
-            let _ = fs::write(persist_file(), saved.to_string());
-        }
+        });
+        tx
     });
+    let _ = tx.send(());
+}
+
+fn snapshot(state: &AppState) {
+    let Some(session) = lock(&state.session).clone() else { return };
+    let Some(sid) = session["session_id"].as_str() else { return };
+    let Ok(dump) = state.manager.request(sid, json!({ "cmd": "dump" })) else { return };
+    let saved = json!({
+        "fe_file": session["fe_file"],
+        "energy": session["energy"],
+        "area": session["area"],
+        "dmp": dump["content"],
+        "saved_at": now_iso(),
+    });
+    let _ = fs::create_dir_all(state_dir());
+    // Write-then-rename: a quit mid-write must not truncate the live snapshot.
+    let tmp = persist_file().with_extension("json.tmp");
+    if fs::write(&tmp, saved.to_string()).is_ok() {
+        let _ = fs::rename(&tmp, persist_file());
+    }
 }
 
 fn try_restore(app: &AppHandle, state: &AppState) -> Value {
     // Restore is lazy (first getRestore call). If the user already loaded a
     // file, restoring now would kill their fresh worker and leave the UI
     // holding a session id the worker no longer serves — bail instead.
-    if !state.sessions.lock().unwrap().is_empty() {
+    if lock(&state.session).is_some() {
         return Value::Null;
     }
     let Ok(raw) = fs::read_to_string(persist_file()) else { return Value::Null };
@@ -219,13 +239,15 @@ fn try_restore(app: &AppHandle, state: &AppState) -> Value {
     match loaded {
         Ok(stats) => {
             let session = session_from_stats(&sid, fe_file, &stats);
-            state.sessions.lock().unwrap().insert(sid, session.clone());
+            *lock(&state.session) = Some(session.clone());
             session
         }
-        Err(_) => {
-            let _ = fs::remove_file(persist_file()); // corrupt snapshot — drop it
-            Value::Null
-        }
+        // Keep the snapshot. A load failure here is just as likely to be a
+        // missing dylib or an unspawnable sidecar as a bad dump, and deleting
+        // it costs the user real work for an unrelated environment problem.
+        // Genuinely malformed snapshots fall out at the parse above, and the
+        // next successful command overwrites this one anyway.
+        Err(_) => Value::Null,
     }
 }
 
@@ -243,7 +265,7 @@ fn dispatch(app: &AppHandle, method: &str, params: Value) -> Result<Value, Strin
     let state: State<AppState> = app.state();
     match method {
         "getRestore" => {
-            let mut memo = state.restore.lock().unwrap();
+            let mut memo = lock(&state.restore);
             if memo.is_none() {
                 *memo = Some(try_restore(app, &state));
             }
@@ -256,7 +278,7 @@ fn dispatch(app: &AppHandle, method: &str, params: Value) -> Result<Value, Strin
                     .map(|rd| {
                         rd.filter_map(|e| e.ok())
                             .map(|e| e.file_name().to_string_lossy().into_owned())
-                            .filter(|f| f.ends_with(".fe") && !QUARANTINED_FE.contains(&f.as_str()))
+                            .filter(|f| f.ends_with(".fe"))
                             .collect()
                     })
                     .unwrap_or_default()
@@ -277,7 +299,7 @@ fn dispatch(app: &AppHandle, method: &str, params: Value) -> Result<Value, Strin
             // A user-initiated load supersedes startup restore: mark it
             // consumed so a late getRestore can't kill this session's worker.
             {
-                let mut memo = state.restore.lock().unwrap();
+                let mut memo = lock(&state.restore);
                 if memo.is_none() {
                     *memo = Some(Value::Null);
                 }
@@ -288,9 +310,21 @@ fn dispatch(app: &AppHandle, method: &str, params: Value) -> Result<Value, Strin
                 .load_session(&sid, &fe_path.to_string_lossy(), &worker_bin(app), &lib_path(app))
                 ?;
             let session = session_from_stats(&sid, fe_file, &stats);
-            state.sessions.lock().unwrap().insert(sid.clone(), session.clone());
-            persist(app, &sid);
+            *lock(&state.session) = Some(session.clone());
+            persist(app, &state);
             Ok(session)
+        }
+
+        // The only cancel there is: se_run is a blocking FFI call, so a running
+        // command can't be interrupted in band — kill() takes only the `proc`
+        // mutex, so it works while the command still holds `io`, and the blocked
+        // read then errors out. The in-memory surface goes with it, but the last
+        // snapshot survives, so getRestore can bring it back.
+        // ponytail: real cancellation needs se_run chunking — BACKLOG "Skip".
+        "cancel" => {
+            state.manager.kill();
+            *lock(&state.session) = None;
+            Ok(json!({ "cancelled": true }))
         }
 
         "uploadFile" => {
@@ -309,8 +343,9 @@ fn dispatch(app: &AppHandle, method: &str, params: Value) -> Result<Value, Strin
             }
             fs::create_dir_all(user_fe_dir()).map_err(|e| e.to_string())?;
             fs::write(user_fe_dir().join(&safe), &buf).map_err(|e| e.to_string())?;
-            let renderable = !QUARANTINED_FE.contains(&safe.as_str());
-            Ok(json!({ "filename": safe, "size_bytes": buf.len(), "renderable": renderable }))
+            // No renderability pre-check: se_load rejects unsupported models
+            // with a real message, which beats a filename allowlist.
+            Ok(json!({ "filename": safe, "size_bytes": buf.len() }))
         }
 
         "exportDmp" => {
@@ -364,17 +399,6 @@ fn dispatch(app: &AppHandle, method: &str, params: Value) -> Result<Value, Strin
             Ok(json!({ "path": dest.to_string_lossy() }))
         }
 
-        "setScale" => {
-            let (sid, _) = get_session(&state, &params)?;
-            let scale = params["scale"].as_f64().filter(|s| *s > 0.0)
-                .ok_or("scale must be a positive number")?;
-            let result = state.manager
-                .request(&sid, json!({ "cmd": "set_scale", "scale": scale }))
-                ?;
-            update_session(&state, &sid, &result);
-            Ok(result)
-        }
-
         "runCommand" => {
             let (sid, _) = get_session(&state, &params)?;
             let command = params["command"].as_str().filter(|c| !c.is_empty())
@@ -383,7 +407,7 @@ fn dispatch(app: &AppHandle, method: &str, params: Value) -> Result<Value, Strin
                 .request(&sid, json!({ "cmd": "run", "command": command }))
                 ?;
             update_session(&state, &sid, &result);
-            persist(app, &sid);
+            persist(app, &state);
             Ok(result)
         }
 
@@ -394,30 +418,6 @@ fn dispatch(app: &AppHandle, method: &str, params: Value) -> Result<Value, Strin
                 req["colors"] = json!(true);
             }
             state.manager.request(&sid, req)
-        }
-
-        "quantities" => {
-            let (sid, _) = get_session(&state, &params)?;
-            state.manager.request(&sid, json!({ "cmd": "quantities" }))
-        }
-
-        "settings" => {
-            let (sid, _) = get_session(&state, &params)?;
-            state.manager.request(&sid, json!({ "cmd": "settings" }))
-        }
-
-        "setSettings" => {
-            let (sid, _) = get_session(&state, &params)?;
-            let mut req = json!({ "cmd": "set_settings" });
-            for k in ["mesh_params", "physics"] {
-                if !params[k].is_null() {
-                    req[k] = params[k].clone();
-                }
-            }
-            let result = state.manager.request(&sid, req)?;
-            update_session(&state, &sid, &result);
-            persist(app, &sid);
-            Ok(result)
         }
 
         "vertexInfo" => {
@@ -431,13 +431,12 @@ fn dispatch(app: &AppHandle, method: &str, params: Value) -> Result<Value, Strin
         "topo" => {
             let (sid, _) = get_session(&state, &params)?;
             let op = params["op"].as_str().filter(|o| !o.is_empty()).ok_or("op is required")?;
-            let mut req = json!({ "cmd": "topo", "op": op });
-            if let Some(n) = params["n"].as_i64() {
-                req["n"] = json!(n);
-            }
+            // No `n`: only `equi` would use it and the UI sends one pass per
+            // click. `u 5` via runCommand covers the rest. Was BACKLOG F7.
+            let req = json!({ "cmd": "topo", "op": op });
             let result = state.manager.request(&sid, req)?;
             update_session(&state, &sid, &result);
-            persist(app, &sid);
+            persist(app, &state);
             Ok(result)
         }
 

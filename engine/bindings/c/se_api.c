@@ -222,6 +222,20 @@ int se_load(const char *filename)
         return -1;
     }
 
+    /* Soapfilm only. STRING facets are polygons with any number of edges and
+     * SIMPLEX cells are k-simplices; se_get_facets() can express neither, so
+     * those surfaces would draw as a bare edge web or as nothing at all.
+     * Reject at load rather than render a lie. `se_run("...")` is unaffected —
+     * this gate is about what we can *draw*, not what the engine can compute. */
+    if (web.representation != SOAPFILM) {
+        snprintf(se_errmsg_buf, sizeof(se_errmsg_buf),
+                 "Unsupported model: this build renders the soapfilm "
+                 "(2-D triangulated) model only, but '%s' declares %s.",
+                 filename ? filename : "(null)",
+                 web.representation == STRING ? "STRING" : "SIMPLEX");
+        return -1;
+    }
+
     se_errmsg_buf[0] = '\0';
     return 0;
 }
@@ -273,11 +287,6 @@ int se_run(const char *cmd)
 double se_get_energy(void) { return (double)web.total_energy; }
 double se_get_area(void)   { return (double)web.total_area;   }
 double se_get_scale(void)  { return (double)web.scale;        }
-
-void se_set_scale(double s)
-{
-    web.scale = (REAL)s;
-}
 
 int se_get_sdim(void)         { return web.sdim; }
 int se_get_vertex_count(void) { return (int)web.skel[VERTEX].count; }
@@ -441,8 +450,13 @@ int se_get_facet_colors(int *front, int *back, int max_count)
 {
     facet_id f_id;
     int n = 0;
-    if (!se_initialized || max_count <= 0 || web.representation != SOAPFILM)
+    if (!se_initialized || max_count <= 0)
         return -1;
+    /* Convention: 0 = "not applicable to this representation", -1 = bad args.
+     * Kept separate from the argument check above, which used to be conflated
+     * with it and reported a wrong model as a caller error. */
+    if (web.representation != SOAPFILM)
+        return 0;
     FOR_ALL_FACETS(f_id) {
         facetedge_id fe;
         if (inverted(f_id)) continue;
@@ -473,13 +487,52 @@ int se_get_edge_colors(int *out, int max_count)
     return n;
 }
 
+/* ── periodicity ──────────────────────────────────────────────────────── */
+/*
+ * Per-edge wrap code, in se_get_edges() row order (same FOR_ALL_EDGES walk and
+ * the same validity filter, so index i lines up across all three accessors).
+ *
+ * 0 means the edge does not cross a period boundary.  Non-zero packs 6 bits
+ * per dimension (see torus.c); callers that only need "is this edge wrapped"
+ * can test against 0 and ignore the encoding.
+ *
+ * Returns the number written, 0 if the surface is not periodic, -1 on error.
+ *
+ * The gate is web.symmetry_flag rather than web.torus_flag on purpose:
+ * E_WRAP_ATTR is only given storage by expand_attribute(EDGE,...) when a
+ * symmetry group is in effect (lexinit.c), so calling get_edge_wrap() on a
+ * plain surface reads a zero-length attribute slot.
+ */
+int se_get_edge_wraps(int *out, int max_count)
+{
+    edge_id e_id;
+    int n = 0;
+    if (!se_initialized || !out || max_count <= 0)
+        return -1;
+    if (!web.symmetry_flag)
+        return 0;
+    FOR_ALL_EDGES(e_id) {
+        if (!valid_id(get_edge_tailv(e_id)) || !valid_id(get_edge_headv(e_id))) continue;
+        if (n >= max_count) break;
+        out[n++] = (int)get_edge_wrap(e_id);
+    }
+    return n;
+}
+
 
 /* ── se_get_bounding_box ──────────────────────────────────────────────── */
 /*
  * Axis-aligned bounds of the current surface, min[] and max[] over sdim
- * coordinates.  Computed directly from vertex positions (the engine's own
- * bounding_box global lives in the graphics pipeline, which is absent in the
- * headless build).  Returns sdim on success, -1 on error, 0 if no vertices.
+ * coordinates.  Computed directly from vertex positions.
+ *
+ * The engine has its own bounding_box global, but it is filled by graphgen()
+ * (graphgen.c:269, 955-1024), and nothing in this facade ever calls graphgen —
+ * so it stays at its initial value.  Note the graphics pipeline *is* linked
+ * into libse: CMakeLists builds SE_GRAPHICS_COMMON unconditionally and
+ * SE_HEADLESS only swaps the backend (xgraph.c -> nulgraph.c).  Linked but
+ * never invoked, which is not the same as absent.
+ *
+ * Returns sdim on success, -1 on error, 0 if no vertices.
  */
 int se_get_bounding_box(double *out_min, double *out_max)
 {
@@ -572,149 +625,20 @@ int se_get_topo_counts(int *out, int max_count)
     return n;
 }
 
-/* ── se_get_total_time ────────────────────────────────────────────────── */
-/* Accumulated sum of scale factors applied — a proxy for total surface motion. */
-double se_get_total_time(void)
-{
-    return (double)total_time;
-}
-
-/* ── physics globals ──────────────────────────────────────────────────── */
-/* Read [gravflag, grav_const, pressflag, pressure].  Returns n written, -1 on
- * error. (flags are 0/1 but returned as double for a uniform buffer.) */
-int se_get_physics(double *out, int max_count)
-{
-    double vals[4];
-    int i, n;
-    if (!se_initialized || !out || max_count <= 0)
-        return -1;
-    vals[0] = (double)web.gravflag;
-    vals[1] = (double)web.grav_const;
-    vals[2] = (double)web.pressflag;
-    vals[3] = (double)web.pressure;
-    n = (max_count < 4) ? max_count : 4;
-    for (i = 0; i < n; i++)
-        out[i] = vals[i];
-    return n;
-}
-
-/* Write the physics globals.  Mirrors the engine rule that a non-zero
- * gravitational constant implies gravity is on (command.c).  Caller should
- * trigger a recalc afterwards to refresh energy.  Returns 0, or -1 on error. */
-int se_set_physics(double grav_const, int gravflag, double pressure, int pressflag)
-{
-    if (!se_initialized)
-        return -1;
-    web.grav_const = (REAL)grav_const;
-    web.gravflag   = (grav_const != 0.0) ? 1 : gravflag;
-    web.pressure   = (REAL)pressure;
-    web.pressflag  = pressflag ? 1 : 0;
-    return 0;
-}
-
-/* Write the mesh-quality thresholds [min_area, min_length, max_len,
- * temperature].  Caller should recalc afterwards.  Returns 0, or -1. */
-int se_set_mesh_params(double min_area, double min_length, double max_len, double temperature)
-{
-    if (!se_initialized)
-        return -1;
-    web.min_area    = (REAL)min_area;
-    web.min_length  = (REAL)min_length;
-    web.max_len     = (REAL)max_len;
-    web.temperature = (REAL)temperature;
-    return 0;
-}
-
-/* ── se_get_mesh_params ───────────────────────────────────────────────── */
-/* Mesh-quality thresholds, fixed order: [min_area, min_length, max_len,
- * temperature].  Returns number written (<= 4), or -1 on error. */
-int se_get_mesh_params(double *out, int max_count)
-{
-    double vals[4];
-    int i, n;
-    if (!se_initialized || !out || max_count <= 0)
-        return -1;
-    vals[0] = (double)web.min_area;
-    vals[1] = (double)web.min_length;
-    vals[2] = (double)web.max_len;
-    vals[3] = (double)web.temperature;
-    n = (max_count < 4) ? max_count : 4;
-    for (i = 0; i < n; i++)
-        out[i] = vals[i];
-    return n;
-}
-
-/* ── named quantities ─────────────────────────────────────────────────── */
-/* Raw count of generalized-quantity slots; iterate 0..count-1 and call
- * se_get_quantity, which returns -1 for deleted/default slots to skip. */
-int se_get_quantity_count(void)
-{
-    return se_initialized ? gen_quant_count : -1;
-}
-
-/* Read one quantity by raw slot index.  name/value/target/modulus/flags may be
- * NULL.  Returns 0 on a real quantity, -1 for an empty/deleted/default slot or
- * out-of-range index. */
-int se_get_quantity(int idx, char *name, int name_size,
-                    double *value, double *target, double *modulus, int *flags)
-{
-    struct gen_quant *q;
-    if (!se_initialized || idx < 0 || idx >= gen_quant_count)
-        return -1;
-    q = GEN_QUANT(idx);
-    if (q->flags & (DEFAULT_QUANTITY | Q_DELETED))
-        return -1;
-    if (name && name_size > 0) {
-        strncpy(name, q->name, (size_t)name_size - 1);
-        name[name_size - 1] = '\0';
-    }
-    if (value)   *value   = (double)q->value;
-    if (target)  *target  = (double)q->target;
-    if (modulus) *modulus = (double)q->modulus;
-    if (flags)   *flags   = q->flags;
-    return 0;
-}
-
-/* ── method instances (energy breakdown) ──────────────────────────────── */
-int se_get_method_instance_count(void)
-{
-    return se_initialized ? meth_inst_count : -1;
-}
-
-/* Read one method instance by raw slot index.  Returns 0 on a real instance,
- * -1 for deleted/default/out-of-range.  `type` is the element type (VERTEX/
- * EDGE/FACET/BODY); `value` is its energy contribution. */
-int se_get_method_instance(int idx, char *name, int name_size,
-                           int *type, double *value)
-{
-    struct method_instance *mi;
-    if (!se_initialized || idx < 0 || idx >= meth_inst_count)
-        return -1;
-    mi = METH_INSTANCE(idx);
-    if ((mi->flags & (Q_DELETED | DEFAULT_INSTANCE)) || mi->name[0] == '\0')
-        return -1;
-    if (name && name_size > 0) {
-        strncpy(name, mi->name, (size_t)name_size - 1);
-        name[name_size - 1] = '\0';
-    }
-    if (type)  *type  = mi->type;
-    if (value) *value = (double)mi->value;
-    return 0;
-}
-
 /* ── se_get_body_cm ───────────────────────────────────────────────────── */
 /*
  * Volume-weighted centre of mass of the body at ordinal `body_idx`.
  *
- * The engine's bptr->cm field is filled only in the graphics pipeline (absent
- * in the headless build), so we compute it directly: decompose the body's
- * bounding surface into tetrahedra (origin, a, b, c) per oriented facet.
+ * The engine's bptr->cm field is written only by graphgen() (graphgen.c:2467),
+ * which this facade never calls, so we compute it directly: decompose the
+ * body's bounding surface into tetrahedra (origin, a, b, c) per oriented facet.
  *   signed tet volume  v = a·(b×c)/6
  *   tet centroid          (a+b+c)/4
  *   body centroid = Σ v·centroid / Σ v
  * Each facet bounds get_facet_body(f) on one side and the inverse on the other;
  * contributions are signed so only the net (closed) body volume survives.
- * SOAPFILM + sdim 3 only.  Fills out_xyz[0..2]; returns 3, or -1 on error /
+ * SOAPFILM + sdim 3 only.  Fills out_xyz[0..2]; returns 3, 0 if the surface is
+ * not SOAPFILM/sdim-3 (not applicable, not an error), or -1 on bad arguments /
  * out-of-range / degenerate (near-zero volume).
  */
 int se_get_body_cm(int body_idx, double *out_xyz)
@@ -727,7 +651,7 @@ int se_get_body_cm(int body_idx, double *out_xyz)
     if (!se_initialized || !out_xyz || body_idx < 0)
         return -1;
     if (web.representation != SOAPFILM || web.sdim != 3)
-        return -1;
+        return 0;   /* not applicable — see the convention note above */
 
     FOR_ALL_BODIES(b_id) {
         if (n == body_idx) { target = b_id; break; }

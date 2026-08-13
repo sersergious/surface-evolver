@@ -14,8 +14,6 @@ export default function OutputLog({ lines }: { lines: string[] }) {
           ? 'text-error'
           : line.startsWith('>')
           ? 'text-primary'
-          : line.startsWith('[job') || line.startsWith('[ws]')
-          ? 'text-base-content/30'
           : 'text-base-content/80'
         return (
           <div key={i} className={`whitespace-pre-wrap break-all ${cls}`}>{line}</div>

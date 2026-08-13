@@ -95,17 +95,6 @@ static void test_scalar_state(void)
     CHECK(scale > 0.0);
 }
 
-static void test_set_scale(void)
-{
-    SECTION("se_set_scale");
-    double original = se_get_scale();
-    double new_scale = original * 0.5;
-    se_set_scale(new_scale);
-    double got = se_get_scale();
-    CHECK(fabs(got - new_scale) < 1e-12);
-    se_set_scale(original); /* restore */
-}
-
 static void test_iterate(void)
 {
     SECTION("iterate (g 10)");
@@ -307,7 +296,7 @@ static void test_run_error(void)
 
 static void test_topo_and_params(void)
 {
-    SECTION("topo counts / mesh params / total_time");
+    SECTION("topo counts");
 
     int c0[SE_TOPO_COUNT];
     int cn = se_get_topo_counts(c0, SE_TOPO_COUNT);
@@ -327,84 +316,6 @@ static void test_topo_and_params(void)
     int c2[SE_TOPO_COUNT];
     se_get_topo_counts(c2, SE_TOPO_COUNT);
     CHECK(c2[0] >= c1[0]);   /* equi_count never decreases */
-
-    /* mesh params: 4 finite values */
-    double mp[4];
-    int mn = se_get_mesh_params(mp, 4);
-    CHECK(mn == 4);
-    int mp_ok = 1;
-    for (int i = 0; i < mn; i++) if (!isfinite(mp[i])) { mp_ok = 0; break; }
-    CHECK(mp_ok);
-
-    CHECK(isfinite(se_get_total_time()));
-}
-
-static void test_quantities(void)
-{
-    SECTION("named quantities / method instances");
-    /* mylarcube.fe defines named quantities (cube_volume, stretch, ...). */
-    int rc = se_load(FE_DIR "/mylarcube.fe");
-    drain();
-    CHECK(rc == 0);
-    if (rc != 0) { fprintf(stderr, "  last_error: %s\n", se_last_error()); return; }
-
-    int qraw = se_get_quantity_count();
-    CHECK(qraw > 0);
-
-    int shown = 0, names_ok = 1, vals_ok = 1;
-    for (int i = 0; i < qraw; i++) {
-        char nm[128] = {0};
-        double v = 0, t = 0, m = 0; int fl = 0;
-        if (se_get_quantity(i, nm, sizeof(nm), &v, &t, &m, &fl) == 0) {
-            shown++;
-            if (nm[0] == '\0')   names_ok = 0;
-            if (!isfinite(v))    vals_ok  = 0;
-        }
-    }
-    CHECK(shown > 0);
-    CHECK(names_ok);
-    CHECK(vals_ok);
-
-    /* method instances: at least one real (named, finite-valued) entry */
-    int mraw = se_get_method_instance_count();
-    int m_shown = 0, m_ok = 1;
-    for (int i = 0; i < mraw; i++) {
-        char nm[128] = {0}; int ty = 0; double v = 0;
-        if (se_get_method_instance(i, nm, sizeof(nm), &ty, &v) == 0) {
-            m_shown++;
-            if (nm[0] == '\0' || !isfinite(v)) m_ok = 0;
-        }
-    }
-    CHECK(m_shown > 0);
-    CHECK(m_ok);
-}
-
-static void test_physics_and_params(void)
-{
-    SECTION("physics globals + mesh-param setters");
-    int rc = se_load(FE_DIR "/mound.fe");
-    drain();
-    CHECK(rc == 0);
-    if (rc != 0) return;
-
-    double ph[4];
-    CHECK(se_get_physics(ph, 4) == 4);
-
-    /* set a non-zero gravitational constant → gravflag forced on, energy changes */
-    double e0 = se_get_energy();
-    CHECK(se_set_physics(2.5, 1, 0.0, 0) == 0);
-    se_run("recalc");
-    drain();
-    CHECK(se_get_physics(ph, 4) == 4);
-    CHECK(fabs(ph[1] - 2.5) < 1e-9);   /* grav_const */
-    CHECK(ph[0] != 0.0);               /* gravflag on */
-    CHECK(se_get_energy() != e0);      /* gravity now contributes */
-
-    /* mesh params round-trip */
-    CHECK(se_set_mesh_params(0.05, 0.2, 0.9, 0.1) == 0);
-    double mp[4];
-    CHECK(se_get_mesh_params(mp, 4) == 4);
-    CHECK(fabs(mp[1] - 0.2) < 1e-9 && fabs(mp[2] - 0.9) < 1e-9 && fabs(mp[3] - 0.1) < 1e-9);
 }
 
 static void test_element_colors(void)
@@ -421,6 +332,41 @@ static void test_element_colors(void)
     }
 }
 
+static void test_edge_wraps(void)
+{
+    SECTION("se_get_edge_wraps");
+
+    /* cube.fe is not periodic → 0, and specifically not -1: "not applicable"
+     * is not an error. Must be safe even though E_WRAP_ATTR has no storage. */
+    if (se_load(FE_CUBE) == 0) {
+        drain();
+        int ne = se_get_edge_count();
+        int *w = malloc((size_t)ne * sizeof(int));
+        CHECK(se_get_edge_wraps(w, ne) == 0);
+        free(w);
+    }
+
+    /* phelanc.fe is TORUS_FILLED. BACKLOG F1 measured 103 of 368 edges as
+     * wrap-around; assert we see wraps, and that they are a strict minority. */
+    if (se_load(FE_DIR "/phelanc.fe") == 0) {
+        drain();
+        int ne = se_get_edge_count();
+        int *w = malloc((size_t)ne * sizeof(int));
+        int n = se_get_edge_wraps(w, ne);
+        CHECK(n == ne);
+
+        int wrapped = 0;
+        for (int i = 0; i < n; i++) if (w[i] != 0) wrapped++;
+        printf("      phelanc.fe: %d of %d edges wrapped\n", wrapped, n);
+        CHECK(wrapped > 0);
+        CHECK(wrapped < n);
+        free(w);
+    }
+
+    /* bad args stay -1 */
+    CHECK(se_get_edge_wraps(NULL, 10) == -1);
+}
+
 /* ── main ───────────────────────────────────────────────────────────────── */
 
 int main(void)
@@ -433,7 +379,6 @@ int main(void)
     test_load();
     test_element_counts();
     test_scalar_state();
-    test_set_scale();
     test_iterate();
     test_get_vertices();
     test_get_vertex_ids();
@@ -446,9 +391,8 @@ int main(void)
     test_output_capture();
     test_run_error();
     test_topo_and_params();   /* mutates the mesh (refine) */
-    test_quantities();        /* loads a different datafile */
-    test_physics_and_params();
     test_element_colors();
+    test_edge_wraps();
 
     printf("\n=================================\n");
     printf("Results: %d/%d passed\n", g_run - g_failed, g_run);

@@ -7,7 +7,7 @@ import { indentOnInput, bracketMatching }                 from '@codemirror/lang
 import { feLanguage }                                     from './feLanguage'
 import { seTheme }                                        from './seTheme'
 import { exportDmp, exportFe, updateFile, saveExport } from '../../api/export'
-import { createSession }                                  from '../../api/sessions'
+import { createSession, lagrangeWarning }                  from '../../api/sessions'
 import { useStore }                                    from '../../store/useStore'
 
 export default function EditorPane() {
@@ -61,8 +61,8 @@ export default function EditorPane() {
       setFileContent(content)
       setDirty(false)
       appendLog(`Reloaded ${activeFile} — session ${session.session_id.slice(0, 8)}`)
-      if ((session.lagrange_order ?? 1) > 1)
-        appendLog(`[warning] ${activeFile}: Lagrange order ${session.lagrange_order} — curved patches render as straight edges`)
+      const warn = lagrangeWarning(activeFile, session)
+      if (warn) appendLog(warn)
     } catch (err: unknown) {
       appendLog(`[error] Save failed: ${err instanceof Error ? err.message : String(err)}`)
     } finally { setSaving(false) }
