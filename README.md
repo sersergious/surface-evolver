@@ -96,8 +96,9 @@ surface-evolver/
 │   ├── src/worker.rs           # Worker lifecycle + mutex
 │   ├── src/menu.rs             # Native menu bar
 │   ├── capabilities/           # Tauri ACL (window drag, events, opener)
+│   ├── worker/                 # Rust worker sidecar: owns one libse instance over FFI
+│   │                           # (separate crate — own target/ and release profile)
 │   └── tauri.conf.json         # Bundle config (resources, sidecar, window)
-├── worker-rs/                  # Rust worker sidecar: owns one libse instance over FFI
 ├── ui/src/                     # React + Vite frontend
 │   ├── components/             # FilePane, CliPane, EditorPane, ViewerPane
 │   ├── store/                  # Zustand store (single source of truth)
@@ -169,7 +170,7 @@ ctest --test-dir cmake-build-debug --output-on-failure
 cd src-tauri && cargo check
 
 # Worker sidecar tests (needs a built libse; smoke tests skip without it)
-cd worker-rs && SE_LIB_PATH=$PWD/../cmake-build-debug/libse.dylib cargo test
+cd src-tauri/worker && SE_LIB_PATH=$PWD/../../cmake-build-debug/libse.dylib cargo test
 
 # Frontend type-check
 cd ui && bunx tsc --noEmit

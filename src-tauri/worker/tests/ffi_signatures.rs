@@ -15,7 +15,8 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 fn repo_file(rel: &str) -> String {
-    let p = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..").join(rel);
+    // ../.. — this crate lives at src-tauri/worker/, so the repo root is two up.
+    let p = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..").join(rel);
     std::fs::read_to_string(&p).unwrap_or_else(|e| panic!("cannot read {}: {e}", p.display()))
 }
 
@@ -105,7 +106,7 @@ fn parse_rust(src: &str) -> BTreeMap<String, (Vec<String>, String)> {
 #[test]
 fn ffi_signatures_match_the_c_header() {
     let header = parse_header(&repo_file("engine/bindings/c/se_api.h"));
-    let rust = parse_rust(&repo_file("worker-rs/src/ffi.rs"));
+    let rust = parse_rust(&repo_file("src-tauri/worker/src/ffi.rs"));
 
     // Floor, not a count: catches a parser that silently matches nothing. Raise
     // it if the facade grows; it was 30 when se_api.h exported 37, and dropped

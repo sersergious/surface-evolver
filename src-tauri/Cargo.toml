@@ -2,6 +2,10 @@
 name = "surface-evolver"
 version = "0.2.0"
 edition = "2021"
+# worker/ is a separate crate that happens to live in this directory — keep it
+# out of this package's file set. See worker/Cargo.toml for why it stays
+# standalone rather than becoming a workspace member.
+exclude = ["worker"]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }

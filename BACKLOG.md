@@ -31,10 +31,10 @@ Full commit history in `git log`. Headline:
   attributes, and the six vertex scalar fields) were deleted, taking `se_api.c`
   from 1343 → 856 lines. Restore any of them from git history if a feature needs
   one; deleting a C accessor also requires deleting its declaration in
-  `worker-rs/src/ffi.rs`, which must stay in lockstep with `se_api.h`.
-- **Worker**: ported from the bun:ffi sidecar to a Rust one (`worker-rs/`)
+  `src-tauri/worker/src/ffi.rs`, which must stay in lockstep with `se_api.h`.
+- **Worker**: ported from the bun:ffi sidecar to a Rust one (`src-tauri/worker/`)
   on 2026-08-08 — 58 MB → 345 KB, and the bun codesign workaround is gone.
-  Guarded by `worker-rs/tests/` (FFI-signature drift + a stdin/stdout smoke
+  Guarded by `src-tauri/worker/tests/` (FFI-signature drift + a stdin/stdout smoke
   suite); the worker previously had no tests at all.
 - **App**: open-files tabs + modal file browser; CLI (full command access) +
   Run-menu topology (refine/equi/vertex-avg/pop) + iterate; 3D viewer with
@@ -50,7 +50,7 @@ Full commit history in `git log`. Headline:
   macOS/Linux/Windows CI (libse on Windows via MinGW/MSYS2).
 - **Removed this cycle** (intentional, not gaps): scalar heatmap colormaps,
   quick-command button bar, Docs feature, `react-router-dom`, and the
-  `worker/se-worker.ts` bun sidecar (superseded by `worker-rs/`).
+  `worker/se-worker.ts` bun sidecar (superseded by `src-tauri/worker/`).
 
 ### Accepted risks (assessed, deliberately not fixed)
 
@@ -59,7 +59,7 @@ Full commit history in `git log`. Headline:
   reload"), but the session is lost. The old TS catch-all kept the process
   alive with the engine in an undefined state, which is not clearly better.
 - **`se_get_edge_colors` has no C test.** It is used by `mesh` and is covered
-  indirectly by `worker-rs/tests/smoke.rs`, but not at the C layer. **S** to fix.
+  indirectly by `src-tauri/worker/tests/smoke.rs`, but not at the C layer. **S** to fix.
 - **Stricter-than-TS input handling in the Rust worker**, both unreachable from
   our own frontend: a partial `mesh_params` now errors instead of passing
   `undefined` into C, and a non-boolean `colors` is ignored rather than treated

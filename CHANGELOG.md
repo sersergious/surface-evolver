@@ -27,10 +27,13 @@ under pre-1.0 semver.
   call and cannot be interrupted in band, so this kills the worker process —
   the in-memory surface goes with it, the tab stays so the file can be
   reopened, and the last auto-snapshot is still on disk.
-- **Rust worker sidecar** (`worker-rs/`) replacing the bun:ffi one. Standalone
-  crate depending only on `libloading` + `serde_json`; deliberately not a
-  workspace member, because a workspace root would relocate `src-tauri/target/`,
-  which CI artifact paths and tauri's bundle output hard-code.
+- **Rust worker sidecar** (`src-tauri/worker/`) replacing the bun:ffi one.
+  Standalone crate depending only on `libloading` + `serde_json`; deliberately
+  not a workspace member. A workspace root would relocate `src-tauri/target/`
+  (which CI artifact paths and tauri's bundle output hard-code), and — the
+  decisive reason — Cargo ignores `[profile]` in workspace members, so sharing
+  one would force `panic = "abort"` onto the Tauri app and cost the sidecar its
+  345 KB release profile.
 - **Worker test suites** where there were none: `tests/ffi_signatures.rs` parses
   `se_api.h` and `src/ffi.rs` and asserts they agree (these are unchecked
   `unsafe extern "C"` declarations, so drift is UB rather than a compile error;

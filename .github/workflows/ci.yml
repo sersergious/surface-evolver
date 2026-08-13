@@ -58,7 +58,7 @@ jobs:
         with:
           workspaces: |
             src-tauri
-            worker-rs
+            src-tauri/worker
 
       - name: Tauri v2 Linux build deps
         run: |
@@ -88,7 +88,7 @@ jobs:
           cmake --build build --parallel 4
 
       - name: Worker tests (ffi signature guard + smoke)
-        working-directory: worker-rs
+        working-directory: src-tauri/worker
         env:
           SE_LIB_PATH: ${{ github.workspace }}/build/libse.so
         run: cargo test --locked

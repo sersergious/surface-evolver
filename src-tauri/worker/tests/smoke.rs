@@ -16,7 +16,8 @@ use std::path::PathBuf;
 use std::process::{Command, Stdio};
 
 fn repo() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..")
+    // ../.. — this crate lives at src-tauri/worker/, so the repo root is two up.
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
 }
 
 /// Feed the worker a script of commands; collect one JSON reply per line.
