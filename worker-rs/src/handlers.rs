@@ -122,7 +122,6 @@ impl Worker {
                 "lagrange_order": (self.se.get_lagrange_order)(),
                 "bbox_min": bbox_min,
                 "bbox_max": bbox_max,
-                "total_time": (self.se.get_total_time)(),
             })
         }
     }
@@ -155,7 +154,6 @@ impl Worker {
                 "output": output,
                 "energy": (self.se.get_energy)(),
                 "area": (self.se.get_area)(),
-                "total_time": (self.se.get_total_time)(),
             })
         }
     }
@@ -195,11 +193,28 @@ impl Worker {
         }
 
         let ecount = unsafe { (self.se.get_edge_count)() };
+        // Periodic surfaces: an edge that crosses a period boundary has no
+        // honest straight-line form — drawn as-is it spans the whole domain
+        // (103 of 368 edges in phelanc.fe, BACKLOG F1). Drop those rather than
+        // draw a lie. Read-only: `se_get_edge_wraps` mutates nothing, unlike
+        // SE's `detorus`, which stays available through `run`.
+        // Returns 0 for a non-periodic surface, so this is a no-op there.
+        let mut wraps = vec![0i32; ecount.max(0) as usize];
+        let wn = if ecount > 0 {
+            unsafe { (self.se.get_edge_wraps)(wraps.as_mut_ptr(), ecount) }.clamp(0, ecount)
+        } else {
+            0
+        };
+        let mut wrapped_hidden = 0usize;
         let mut edges: Vec<Value> = Vec::new();
         if ecount > 0 {
             let mut ebuf = vec![0i32; ecount as usize * 2];
             let en = unsafe { (self.se.get_edges)(ebuf.as_mut_ptr(), ecount) }.clamp(0, ecount);
             for i in 0..en.max(0) as usize {
+                if wn > 0 && wraps[i] != 0 {
+                    wrapped_hidden += 1;
+                    continue;
+                }
                 edges.push(json!([ebuf[i * 2], ebuf[i * 2 + 1]]));
             }
         }
@@ -251,10 +266,21 @@ impl Worker {
             if ecount > 0 {
                 let mut ec = vec![0i32; ecount as usize];
                 let cn = unsafe { (self.se.get_edge_colors)(ec.as_mut_ptr(), ecount) };
-                edge_colors.extend_from_slice(&ec[..cn.clamp(0, ecount) as usize]);
+                // Same skip as `edges`, so index i stays aligned across both.
+                for i in 0..cn.clamp(0, ecount) as usize {
+                    if wn > 0 && wraps[i] != 0 {
+                        continue;
+                    }
+                    edge_colors.push(ec[i]);
+                }
             }
             out.insert("facet_colors".into(), json!(facet_colors));
             out.insert("edge_colors".into(), json!(edge_colors));
+        }
+        // Only present when something was actually dropped — the UI surfaces it
+        // so the omission is visible rather than silent.
+        if wrapped_hidden > 0 {
+            out.insert("wrapped_edges_hidden".into(), json!(wrapped_hidden));
         }
         Value::Object(out)
     }
@@ -333,46 +359,8 @@ impl Worker {
                 "energy": energy,
                 "energy_delta": energy - energy_start,
                 "area": (self.se.get_area)(),
-                "total_time": (self.se.get_total_time)(),
             })
         }
-    }
-
-    // ── quantities ──────────────────────────────────────────────────────────
-
-    pub fn quantities(&mut self) -> Value {
-        let mut name = vec![0u8; NAME_SIZE as usize];
-        let (mut d0, mut d1, mut d2) = (0f64, 0f64, 0f64);
-        let mut i0 = 0i32;
-
-        let mut quantities: Vec<Value> = Vec::new();
-        let qc = unsafe { (self.se.get_quantity_count)() };
-        for i in 0..qc.max(0) {
-            let r = unsafe {
-                (self.se.get_quantity)(
-                    i, name.as_mut_ptr(), NAME_SIZE,
-                    &mut d0, &mut d1, &mut d2, &mut i0,
-                )
-            };
-            if r == 0 {
-                quantities.push(json!({
-                    "name": cstr(&name), "value": d0,
-                    "target": d1, "modulus": d2, "flags": i0,
-                }));
-            }
-        }
-
-        let mut methods: Vec<Value> = Vec::new();
-        let mc = unsafe { (self.se.get_method_instance_count)() };
-        for i in 0..mc.max(0) {
-            let r = unsafe {
-                (self.se.get_method_instance)(i, name.as_mut_ptr(), NAME_SIZE, &mut i0, &mut d0)
-            };
-            if r == 0 {
-                methods.push(json!({ "name": cstr(&name), "type": i0, "value": d0 }));
-            }
-        }
-        json!({ "ok": true, "quantities": quantities, "methods": methods })
     }
 
     // ── vertex_info ─────────────────────────────────────────────────────────
@@ -406,86 +394,6 @@ impl Worker {
             "ok": true, "id": id, "xyz": [xyz[0], xyz[1], xyz[2]],
             "attr": attr, "constraints": constraints,
         })
-    }
-
-    // ── settings ────────────────────────────────────────────────────────────
-
-    fn read_settings(&self) -> (Value, Value, f64) {
-        let mut mp = [0f64; 4];
-        let mut ph = [0f64; 4];
-        unsafe {
-            (self.se.get_mesh_params)(mp.as_mut_ptr(), 4);
-            (self.se.get_physics)(ph.as_mut_ptr(), 4);
-        }
-        (
-            json!({ "min_area": mp[0], "min_length": mp[1], "max_len": mp[2], "temperature": mp[3] }),
-            json!({ "gravflag": ph[0] != 0.0, "grav_const": ph[1], "pressflag": ph[2] != 0.0, "pressure": ph[3] }),
-            unsafe { (self.se.get_total_time)() },
-        )
-    }
-
-    pub fn settings(&mut self) -> Value {
-        let (mesh_params, physics, total_time) = self.read_settings();
-        json!({ "ok": true, "mesh_params": mesh_params, "physics": physics, "total_time": total_time })
-    }
-
-    pub fn set_settings(&mut self, req: &Value) -> Value {
-        if let Some(m) = req["mesh_params"].as_object() {
-            // Validate in the declared field order so the error names the same
-            // field the TS would have named.
-            let mut vals = [0f64; 4];
-            for (i, k) in ["min_area", "min_length", "max_len", "temperature"].iter().enumerate() {
-                match m.get(*k).and_then(|v| v.as_f64()) {
-                    Some(v) if v.is_finite() && v > 0.0 => vals[i] = v,
-                    _ => return json!({ "ok": false, "error": format!("invalid {k}: must be a positive finite number") }),
-                }
-            }
-            unsafe { (self.se.set_mesh_params)(vals[0], vals[1], vals[2], vals[3]) };
-        }
-        if let Some(p) = req["physics"].as_object() {
-            // grav/pressure may legitimately be negative or zero -> finite only.
-            let g = p.get("grav_const").and_then(|v| v.as_f64());
-            let pr = p.get("pressure").and_then(|v| v.as_f64());
-            match (g, pr) {
-                (Some(g), Some(pr)) if g.is_finite() && pr.is_finite() => unsafe {
-                    (self.se.set_physics)(
-                        g,
-                        p.get("gravflag").and_then(|v| v.as_bool()).unwrap_or(false) as i32,
-                        pr,
-                        p.get("pressflag").and_then(|v| v.as_bool()).unwrap_or(false) as i32,
-                    );
-                },
-                _ => return json!({ "ok": false, "error": "grav_const/pressure must be finite numbers" }),
-            }
-        }
-        // recalc through the protected command path so energy/area refresh.
-        unsafe { (self.se.run)(cstring("recalc").as_ptr()) };
-        self.pop_output();
-
-        let (mesh_params, physics, total_time) = self.read_settings();
-        unsafe {
-            json!({
-                "ok": true, "mesh_params": mesh_params, "physics": physics,
-                "total_time": total_time,
-                "energy": (self.se.get_energy)(), "area": (self.se.get_area)(),
-            })
-        }
-    }
-
-    pub fn set_scale(&mut self, req: &Value) -> Value {
-        let scale = match req["scale"].as_f64() {
-            Some(s) if s > 0.0 => s,
-            _ => return json!({ "ok": false, "error": "scale must be a positive number" }),
-        };
-        unsafe { (self.se.set_scale)(scale) };
-        unsafe {
-            json!({
-                "ok": true,
-                "scale": (self.se.get_scale)(),
-                "energy": (self.se.get_energy)(),
-                "area": (self.se.get_area)(),
-            })
-        }
     }
 
     // ── dump ────────────────────────────────────────────────────────────────

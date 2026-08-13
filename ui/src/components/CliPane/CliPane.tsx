@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react'
 import { runCommand, runTopo, type TopoOp } from '../../api/simulation'
+import { cancelSession } from '../../api/sessions'
 import { useStore } from '../../store/useStore'
 import { useMenuAction } from '../../hooks/useMenuAction'
 import OutputLog from './OutputLog'
@@ -19,10 +20,24 @@ function summarize(counts: Record<string, number>): string {
 }
 
 export default function CliPane() {
-  const { sessionId, outputLog, appendLog, setStats, setTotalTime, bumpMeshVersion } = useStore()
+  const { sessionId, outputLog, appendLog, setStats, bumpMeshVersion, clearSession } = useStore()
   const [input, setInput] = useState('')
   const [busy, setBusy]   = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
+
+  // The only cancel there is: se_run blocks, so the backend kills the worker.
+  // The in-memory surface dies with it — the tab stays so the file can be
+  // reopened, and the last auto-snapshot is still on disk.
+  async function handleStop() {
+    if (!sessionId) return
+    try {
+      await cancelSession()
+      clearSession()
+      appendLog('[stopped] engine killed — reopen the file to continue')
+    } catch (err: unknown) {
+      appendLog(`[error] ${err instanceof Error ? err.message : String(err)}`)
+    }
+  }
 
   // Native Run menu → iterate `g N` (reuses the run path so stats/mesh refresh).
   async function runG(n: number) {
@@ -33,7 +48,6 @@ export default function CliPane() {
       const res = await runCommand(sessionId, `g ${n}`)
       if (res.output) appendLog(res.output)
       setStats(res.energy, res.area)
-      setTotalTime(res.total_time)
       bumpMeshVersion()
     } catch (err: unknown) {
       appendLog(`[error] ${err instanceof Error ? err.message : String(err)}`)
@@ -60,7 +74,6 @@ export default function CliPane() {
       const res = await runTopo(sessionId, op)
       appendLog(`  ${summarize(res.counts)} · ΔE ${res.energy_delta >= 0 ? '+' : ''}${res.energy_delta.toExponential(2)}`)
       setStats(res.energy, res.area)
-      setTotalTime(res.total_time)
       bumpMeshVersion()
     } catch (err: unknown) {
       appendLog(`[error] ${err instanceof Error ? err.message : String(err)}`)
@@ -80,7 +93,6 @@ export default function CliPane() {
       if (res.output) appendLog(res.output)
       if (res.energy !== null || res.area !== null) {
         setStats(res.energy, res.area)
-        setTotalTime(res.total_time)
         bumpMeshVersion()
       }
     } catch (err: unknown) {
@@ -110,11 +122,12 @@ export default function CliPane() {
           autoComplete="off"
         />
         <button
-          className="btn btn-xs btn-primary shrink-0"
-          onClick={handleRun}
-          disabled={!sessionId || !input.trim() || busy}
+          className={`btn btn-xs shrink-0 ${busy ? 'btn-error' : 'btn-primary'}`}
+          onClick={busy ? handleStop : handleRun}
+          disabled={!sessionId || (!busy && !input.trim())}
+          title={busy ? 'Kill the engine process' : 'Run command'}
         >
-          Run
+          {busy ? 'Stop' : 'Run'}
         </button>
       </div>
     </div>

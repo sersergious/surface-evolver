@@ -2,9 +2,8 @@ import { useRef, useEffect, useState, useMemo } from 'react'
 import * as THREE from 'three'
 import { Canvas, useThree } from '@react-three/fiber'
 import { OrbitControls } from '@react-three/drei'
-import { ArrowPathIcon, ChartBarIcon, CursorArrowRaysIcon, Cog6ToothIcon } from '@heroicons/react/24/outline'
+import { ArrowPathIcon, CursorArrowRaysIcon } from '@heroicons/react/24/outline'
 import { useMesh } from '../../hooks/useMesh'
-import { useQuantities } from '../../hooks/useQuantities'
 import { useMenuAction } from '../../hooks/useMenuAction'
 import { useThemeColors } from '../../hooks/useThemeColors'
 import { useStore } from '../../store/useStore'
@@ -12,9 +11,7 @@ import { getVertexInfo, type MeshData, type VertexInfo } from '../../api/simulat
 import MeshGeometry, {
   EdgeLines, PickPoints, VertexMarker, BodyMarkers, RaycasterConfig, type RenderMode,
 } from './MeshGeometry'
-import QuantitiesPanel from './QuantitiesPanel'
 import VertexInspector from './VertexInspector'
-import SettingsPanel from './SettingsPanel'
 
 const MODES: RenderMode[] = ['solid', 'wireframe', 'xray']
 const MODE_LABEL: Record<RenderMode, string> = { solid: 'Solid', wireframe: 'Wire', xray: 'X-Ray' }
@@ -46,19 +43,16 @@ function FitCamera({ mesh }: { mesh: MeshData | null }) {
 }
 
 export default function ViewerPane() {
-  const { sessionId, setStats, setTotalTime, bumpMeshVersion } = useStore()
+  const { sessionId } = useStore()
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const controlsRef = useRef<any>(null)
   const [mode,      setMode]      = useState<RenderMode>('solid')
-  const [showQuants, setShowQuants] = useState(false)
-  const [showSettings, setShowSettings] = useState(false)
   const [inspect,    setInspect]    = useState(false)
   const [picked,     setPicked]     = useState<VertexInfo | null>(null)
   const [pickedPos,  setPickedPos]  = useState<number[] | null>(null)
 
   const { data: mesh, isFetching } = useMesh()
-  const quantities = useQuantities(showQuants)
   const themeColors = useThemeColors()
 
   // Characteristic mesh size → raycaster threshold + marker radii (scale-aware).
@@ -82,13 +76,11 @@ export default function ViewerPane() {
   useMenuAction(a => {
     if (!sessionId) return
     if (a.startsWith('render:'))      setMode(a.slice(7) as RenderMode)
-    else if (a === 'panel:quants')    { setShowQuants(s => !s); setShowSettings(false) }
-    else if (a === 'panel:settings')  { setShowSettings(s => !s); setShowQuants(false) }
     else if (a === 'panel:inspect')   { setInspect(i => !i); setPicked(null); setPickedPos(null) }
   })
 
   useEffect(() => {
-    if (!sessionId) { setShowQuants(false); setShowSettings(false); setInspect(false) }
+    if (!sessionId) { setInspect(false) }
   }, [sessionId])
 
   // A picked vertex's position index goes stale when the mesh changes (refine,
@@ -130,36 +122,12 @@ export default function ViewerPane() {
           title="Cycle render mode"
         >{MODE_LABEL[mode]}</button>
         <button
-          className={`btn btn-xs border-base-300 text-base-content ${showQuants ? 'bg-base-300' : 'bg-base-300/80 hover:bg-base-300'}`}
-          onClick={() => { setShowQuants(s => !s); setShowSettings(false) }}
-          disabled={!sessionId}
-          title="Quantities & energy breakdown"
-        ><ChartBarIcon className="w-4 h-4" /></button>
-        <button
           className={`btn btn-xs border-base-300 text-base-content ${inspect ? 'bg-base-300' : 'bg-base-300/80 hover:bg-base-300'}`}
           onClick={() => { setInspect(i => !i); setPicked(null); setPickedPos(null) }}
           disabled={!sessionId}
           title="Inspect: click a vertex; show body centroids"
         ><CursorArrowRaysIcon className="w-4 h-4" /></button>
-        <button
-          className={`btn btn-xs border-base-300 text-base-content ${showSettings ? 'bg-base-300' : 'bg-base-300/80 hover:bg-base-300'}`}
-          onClick={() => { setShowSettings(s => !s); setShowQuants(false) }}
-          disabled={!sessionId}
-          title="Mesh & physics settings"
-        ><Cog6ToothIcon className="w-4 h-4" /></button>
       </div>
-
-      {showQuants && quantities && (
-        <QuantitiesPanel data={quantities} onClose={() => setShowQuants(false)} />
-      )}
-
-      {showSettings && sessionId && (
-        <SettingsPanel
-          sessionId={sessionId}
-          onClose={() => setShowSettings(false)}
-          onApplied={(energy, area, totalTime) => { setStats(energy, area); setTotalTime(totalTime); bumpMeshVersion() }}
-        />
-      )}
 
       {inspect && picked && (
         <VertexInspector info={picked} onClose={() => { setPicked(null); setPickedPos(null) }} />
@@ -174,6 +142,12 @@ export default function ViewerPane() {
       {mesh && (
         <div className="absolute bottom-3 left-3 z-20 badge bg-base-300/80 border-base-300 text-base-content font-mono text-[10px] pointer-events-none">
           {mesh.vertices.length.toLocaleString()} v · {mesh.edges.length.toLocaleString()} e · {mesh.facets.length.toLocaleString()} f
+          {mesh.wrapped_edges_hidden ? (
+            <span
+              className="ml-1 text-warning"
+              title={`Periodic surface: ${mesh.wrapped_edges_hidden} edges wrap around the domain and are not drawn. Run \`detorus\` to unwrap the geometry — note that is irreversible.`}
+            >· {mesh.wrapped_edges_hidden} wrapped</span>
+          ) : null}
         </div>
       )}
 

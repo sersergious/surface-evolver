@@ -18,8 +18,6 @@ pub struct Se {
     pub get_energy: unsafe extern "C" fn() -> f64,
     pub get_area: unsafe extern "C" fn() -> f64,
     pub get_scale: unsafe extern "C" fn() -> f64,
-    pub set_scale: unsafe extern "C" fn(f64),
-    pub get_total_time: unsafe extern "C" fn() -> f64,
 
     pub get_sdim: unsafe extern "C" fn() -> i32,
     pub get_vertex_count: unsafe extern "C" fn() -> i32,
@@ -34,22 +32,13 @@ pub struct Se {
     pub get_edges: unsafe extern "C" fn(*mut i32, i32) -> i32,
     pub get_facet_colors: unsafe extern "C" fn(*mut i32, *mut i32, i32) -> i32,
     pub get_edge_colors: unsafe extern "C" fn(*mut i32, i32) -> i32,
+    pub get_edge_wraps: unsafe extern "C" fn(*mut i32, i32) -> i32,
     pub get_bounding_box: unsafe extern "C" fn(*mut f64, *mut f64) -> i32,
 
     pub get_topo_counts: unsafe extern "C" fn(*mut i32, i32) -> i32,
-    pub get_mesh_params: unsafe extern "C" fn(*mut f64, i32) -> i32,
-    pub set_mesh_params: unsafe extern "C" fn(f64, f64, f64, f64) -> i32,
-    pub get_physics: unsafe extern "C" fn(*mut f64, i32) -> i32,
-    pub set_physics: unsafe extern "C" fn(f64, i32, f64, i32) -> i32,
 
     pub get_body_volumes: unsafe extern "C" fn(*mut f64, *mut f64, i32) -> i32,
     pub get_body_cm: unsafe extern "C" fn(i32, *mut f64) -> i32,
-
-    pub get_quantity_count: unsafe extern "C" fn() -> i32,
-    pub get_quantity:
-        unsafe extern "C" fn(i32, *mut u8, i32, *mut f64, *mut f64, *mut f64, *mut i32) -> i32,
-    pub get_method_instance_count: unsafe extern "C" fn() -> i32,
-    pub get_method_instance: unsafe extern "C" fn(i32, *mut u8, i32, *mut i32, *mut f64) -> i32,
 
     pub get_vertex_info:
         unsafe extern "C" fn(i32, *mut i32, *mut f64, *mut i32, *mut i32, i32) -> i32,
@@ -85,8 +74,6 @@ impl Se {
                 get_energy: sym(lib, b"se_get_energy\0")?,
                 get_area: sym(lib, b"se_get_area\0")?,
                 get_scale: sym(lib, b"se_get_scale\0")?,
-                set_scale: sym(lib, b"se_set_scale\0")?,
-                get_total_time: sym(lib, b"se_get_total_time\0")?,
 
                 get_sdim: sym(lib, b"se_get_sdim\0")?,
                 get_vertex_count: sym(lib, b"se_get_vertex_count\0")?,
@@ -101,21 +88,13 @@ impl Se {
                 get_edges: sym(lib, b"se_get_edges\0")?,
                 get_facet_colors: sym(lib, b"se_get_facet_colors\0")?,
                 get_edge_colors: sym(lib, b"se_get_edge_colors\0")?,
+                get_edge_wraps: sym(lib, b"se_get_edge_wraps\0")?,
                 get_bounding_box: sym(lib, b"se_get_bounding_box\0")?,
 
                 get_topo_counts: sym(lib, b"se_get_topo_counts\0")?,
-                get_mesh_params: sym(lib, b"se_get_mesh_params\0")?,
-                set_mesh_params: sym(lib, b"se_set_mesh_params\0")?,
-                get_physics: sym(lib, b"se_get_physics\0")?,
-                set_physics: sym(lib, b"se_set_physics\0")?,
 
                 get_body_volumes: sym(lib, b"se_get_body_volumes\0")?,
                 get_body_cm: sym(lib, b"se_get_body_cm\0")?,
-
-                get_quantity_count: sym(lib, b"se_get_quantity_count\0")?,
-                get_quantity: sym(lib, b"se_get_quantity\0")?,
-                get_method_instance_count: sym(lib, b"se_get_method_instance_count\0")?,
-                get_method_instance: sym(lib, b"se_get_method_instance\0")?,
 
                 get_vertex_info: sym(lib, b"se_get_vertex_info\0")?,
                 get_constraint_name: sym(lib, b"se_get_constraint_name\0")?,

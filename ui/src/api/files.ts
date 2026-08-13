@@ -3,7 +3,6 @@ import { rpc } from './client'
 export interface UploadResult {
   filename:   string
   size_bytes: number
-  renderable: boolean
 }
 
 export async function listFiles(): Promise<string[]> {

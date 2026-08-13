@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { createSession, getRestore } from '../../api/sessions'
+import { createSession, getRestore, lagrangeWarning } from '../../api/sessions'
 import { exportFe } from '../../api/export'
 import { useStore } from '../../store/useStore'
 import { useMenuAction } from '../../hooks/useMenuAction'
@@ -54,7 +54,9 @@ export default function FilePane() {
 
   async function handleSelect(file: string) {
     if (loadingFile) return
-    if (activeFile === file && !fileErrors[file]) return
+    // `!sessionId` lets the active file be re-opened after a cancel killed its
+    // worker — the tab stays, but there is no live session behind it.
+    if (activeFile === file && sessionId && !fileErrors[file]) return
     clearError(file)
     setLoadingFile(file)
     try {
@@ -63,8 +65,8 @@ export default function FilePane() {
       setSession(session.session_id, file)   // also adds to openFiles
       setStats(session.energy, session.area)
       appendLog(`Loaded ${file} — session ${session.session_id.slice(0, 8)}`)
-      if ((session.lagrange_order ?? 1) > 1)
-        appendLog(`[warning] ${file}: Lagrange order ${session.lagrange_order} — curved patches render as straight edges`)
+      const warn = lagrangeWarning(file, session)
+      if (warn) appendLog(warn)
       try {
         const fe = await exportFe(session.session_id)
         setFileContent(fe.content)

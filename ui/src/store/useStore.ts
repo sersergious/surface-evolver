@@ -7,17 +7,16 @@ interface AppState {
   fileContent: string | null
   energy:      number | null
   area:        number | null
-  totalTime:   number | null
   outputLog:   string[]
   meshVersion: number
 }
 
 interface AppActions {
   setSession:      (id: string, file: string) => void
+  clearSession:    () => void
   removeOpenFile:  (file: string) => void
   setFileContent:  (content: string | null) => void
   setStats:        (energy: number | null, area: number | null) => void
-  setTotalTime:    (t: number | null) => void
   appendLog:       (line: string) => void
   bumpMeshVersion: () => void
 }
@@ -29,24 +28,25 @@ export const useStore = create<AppState & AppActions>((set) => ({
   fileContent: null,
   energy:      null,
   area:        null,
-  totalTime:   null,
   outputLog:   [],
   meshVersion: 0,
 
   setSession:      (id, file) => set((s) => ({
-    sessionId: id, activeFile: file, totalTime: 0,
+    sessionId: id, activeFile: file,
     openFiles: s.openFiles.includes(file) ? s.openFiles : [...s.openFiles, file],
   })),
+  // Worker killed (cancel) — drop the session but keep the tab, so clicking it
+  // reloads. activeFile stays set so File ▸ Reload Surface still works.
+  clearSession:    ()         => set({ sessionId: null, energy: null, area: null }),
   // Close a tab. If it's the live one, also tear down the active session.
   removeOpenFile:  (file)     => set((s) => {
     const openFiles = s.openFiles.filter(f => f !== file)
     return file === s.activeFile
-      ? { openFiles, sessionId: null, activeFile: null, energy: null, area: null, totalTime: null, fileContent: null }
+      ? { openFiles, sessionId: null, activeFile: null, energy: null, area: null, fileContent: null }
       : { openFiles }
   }),
   setFileContent:  (content)  => set({ fileContent: content }),
   setStats:        (energy, area) => set({ energy, area }),
-  setTotalTime:    (t) => set({ totalTime: t }),
   appendLog: (line) =>
     set((s) => {
       const next = [...s.outputLog, line]

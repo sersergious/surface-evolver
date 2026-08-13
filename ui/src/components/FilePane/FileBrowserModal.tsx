@@ -48,7 +48,7 @@ export default function FileBrowserModal({ open, onClose, onPick }: {
       const result = await uploadFile(file.name, arrayBufferToBase64(await file.arrayBuffer()))
       appendLog(`Uploaded ${result.filename} (${result.size_bytes} bytes)`)
       await refreshFiles()
-      if (result.renderable) { onPick(result.filename); onClose() }
+      onPick(result.filename); onClose()
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err)
       setUploadErr(msg.length > 80 ? msg.slice(0, 77) + '…' : msg)

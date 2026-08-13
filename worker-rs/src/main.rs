@@ -77,12 +77,8 @@ fn main() {
             "load" => w.load(&req),
             "run" => w.run(&req),
             "mesh" => w.mesh(&req),
-            "set_scale" => w.set_scale(&req),
             "topo" => w.topo(&req),
-            "quantities" => w.quantities(),
             "vertex_info" => w.vertex_info(&req),
-            "settings" => w.settings(),
-            "set_settings" => w.set_settings(&req),
             "dump" => w.dump(),
             other => json!({ "ok": false, "error": format!("unknown cmd: {other}") }),
         };

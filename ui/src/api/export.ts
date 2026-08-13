@@ -10,22 +10,12 @@ export interface FeExport {
   content:  string
 }
 
-export interface ScaleResult {
-  scale:  number
-  energy: number
-  area:   number
-}
-
 export async function exportDmp(sessionId: string): Promise<DmpExport> {
   return rpc<DmpExport>('exportDmp', { sessionId })
 }
 
 export async function exportFe(sessionId: string): Promise<FeExport> {
   return rpc<FeExport>('exportFe', { sessionId })
-}
-
-export async function setScale(sessionId: string, scale: number): Promise<ScaleResult> {
-  return rpc<ScaleResult>('setScale', { sessionId, scale })
 }
 
 export async function updateFile(filename: string, content: string): Promise<{ filename: string; size_bytes: number }> {

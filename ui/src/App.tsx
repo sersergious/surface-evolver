@@ -50,7 +50,7 @@ function Navbar({ sidebarOpen, onToggleSidebar }: {
   sidebarOpen: boolean
   onToggleSidebar: () => void
 }) {
-  const { sessionId, activeFile, energy, area, totalTime } = useStore()
+  const { sessionId, activeFile, energy, area } = useStore()
 
   return (
     <div data-tauri-drag-region className="navbar min-h-0 h-11 bg-base-200 border-b border-base-300 px-2 gap-0 shrink-0">
@@ -81,11 +81,10 @@ function Navbar({ sidebarOpen, onToggleSidebar }: {
       {/* ── Right ── */}
       <div data-tauri-drag-region className="navbar-end gap-2">
         {/* Stats */}
-        {(energy !== null || area !== null || totalTime !== null) && (
+        {(energy !== null || area !== null) && (
           <div data-tauri-drag-region className="hidden sm:flex items-center gap-3 mr-1">
             {energy !== null && <StatChip label="E" value={energy.toFixed(4)} />}
             {area   !== null && <StatChip label="A" value={area.toFixed(4)} />}
-            {totalTime !== null && <StatChip label="t" value={totalTime.toPrecision(4)} />}
           </div>
         )}
 
