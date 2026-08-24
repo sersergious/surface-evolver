@@ -1,202 +1,146 @@
-# Surface Evolver
+# Surface Evolver Desktop [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://www.apache.org/licenses/LICENSE-2.0)
 
-A native **desktop app** for Mac, Linux, and Windows that wraps the [Surface Evolver](https://facstaff.susqu.edu/brakke/evolver/evolver.html) C engine in an interactive three-pane interface: a file browser, a command line, and a live 3D viewer. It runs as a real desktop window via [Tauri](https://tauri.app/) (Rust backend + system webview) — no browser, no server, no HTTP.
+A native desktop app for macOS, Linux, and Windows that wraps Ken Brakke's [Surface Evolver](https://facstaff.susqu.edu/brakke/evolver/evolver.html) — a 190,000-line C engine for minimising the energy of constrained surfaces — in a modern three-pane interface with a live WebGL viewer. It exists because the original ships as a terminal program with an X11 graphics window, which is a hard sell in 2026 even for the researchers who depend on it.
 
-## What it does
-
-Surface Evolver minimizes the energy of surfaces subject to constraints — volumes, pressures, boundary conditions — using gradient descent and other methods. It's widely used in physics, materials science, and computational geometry.
-
-This project drives the original C engine directly over FFI from a small Rust sidecar, so you get the full Surface Evolver command language in the CLI pane, plus first-class UI for the common workflow (load → evolve → refine → inspect → export) and a WebGL viewer that renders the mesh as it evolves.
-
-## What you can do
-
-- **Load** any bundled `.fe` file, or upload your own (the **+** button in the file pane). Open several as tabs.
-- **Run the full SE command language** in the CLI pane — anything you'd type in the real Evolver (`g`, `r`, `u`, `hessian`, `ritz`, quantity/constraint definitions, macros like `gogo := { … }`, …).
-- **Evolve & refine** via the Run menu / keyboard: iterate (`⌘G`), Refine (`⌘R`), Equiangulate (`⌘U`), Vertex Average (`⌘E`), Pop.
-- **Visualize** in 3D: Solid / Wireframe / X-Ray modes, native SE per-element colours, full edge overlay, orbit + reset camera.
-- **Inspect**: click a vertex for its id, coordinates, constraints and flags; body centre-of-mass markers.
-- **Panels**: named quantities + energy breakdown; mesh-quality and physics settings (min area/length, gravity, pressure).
-- **Export** the current surface as `.fe` or an exact-state `.dmp`.
-- **Auto-restore** — the surface is snapshotted in the background after every mutating command, and your evolved state comes back after a restart (opening a file first always wins over the restored session).
-
-## What you can't do (yet)
-
-- **Only one live session at a time.** The engine is one-worker-per-session, so open files are tabs — switching reloads; background tabs aren't kept warm.
-- **Power features are CLI-only** (they work, just no buttons): Hessian/eigenvalue stability analysis, and advanced ops like `edgeswap`, `dissolve`, `jiggle`, `optimize`, `conj_grad`, `saddle`.
-- **Defining** quantities / constraints / methods happens in the CLI or the `.fe` file — the panels are view-only.
-- **No scalar heat-map colormaps** (curvature/valence/…); the viewer shows native SE colours only.
-- **No native graphics window or PostScript export** — the WebGL viewer replaces them.
-
-## Known issues
-
-- **`simplex3.fe` and `slidestr.fe` are hidden** — `simplex3` (SIMPLEX model) loads and runs but renders empty (simplex cells aren't exposed by the mesh API); `slidestr` is a malformed bundled datafile the engine rejects at load.
-- **Curved (Lagrange/quadratic) patches render as straight edges** — you'll see a warning in the log; the geometry is approximate.
-- **Periodic (torus) files show wrap-around edges** — edges that cross the periodic boundary are drawn as long straight lines across the view (about a quarter of the edges in `phelanc.fe`). The surface itself is correct; only the display is. Running `detorus` in the CLI pane fixes the geometry, but it alters the surface irreversibly — export first if you care about the original.
-- **2-D (STRING model) cells render as bare edges** — files like `100grain.fe` and `5pb.fe` draw their films correctly, but the cells between them have no fill or per-cell colour, so individual grains/bubbles are hard to tell apart. Their areas are still computed — read them from the CLI with `print body[1].volume`, or all at once with `foreach body bb do printf "%g\n",bb.volume` (in the 2-D model, `volume` is the cell area).
-- **Attributes defined in a datafile's *command* section** don't appear in the colour/inspector lists until the file is reloaded (header-defined attributes are fine).
-- **Closing the active tab clears the viewer** — it doesn't auto-switch to another open file.
-- **Interactive commands can hang the engine** — bare single-letter commands that prompt for keyboard input (`f`, `G`, …) are rejected with a clear error, but a compound like `f; g` slips through and blocks the worker. Recover by reloading the file (each load spawns a fresh engine process).
-- **Distributables are ad-hoc signed, not notarized** — on first open macOS warns it "cannot verify the app is free of malware": right-click → Open, or `xattr -dr com.apple.quarantine "/Applications/Surface Evolver.app"`.
-
-## Overall architecture
-
-One worker subprocess owns exactly one `libse` instance per session — `libse` can't be initialized twice in the same process, so loading a new file spawns a fresh worker.
-
-```mermaid
-flowchart TD
-    subgraph win["Tauri desktop window"]
-        UI["React + Three.js views<br/>FilePane · Editor/CLI · 3D Viewer"]
-    end
-    UI <-->|"Tauri invoke — rpc(method, params)"| Main["Rust backend<br/>src-tauri/src/rpc.rs"]
-    Main -->|"spawn per session"| Mgr["worker.rs<br/>worker lifecycle + mutex"]
-    Mgr <-->|"line-delimited JSON<br/>over stdin/stdout"| Worker["se-worker sidecar (Rust)<br/>owns one libse instance"]
-    Worker <-->|"dlopen (libloading)"| Lib["libse<br/>(headless shared library)"]
-    Lib --> Engine["Surface Evolver C engine<br/>engine/src — ~117 files"]
-    Main -->|"auto-snapshot / restore"| Persist["last-session.json<br/>~/.surface-evolver"]
-```
-
-## API architecture
-
-The frontend "API client" uses HTTP-style call paths purely as a naming convention — every call is native IPC, not a network request. A request threads through five layers down to the C facade and back:
-
-```mermaid
-flowchart LR
-    View["client.ts<br/>rpc(method, params)"] -->|"Tauri invoke"| RPC["RPC dispatch<br/>src-tauri/src/rpc.rs"]
-    RPC --> Mgr["worker.rs<br/>mutex-serialized"]
-    Mgr -->|"cmd: load · run · mesh · topo …"| Worker["se-worker sidecar"]
-    Worker -->|"FFI"| Facade["se_api.c / se_api.h<br/>C facade (37 functions)"]
-    Facade --> Core["engine/src<br/>parser · command loop<br/>gradient descent · topology"]
-```
-
-The C facade (`engine/bindings/c/se_api.h`) exposes structured getters/setters — geometry (vertices/edges/facets), per-element colours, energy/area, quantities + energy methods, physics, mesh params, body volumes + centre-of-mass, vertex info + constraints, topology counters — plus a universal `se_run` escape hatch that gives the CLI pane the entire command language. Graphics-only engine globals excluded from the headless build (bounding box, body centre-of-mass) are recomputed inside the facade. It is deliberately kept to what the app actually calls; accessors built for removed features were deleted rather than left to rot, and are recoverable from git history.
-
-## Stack
-
-| Layer | Technology |
-|---|---|
-| Core engine | C — parser, gradient descent, mesh topology (~117 files, flat upstream layout) |
-| C API | `engine/bindings/c/se_api.{h,c}` — 37-function facade with stdout/stderr capture |
-| Native binding | `dlopen` via `libloading`, in a 345 KB Rust worker sidecar |
-| Desktop shell | Tauri v2 (Rust, native WKWebView / WebKitGTK / WebView2) |
-| 3D rendering | Three.js + @react-three/fiber + drei |
-| Frontend | React + Vite, Zustand store, Tailwind + daisyUI, heroicons |
-| Build | CMake (`libse` shared lib + `surface_evolver` CLI); Tauri bundler |
-
-## Repository layout
-
-```
-surface-evolver/
-├── engine/
-│   ├── src/                    # Surface Evolver C engine
-│   │                           # (flat upstream layout, ~117 files)
-│   └── bindings/c/             # se_api.h / se_api.c — C facade
-├── src-tauri/                  # Tauri (Rust) backend
-│   ├── src/main.rs             # App entry: window, menu, state
-│   ├── src/rpc.rs              # RPC dispatch (sessions, files, persistence)
-│   ├── src/worker.rs           # Worker lifecycle + mutex
-│   ├── src/menu.rs             # Native menu bar
-│   ├── capabilities/           # Tauri ACL (window drag, events, opener)
-│   ├── worker/                 # Rust worker sidecar: owns one libse instance over FFI
-│   │                           # (separate crate — own target/ and release profile)
-│   └── tauri.conf.json         # Bundle config (resources, sidecar, window)
-├── ui/src/                     # React + Vite frontend
-│   ├── components/             # FilePane, CliPane, EditorPane, ViewerPane
-│   ├── store/                  # Zustand store (single source of truth)
-│   └── api/                    # RPC client + per-resource modules
-├── fe/                         # Bundled .fe datafiles (cube, sphere, octa, …)
-├── tests/c/                    # CTest integration tests for the C API
-├── scripts/tauri-before.ts     # Stages libse + worker sidecar + CSS (dev/build hook)
-├── CMakeLists.txt              # Builds surface_evolver CLI + libse shared lib
-└── .github/workflows/build.yml # macOS + Linux + Windows build matrix
-```
-
-## Build & run
-
-```bash
-# 1. Build the headless C library (required)
-cmake -B cmake-build-debug -DSE_HEADLESS=ON
-cmake --build cmake-build-debug
-
-# 2. Install workspaces
-bun install
-
-# 3. Launch the desktop app in dev mode (hot reload)
-bun run dev
-```
-
-### Package a distributable
-
-`tauri build` runs `scripts/tauri-before.ts`, which compiles `libse` for the
-current platform, bun-compiles the `se-worker` sidecar, and builds the CSS;
-the Tauri bundler then packages everything with the `fe/` library.
-
-```bash
-bun run build    # → src-tauri/target/release/bundle/{macos,dmg}/
-```
-
-Cross-platform builds run in CI (`.github/workflows/build.yml`) on a macOS +
-Linux + Windows matrix:
-
-- macOS → ad-hoc-signed `SurfaceEvolver-macos-arm64.dmg`
-- Linux → `SurfaceEvolver-linux-x64.deb`
-- Windows → `SurfaceEvolver-windows-x64-setup.exe` (libse built with MinGW/MSYS2)
-
-Grab them from the [Actions run](../../actions/workflows/build.yml) artifacts
-(or a tagged release, if one exists). The macOS build is **ad-hoc signed, not
-notarized** — see Known issues above for the Gatekeeper prompt.
-
-### Linux launch
-
-```bash
-sudo apt install ./SurfaceEvolver-linux-x64.deb
-surface-evolver
-```
-
-The `.deb` declares its GTK3/WebKitGTK dependencies.
-
-### Windows launch
-
-Run `SurfaceEvolver-windows-x64-setup.exe` (NSIS installer). The engine DLL is
-built with MinGW; the app itself uses WebView2 (preinstalled on Windows 10/11).
-Unsigned — SmartScreen will warn on first run: More info → Run anyway.
-
-## Tests
-
-```bash
-# C API tests (requires built libse)
-ctest --test-dir cmake-build-debug --output-on-failure
-
-# Rust backend check
-cd src-tauri && cargo check
-
-# Worker sidecar tests (needs a built libse; smoke tests skip without it)
-cd src-tauri/worker && SE_LIB_PATH=$PWD/../../cmake-build-debug/libse.dylib cargo test
-
-# Frontend type-check
-cd ui && bunx tsc --noEmit
-```
-
-CI (`.github/workflows/ci.yml`) runs all three on every push: the C API suite on
-macOS + Linux, `cargo check`, and the frontend type-check + production build.
-
-## Data files
-
-`.fe` files in `fe/` define the geometry, constraints, and initial conditions for a
-simulation. Add one from the **+** button in the file pane (built-in library or your
-own upload). Examples: `cube.fe`, `sphere.fe`, `octa.fe`, `mound.fe`, `knotty.fe`,
-`catenoid`/`cat.fe`, and more.
+🔗 **[Live Demo / Downloads](https://surface-evolver.vercel.app)**
 
 ---
 
-### A note on this project
+## 📸 Preview
 
-This is a **hobby project** — built for fun and curiosity, not backed by any company
-or roadmap. The heavy lifting is all Ken Brakke's original Surface Evolver engine;
-this repo is just the result of my work for capstone and personal interest.
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshot-dark.png">
+  <img alt="Surface Evolver desktop app: .fe datafile editor on the left, command log below, and a cube evolved into a sphere in the 3D viewer" src="docs/screenshot-light.png">
+</picture>
 
-There can be bugs that have not been identified or tested when running the app. Additionally,
-the code is not meant to be production grade. So, if you would like to use in a serious research environment,
-please make sure to test all the functionality beforehand.
+*`cube.fe` refined twice and evolved to a sphere under its volume constraint — energy, area and mesh counts update live in the titlebar.*
 
-If any of it is useful to you, please help yourself. **Anyone is welcome to pick it
-up, fork it, or take it further** — no permission needed.
+## ✨ Features
+
+Everything below is what the **desktop app** adds. The original engine's full command language is preserved verbatim — nothing was taken away.
+
+- **Live WebGL viewer**: Three.js rendering with solid / wireframe / X-ray modes, native SE per-element colours, an all-edge overlay, orbit controls and auto-fit camera. The original offers a basic X11/OpenGL window that many users never get working.
+- **Correct periodic (torus) rendering**: foam and crystal models wrap around a periodic cell. A new C accessor exposes SE's per-edge wrap codes so wrapped edges are hidden instead of drawn as long lines across the view — *measured:* 103 of 368 edges in `phelanc.fe`. Non-destructive, unlike the engine's own `detorus`.
+- **Syntax-highlighted datafile editor** with Save & Reload, so you edit geometry and re-run without leaving the app or restarting the engine.
+- **Click-to-inspect vertices**: click any vertex for its id, coordinates, constraints and attribute flags, plus body centre-of-mass markers. In the original this is a `print` statement and a wall of numbers.
+- **One-click topology operations** with structured feedback: refine, equiangulate, vertex-average and pop, each reporting element deltas, named topology counters (pops, edgeswaps, dissolves) and ΔE — where the engine prints raw text you have to read.
+- **A real Stop button**: `se_run` is a blocking FFI call and cannot be interrupted in band, so cancelling kills the worker process. Your tab stays and the last auto-snapshot survives. In the original, Ctrl-C takes the whole program down with your surface.
+- **Crash isolation**: the engine runs in a separate process. An engine segfault or an `exit()` on an unrecoverable error costs you a session, not the application.
+- **Session auto-restore**: the surface is snapshotted in the background after every mutating command, so your *evolved* state — not the original datafile — comes back after a restart.
+- **Bundled datafile library**: 20 curated examples, all of which render correctly, loadable in one click, plus upload of your own `.fe` files.
+- **Export** the current surface as `.fe` or an exact-state `.dmp`, straight to Downloads.
+- **Installers for all three platforms** — no compiler, no X11, no build step for end users.
+
+## 🛠️ Tech Stack
+
+- **Core engine**: C — Ken Brakke's Surface Evolver (~117 files, flat upstream layout), built headless as a shared library
+- **C API**: `engine/bindings/c/se_api.{h,c}` — a 28-function anti-corruption facade with stdout/stderr capture
+- **Worker sidecar**: Rust — 345 KB binary, `libloading` (`dlopen`) + `serde_json`
+- **Backend**: Rust — Tauri v2, single `rpc(method, params)` command over 13 methods
+- **Frontend**: React + Vite, Zustand, Three.js / @react-three/fiber, Tailwind + daisyUI
+- **Build**: CMake (engine), Cargo (app + sidecar), Bun (frontend), Tauri bundler; GitHub Actions matrix for macOS / Linux / Windows
+
+## 🚀 Getting Started
+
+### Prerequisites
+
+- **Rust** (stable) and **Bun**
+- **CMake** and a C compiler — Clang, GCC, or MinGW/MSYS2 on Windows
+- **Linux only**: `libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev libssl-dev`
+
+Just want to run it? Grab an installer from the [releases](../../releases) instead — no toolchain needed.
+
+### Installation
+
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/sersergious/surface-evolver.git
+   cd surface-evolver
+   ```
+2. Build the headless C engine (required — the app dlopens it at runtime):
+   ```bash
+   cmake -B cmake-build-debug -DSE_HEADLESS=ON
+   cmake --build cmake-build-debug
+   ```
+3. Install frontend dependencies:
+   ```bash
+   bun install
+   ```
+4. Start the development app:
+   ```bash
+   bun run dev
+   ```
+
+There is no `.env` file — the app resolves everything from the bundle. Three optional variables override that for development:
+
+```env
+SE_LIB_PATH=/path/to/libse.dylib     # engine shared library
+SE_WORKER_PATH=/path/to/se-worker    # worker sidecar binary
+SE_STATE_DIR=~/.surface-evolver      # session snapshot location
+```
+
+### Build a distributable
+
+```bash
+bun run build   # → src-tauri/target/release/bundle/
+```
+
+### Tests
+
+```bash
+ctest --test-dir cmake-build-debug --output-on-failure          # C API suite
+cd src-tauri && cargo check                                     # Rust backend
+cd src-tauri/worker && \
+  SE_LIB_PATH=$PWD/../../cmake-build-debug/libse.dylib cargo test  # FFI guard + smoke
+cd ui && bunx tsc --noEmit                                      # frontend types
+```
+
+## 🧠 Challenges & Learnings
+
+**Challenge — Driving a 1990s C engine that was never designed to be embedded.**
+Surface Evolver assumes it *is* the process: `se_init()` corrupts the heap if called twice, unrecoverable errors call `exit()`, it installs process-wide signal handlers, and a failed file open can drop into an interactive stdin prompt. Every one of those is fatal inside a GUI application.
+
+**Solution** — Rather than fight the constraint, I made it the architecture: one engine instance per process, in a throwaway sidecar the backend spawns and kills. Loading a new file kills the old worker. That turned a liability into three features for free — crash isolation, cancel-by-kill, and a guaranteed-clean engine state on every load. I also kept the engine source pristine and put all coupling in a single C facade, which paid off directly: re-forking the engine from upstream later broke only three files.
+
+**Challenge — FFI, where a mistake is undefined behaviour rather than an error.**
+Calling C from a managed runtime means hand-writing signatures the compiler cannot check, and passing raw buffers into code that trusts you about their size. A stale doc comment in my own header claimed a variable stride where the implementation always wrote three doubles — sizing a buffer from it would have silently overflowed the heap on 2-D models.
+
+**Solution** — A test that parses the C header and the Rust declarations and asserts they agree, so drift fails CI instead of corrupting memory. I mutation-tested it, because a guard that has never been seen to fail is worth nothing. Buffer lengths are now clamped to what was actually allocated rather than trusting the C return value.
+
+**Challenge — IPC and RPC between three languages in two processes.**
+The UI is TypeScript in a webview, the backend is Rust, the engine is C in a *different* process. Every user action crosses all of it and has to come back.
+
+**Solution** — Line-delimited JSON over stdin/stdout to the sidecar, and a single `rpc(method, params)` command as the only frontend↔backend seam. Keeping that waist narrow was the highest-leverage decision in the project: when I migrated the entire desktop framework, the frontend change was one 17-line file. I later ported the sidecar itself from a 58 MB bun/TypeScript binary to 345 KB of Rust, verified by driving both implementations with identical command sequences and diffing the parsed responses.
+
+**Challenge — Owning the whole stack, from numerical C to WebGL.**
+Full-stack here spans four languages and a rendering pipeline, and the interesting bugs live *between* the layers — a race between session restore and a user-initiated load, a persistence call blocking the command path, a build script using a shell builtin that does not exist on Windows.
+
+**Solution** — Measure before believing. The payload cost of the mesh path, the share of edges rendering wrongly on periodic models, the real reason the macOS build refused to sign — each was settled by an experiment rather than an assumption, and each is written down in [`BACKLOG.md`](BACKLOG.md) with reproduction steps so the next person does not re-derive it.
+
+## Design decisions & constraints
+
+- **Soapfilm model only.** `STRING` and `SIMPLEX` datafiles are rejected at load with an explanation. Neither model's cells can be expressed by the triangulated-facet mesh API, so they used to render as a bare edge web or as nothing at all. Rejecting beats drawing a lie — the engine still computes them, and `se_run` reaches them.
+- **One live session at a time**, a direct consequence of one-engine-per-process. Open files are tabs; switching reloads.
+- **The C facade is kept to what the app calls.** Accessors built for removed features were deleted rather than left to rot; they are recoverable from git history.
+- **Structured API only where it earns its place.** The physics and named-quantity panels were removed because `set gravity_constant 980`, `print body[1].volume` and `v` already do the job through the command line — a structured duplicate is a second thing to keep correct.
+- **Power features are CLI-only** (they work, there are just no buttons): Hessian/eigenvalue stability analysis, `edgeswap`, `dissolve`, `jiggle`, `optimize`, `conj_grad`, `saddle`.
+- **Known rough edges**: curved Lagrange patches render as straight edges; a compound interactive command such as `f; g` can still block the worker (reload to recover); macOS builds are ad-hoc signed, not notarized, so first launch needs right-click → Open.
+
+## Architecture
+
+One worker subprocess owns exactly one `libse` instance. A request threads from the webview down to the C engine and back:
+
+```mermaid
+flowchart LR
+    UI["React + Three.js<br/>ui/"] -->|"Tauri invoke — rpc(method, params)"| RPC["Rust backend<br/>src-tauri/src/rpc.rs"]
+    RPC --> Mgr["worker.rs<br/>lifecycle + mutex"]
+    Mgr <-->|"line-delimited JSON<br/>stdin/stdout"| W["se-worker sidecar<br/>src-tauri/worker/"]
+    W <-->|"dlopen + FFI"| Facade["se_api.c<br/>28-function facade"]
+    Facade --> Engine["Surface Evolver<br/>C engine, ~117 files"]
+```
+
+## 📄 License
+
+Distributed under the Apache License 2.0. See [`LICENSE`](LICENSE) for details.
+
+The engine is Ken Brakke's original Surface Evolver; this repository is a wrapper around it, built as a capstone and out of personal interest. It is not production-grade — if you plan to rely on it for research, test the functionality you need first. Anyone is welcome to fork it or take it further.
