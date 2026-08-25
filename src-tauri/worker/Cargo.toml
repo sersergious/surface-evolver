@@ -1,6 +1,6 @@
 [package]
 name = "se-worker"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
 description = "Surface Evolver worker sidecar — owns one libse instance, speaks line-delimited JSON on stdin/stdout"
 
