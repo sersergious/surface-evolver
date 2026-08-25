@@ -72,7 +72,7 @@ dependencies = [
 
 [[package]]
 name = "se-worker"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "libloading",
  "serde_json",
