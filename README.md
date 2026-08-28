@@ -112,7 +112,7 @@ The UI is TypeScript in a webview, the backend is Rust, the engine is C in a *di
 
 **Solution** — Line-delimited JSON over stdin/stdout to the sidecar, and a single `rpc(method, params)` command as the only frontend-backend seam. Keeping it narrow was the highest-leverage decision in the project: when I migrated the entire desktop framework, the frontend change was one 17-line file. I later ported the sidecar itself from a 58 MB bun/TypeScript binary to 345 KB of Rust, verified by driving both implementations with identical command sequences and diffing the parsed responses.
 
-**Challenge — Owning the whole stack, from numerical C to WebGL.**
+**Challenge — Owning the whole stack**
 Full-stack here spans four languages and a rendering pipeline, and the interesting bugs live *between* the layers — a race between session restore and a user-initiated load, a persistence call blocking the command path, a build script using a shell builtin that does not exist on Windows.
 
 **Solution** — Put a test on every seam, then reduce the number of seams. The C facade carries its own suite (56 assertions), the FFI boundary has the signature guard described above, and the worker protocol is exercised by tests that drive the real binary over stdin the way the backend does. When I replaced the sidecar wholesale, I kept the old implementation building alongside the new one and diffed their parsed responses command by command instead of trusting the rewrite.
@@ -149,28 +149,4 @@ The engine is Ken Brakke's original Surface Evolver; this repository is a wrappe
 
 ## Note on AI Use in the Project
 
-This project demonstrates a critical lesson: **AI tools are force multipliers, but only with disciplined methodology.**
-
-### Initial Approach: Vibe Coding Failure
-
-Early iterations used Claude Code exploratively, treating AI output as trusted implementation. The result was as expected: bugs, architectural inconsistencies, and downstream failures that compounded as the codebase grew. This "vibe coding" approach—accepting generated code without rigorous verification—taught me that speed without scrutiny is false velocity.
-
-### Refined Approach: Agentic Coding and Manual Verification
-
-I restructured my workflow around **semantic verification**: every generated line requires manual inspection for correctness, safety, and alignment with architecture. This means:
-
-- Reviewing generated logic against implementation intent
-- Validating error handling and edge cases
-- Catching architectural violations before integration
-- Understanding *why* code works, not just *that* it works
-
-### Impact
-
-This disciplined use of AI delivered measurable benefits:
-- **Productivity:** Tackled substantially more complex problems than would be feasible otherwise
-- **Code Quality:** All shipped code passed rigorous review, despite accelerated development
-- **Learning:** Deep engagement with each component (required for verification) strengthened my understanding of systems design
-
-### Bottom Line
-
-AI is a powerful tool for scaling capability, but it requires treating it as a *code generator* that needs review, not a *code oracle* to be trusted. While most code in this project was AI-generated, **all code was manually reviewed and validated for correctness and safety** before inclusion.
+A lot of the code that has been written in this prroject 
