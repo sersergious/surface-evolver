@@ -149,4 +149,9 @@ The engine is Ken Brakke's original Surface Evolver; this repository is a wrappe
 
 ## Note on AI Use in the Project
 
-A lot of the code that has been written in this prroject 
+This project utilized AI to generate code, however all the final decisions and calls were made by me.
+
+One takeaway from this project when it comes to AI assistance is it is easy to get carried away and lose track of everything. That was my main mistake at first. I first developed the prototype for this project. Subsequently - many bugs that affected the overall quality of the product.
+
+My main approach to resolving most of the bugs was simply adopting a more thorough code review and spec driven workflow. This in turn has helped to reduce the overall amount bugs that came with the inital "vibe coded" app.
+
