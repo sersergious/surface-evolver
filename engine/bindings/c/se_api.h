@@ -39,24 +39,45 @@ int se_load(const char *filename);
 /* ── command execution ────────────────────────────────────────────────── */
 
 /* Execute a single SE language command (e.g. "g", "r", "u 3").
+ * Blocking, and uninterruptible from outside: there is no in-band cancel, so a
+ * caller that needs to abort a long evolution must kill the process.
  * Output is captured; retrieve it with se_pop_output().
- * Returns 0 on success, non-zero if the command had an error. */
+ * A RECOVERABLE engine error is caught here (the capture streams are torn down
+ * by the engine's bailout path and reopened before returning), and its text is
+ * left in se_last_error().
+ * Returns 0 on success, -1 on a parse or runtime error. */
 int se_run(const char *cmd);
 
 /* ── scalar state ─────────────────────────────────────────────────────── */
 
-double se_get_energy(void);   /* web.total_energy               */
+/* These read the `web` global directly and do NOT check that the runtime is
+ * initialised or that a surface is loaded — before a successful se_load() they
+ * return whatever the zero-initialised global holds (0). They cannot fail, so
+ * they are the one group not covered by the return-value convention above. */
+
+double se_get_energy(void);   /* web.total_energy                */
 double se_get_area(void);     /* web.total_area                  */
 double se_get_scale(void);    /* web.scale (step-size factor)    */
 
-/* Spatial dimension of the ambient space (usually 3). */
+/* Spatial dimension of the ambient space; 3 for the models this build renders,
+ * 2 for planar foam datafiles. Note this is NOT the stride of the coordinate
+ * accessors — se_get_vertices() and se_get_vertex_info() always write 3. */
 int se_get_sdim(void);
 
 /* ── element counts ───────────────────────────────────────────────────── */
 
+/* Sizes of the four element skeletons, for allocating the buffers the mesh
+ * accessors below fill. Same no-guard caveat as the scalar block: 0 before a
+ * surface is loaded rather than an error. Counts change after any topology
+ * command, so re-read them before re-allocating. */
+
 int se_get_vertex_count(void);
 int se_get_edge_count(void);
-int se_get_facet_count(void);
+int se_get_facet_count(void);   /* an upper bound on what se_get_facets()
+                                 * writes, not an exact count: facets whose
+                                 * facet-edge chain is invalid are skipped.
+                                 * Size the buffer from this, then trust the
+                                 * return value for the row count. */
 int se_get_body_count(void);
 
 /* ── mesh geometry ────────────────────────────────────────────────────── */
@@ -99,7 +120,11 @@ int se_get_edges(int *out, int max_count);
  * -1 on bad arguments. Colour CLEAR is -1. */
 int se_get_facet_colors(int *front, int *back, int max_count);
 
-/* Per-edge colour index, in se_get_edges row order. Returns count, or -1. */
+/* SE colour-table index per edge, in se_get_edges row order (same walk and the
+ * same valid-endpoint filter, so row i is the same edge in both).
+ * Returns number written, or -1 on bad arguments. Colour CLEAR is -1, which is
+ * indistinguishable from the error return — check the return value first.
+ * Caller must allocate: int out[max_count]. */
 int se_get_edge_colors(int *out, int max_count);
 
 /* Per-edge wrap code, in se_get_edges row order. 0 = the edge does not cross a
@@ -120,11 +145,19 @@ int se_get_lagrange_order(void);
 
 /* ── topology counters & mesh params ──────────────────────────────────── */
 
-/* Number of counters se_get_topo_counts reports (see .c for the fixed order). */
+/* Number of counters se_get_topo_counts reports. */
 #define SE_TOPO_COUNT 11
 
-/* Cumulative topology-op counters in a fixed order (diff before/after a command
- * for per-command deltas).  Fills out[0..n-1]; returns n (<= SE_TOPO_COUNT) or -1. */
+/* Cumulative topology-op counters, in this fixed order:
+ *   0 equi           1 edge_refine     2 facet_refine   3 vertex_dissolve
+ *   4 edge_dissolve  5 facet_dissolve  6 vertex_pop     7 edge_pop
+ *   8 edgeswap       9 fix            10 unfix
+ * The order is part of the contract — callers index by position. It is
+ * mirrored by TOPO_NAMES in the Rust worker's handlers.rs; change both together.
+ * These accumulate over the whole session, so read before and after a command
+ * and diff to get per-command deltas.
+ * Fills out[0..n-1] where n = min(max_count, SE_TOPO_COUNT); returns n, or -1
+ * on bad arguments. Caller must allocate: int out[SE_TOPO_COUNT]. */
 int se_get_topo_counts(int *out, int max_count);
 
 /* ── body data ────────────────────────────────────────────────────────── */
@@ -149,19 +182,34 @@ int se_get_body_cm(int body_idx, double *out_xyz);
 int se_get_vertex_info(int vpos, int *out_id, double *out_xyz, int *out_attr,
                        int *out_cons, int cons_max);
 
-/* Name of constraint `con_idx` (1..highcon) → buf. Returns 0, or -1. */
+/* Name of constraint `con_idx` (1-based, 1..web.highcon) → buf, always
+ * NUL-terminated and truncated to `size` bytes if the name is longer.
+ * Constraint indices come from se_get_vertex_info()'s out_cons.
+ * Returns 0 on success, or -1 on bad arguments / index out of range. Note this
+ * is the one accessor whose success value is 0, since it writes no elements. */
 int se_get_constraint_name(int con_idx, char *buf, int size);
 
 /* ── output capture ───────────────────────────────────────────────────── */
 
-/* Copy SE's captured stdout into buf (NUL-terminated), then reset the
- * capture buffer.  Returns number of bytes copied (excluding NUL). */
+/* Copy SE's captured stdout into buf (always NUL-terminated), then clear the
+ * capture buffer so the next call returns only new output.
+ * Destructive: output not copied because it exceeded bufsize is discarded, not
+ * kept for the next call. At most bufsize-1 bytes are written; size the buffer
+ * generously for commands that print a lot.
+ * Returns bytes copied excluding the NUL, or -1 on bad arguments. */
 int se_pop_output(char *buf, int bufsize);
 
-/* Same for SE's stderr / error messages. */
+/* Same contract, for SE's stderr / error messages. Note se_run() already drains
+ * this stream into se_last_error() when a command fails, so a failed command
+ * usually leaves nothing here. */
 int se_pop_errout(char *buf, int bufsize);
 
-/* NUL-terminated string describing the last API-level error. */
+/* Description of the last API-level error, NUL-terminated and never NULL.
+ * This is SE_API's own message, not SE's `errmsg` global.
+ * Points into a static 4 KB buffer owned by the library: the caller must not
+ * free it, and must copy the contents before the next se_* call that can fail,
+ * since se_init / se_load / se_run overwrite it in place. Empty string means
+ * no error has been recorded, or the last operation succeeded. */
 const char *se_last_error(void);
 
 #ifdef __cplusplus

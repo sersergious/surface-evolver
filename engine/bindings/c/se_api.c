@@ -80,6 +80,8 @@ static size_t cap_size(FILE *fd, size_t memsize)
     fflush(fd);
     return memsize;
 }
+/* POSIX twin of the Windows cap_copy above: open_memstream keeps the bytes in a
+ * buffer we already hold, so this is a memcpy with no stream repositioning. */
 static size_t cap_copy(FILE *fd, const char *membuf, size_t memsize,
                        char *out, size_t outmax)
 {
@@ -120,7 +122,21 @@ static void reset_cap(FILE **fd, char **buf, size_t *sz, FILE **global_fd)
 }
 
 /* ── se_init ──────────────────────────────────────────────────────────── */
-
+/*
+ * Performs the initialisation SE's own main() does, in the same order, minus
+ * anything that reads argv or drives the terminal: message buffer, parser ctype
+ * tables, machine-epsilon constants, output capture, integration coefficients,
+ * the single-thread data structure, and the signal handlers.
+ *
+ * Idempotent by the `se_initialized` flag, and it has to be: calling the
+ * underlying SE initialisers twice corrupts the heap, which is why one process
+ * hosts exactly one engine for its whole life.
+ *
+ * Note the side effects on the process, not just on this library — SIGINT and
+ * friends are captured globally, and stdout/stderr are redirected to in-memory
+ * streams. A host application cannot undo either; it isolates them by keeping
+ * the engine in a subprocess.
+ */
 int se_init(void)
 {
     if (se_initialized)
@@ -190,7 +206,18 @@ int se_init(void)
 }
 
 /* ── se_load ──────────────────────────────────────────────────────────── */
-
+/*
+ * Parses a .fe datafile into the global `web` and computes its initial energy.
+ *
+ * Failure is detected three different ways, because SE reports it three ways:
+ * an UNRECOVERABLE error longjmps out of startup() (caught below), a parse
+ * error writes to the captured stderr while leaving zero vertices, and an
+ * unsupported model parses cleanly but cannot be drawn. Each sets
+ * se_last_error() and returns -1.
+ *
+ * On failure the engine is left in a half-initialised state that no subsequent
+ * call can clean up — the caller must discard the process rather than retry.
+ */
 int se_load(const char *filename)
 {
     if (!se_initialized)
@@ -241,7 +268,18 @@ int se_load(const char *filename)
 }
 
 /* ── se_run ───────────────────────────────────────────────────────────── */
-
+/*
+ * Runs one command through SE's own interpreter, so the entire command language
+ * stays reachable without this facade having to model any of it.
+ *
+ * Two error paths, nested. command() has its own setjmp for ordinary parse and
+ * runtime errors; anything that escapes it lands in the jumpbuf established
+ * here. The second path needs care: the engine's bailout closes our capture
+ * streams and repoints outfd/erroutfd at the real stdout/stderr, so the error
+ * text has to be salvaged before the streams are reopened, or it is lost.
+ *
+ * Blocking and uninterruptible — see the note in se_api.h.
+ */
 int se_run(const char *cmd)
 {
     if (!se_initialized || !cmd)
@@ -283,6 +321,10 @@ int se_run(const char *cmd)
 }
 
 /* ── scalar state accessors ───────────────────────────────────────────── */
+/* Unguarded reads of the `web` global — no se_initialized check, so these
+ * return 0 rather than an error before a surface is loaded. Deliberate: they
+ * are called on every stats refresh and have no failure mode worth a branch.
+ * The contract is in se_api.h. */
 
 double se_get_energy(void) { return (double)web.total_energy; }
 double se_get_area(void)   { return (double)web.total_area;   }
@@ -321,7 +363,9 @@ int se_get_vertices(double *out, int max_count)
 }
 
 /* ── se_get_vertex_ids ────────────────────────────────────────────────── */
-
+/* The inverse of the ordinal→position map se_get_facets builds: given a row in
+ * the vertex buffer, the SE ordinal to quote back at the user or at a command.
+ * Ordinals are not row indices — deletions leave gaps. */
 int se_get_vertex_ids(int *ids, int max_count)
 {
     vertex_id v_id;
@@ -339,7 +383,16 @@ int se_get_vertex_ids(int *ids, int max_count)
 }
 
 /* ── se_get_facets ────────────────────────────────────────────────────── */
-
+/*
+ * Triangle vertex indices, as positions into the se_get_vertices() buffer.
+ *
+ * The translation is the whole point: SE identifies vertices by ordinal, which
+ * has gaps after deletions, while a GPU index buffer needs dense 0-based rows.
+ * So a scratch ordinal→position table is built per call from the same
+ * FOR_ALL_VERTICES walk se_get_vertices uses, guaranteeing the two agree.
+ * Rebuilt every call rather than cached because any topology command
+ * invalidates it, and a stale map produces silently wrong geometry.
+ */
 int se_get_facets(int *out, int max_count)
 {
     facet_id f_id;
@@ -471,8 +524,11 @@ int se_get_facet_colors(int *front, int *back, int max_count)
 }
 
 
-/* ── se_get_edge_colors / lengths / densities ─────────────────────────── */
-/* All three iterate edges in se_get_edges row order (valid endpoints only). */
+/* ── se_get_edge_colors ───────────────────────────────────────────────── */
+/* Iterates edges in se_get_edges() row order, using the identical FOR_ALL_EDGES
+ * walk and valid-endpoint filter so row i is the same edge in both. The edge
+ * length and density accessors that used to share this banner were removed in
+ * 0.2.1 — `print edge[n].length` covers them through the command language. */
 int se_get_edge_colors(int *out, int max_count)
 {
     edge_id e_id;
@@ -577,7 +633,10 @@ int se_get_lagrange_order(void)
 
 
 /* ── se_get_body_volumes ──────────────────────────────────────────────── */
-
+/* Both quantities come from the same body walk, so they are fetched together
+ * and either output may be NULL — a caller wanting only volumes pays one pass,
+ * not two. Values are whatever the last recalc() left; se_run() triggers that
+ * itself when a command sets change_flag. */
 int se_get_body_volumes(double *volumes, double *pressures, int max_count)
 {
     body_id b_id;
@@ -699,11 +758,14 @@ int se_get_body_cm(int body_idx, double *out_xyz)
 /* ── se_get_vertex_info (element inspector) ────────────────────────────── */
 /*
  * Detail for the vertex at sequential position `vpos` (matching se_get_vertices
- * row order).  out_id ← 1-based SE ordinal; out_xyz ← sdim coords; out_attr ←
- * the attribute bitmap (FIXED 0x40, BOUNDARY 0x80, CONSTRAINT 0x400, …);
- * out_cons ← active constraint indices (up to cons_max).  Any out param may be
- * NULL.  Returns the number of constraints on the vertex (may exceed cons_max),
- * or -1 on error / out-of-range.
+ * row order).  out_id ← 1-based SE ordinal; out_xyz ← ALWAYS 3 doubles, zero-
+ * padded above sdim exactly as se_get_vertices does (NOT sdim coords — sizing
+ * this buffer from se_get_sdim() would under-allocate on sdim>3 files);
+ * out_attr ← the attribute bitmap (FIXED 0x40, BOUNDARY 0x80, CONSTRAINT 0x400,
+ * …); out_cons ← active constraint indices (up to cons_max).  Any out param may
+ * be NULL.  Returns the number of constraints on the vertex, which may exceed
+ * cons_max — the count is the true total, the buffer holds only what fit.
+ * Returns -1 on error / out-of-range.
  */
 int se_get_vertex_info(int vpos, int *out_id, double *out_xyz, int *out_attr,
                        int *out_cons, int cons_max)
@@ -749,7 +811,15 @@ int se_get_constraint_name(int con_idx, char *buf, int size)
 
 
 /* ── output capture helpers ───────────────────────────────────────────── */
-
+/*
+ * "Pop" is literal: each call drains the stream and reopens an empty one, so
+ * output is delivered exactly once and a long session does not accumulate an
+ * unbounded buffer. The reopen is what makes the reset safe — SE writes through
+ * the global outfd/erroutfd pointers, so reset_cap() repoints them at the fresh
+ * stream rather than leaving the engine holding a closed FILE*.
+ *
+ * Anything past bufsize-1 bytes is dropped, not retained for a second call.
+ */
 int se_pop_output(char *buf, int bufsize)
 {
     int n;
@@ -774,6 +844,8 @@ int se_pop_errout(char *buf, int bufsize)
     return n;
 }
 
+/* Borrowed pointer into the static buffer above — never NULL, never freed by
+ * the caller, overwritten by the next se_init/se_load/se_run that fails. */
 const char *se_last_error(void)
 {
     return se_errmsg_buf;
