@@ -88,11 +88,12 @@ bun run build   # → src-tauri/target/release/bundle/
 ### Tests
 
 ```bash
-ctest --test-dir cmake-build-debug --output-on-failure          # C API suite
-cd src-tauri && cargo check                                     # Rust backend
+ctest --test-dir cmake-build-debug --output-on-failure          # C API suite, 56 assertions
 cd src-tauri/worker && \
-  SE_LIB_PATH=$PWD/../../cmake-build-debug/libse.dylib cargo test  # FFI guard + smoke
-cd ui && bunx tsc --noEmit                                      # frontend types
+  SE_LIB_PATH=$PWD/../../cmake-build-debug/libse.dylib cargo test  # FFI guard + smoke + fixtures, 9 tests
+cd src-tauri && cargo check                                     # Rust backend, type-check
+SE_LIB_PATH=$PWD/../cmake-build-debug/libse.dylib cargo test     # + rpc.rs unit + integration tests, 22 tests
+cd ui && bunx tsc --noEmit && bun run test                       # frontend types + 47 unit/component tests
 ```
 
 ## Challenges & Learnings
