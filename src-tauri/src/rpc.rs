@@ -7,7 +7,7 @@ use serde_json::{json, Value};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{mpsc, Mutex};
-use tauri::{AppHandle, Manager as TauriManager, State};
+use tauri::{AppHandle, Manager as TauriManager, Runtime, State};
 use tauri_plugin_opener::OpenerExt;
 
 const MAX_UPLOAD_BYTES: usize = 5 * 1024 * 1024;
@@ -44,17 +44,17 @@ fn user_fe_dir() -> PathBuf {
     state_dir().join("fe")
 }
 
-fn resource_dir(app: &AppHandle) -> PathBuf {
+fn resource_dir<R: Runtime>(app: &AppHandle<R>) -> PathBuf {
     app.path().resource_dir().unwrap_or_else(|_| PathBuf::from("."))
 }
 
-fn bundled_fe_dir(app: &AppHandle) -> PathBuf {
+fn bundled_fe_dir<R: Runtime>(app: &AppHandle<R>) -> PathBuf {
     std::env::var("SE_FE_DIR")
         .map(PathBuf::from)
         .unwrap_or_else(|_| resource_dir(app).join("fe"))
 }
 
-fn lib_path(app: &AppHandle) -> PathBuf {
+fn lib_path<R: Runtime>(app: &AppHandle<R>) -> PathBuf {
     if let Ok(p) = std::env::var("SE_LIB_PATH") {
         return PathBuf::from(p);
     }
@@ -69,7 +69,7 @@ fn lib_path(app: &AppHandle) -> PathBuf {
     resource_dir(app).join("native").join(format!("libse-{os}-{arch}.{ext}"))
 }
 
-fn worker_bin(_app: &AppHandle) -> PathBuf {
+fn worker_bin<R: Runtime>(_app: &AppHandle<R>) -> PathBuf {
     if let Ok(p) = std::env::var("SE_WORKER_PATH") {
         return PathBuf::from(p);
     }
@@ -90,7 +90,7 @@ fn sanitize(name: &str) -> String {
 }
 
 /// User files shadow bundled ones of the same name.
-fn resolve_fe_path(app: &AppHandle, fe_file: &str) -> PathBuf {
+fn resolve_fe_path<R: Runtime>(app: &AppHandle<R>, fe_file: &str) -> PathBuf {
     let name = sanitize(fe_file);
     let user = user_fe_dir().join(&name);
     if user.exists() { user } else { bundled_fe_dir(app).join(&name) }
@@ -177,7 +177,7 @@ fn persist_file() -> PathBuf {
 /// `g N` and then lets an older dump land after a newer one. The consumer
 /// drains the channel first and keeps only the newest request — that is the
 /// only snapshot anyone wants anyway.
-fn persist(app: &AppHandle, state: &AppState) {
+fn persist<R: Runtime>(app: &AppHandle<R>, state: &AppState) {
     let mut guard = lock(&state.persist_tx);
     let tx = guard.get_or_insert_with(|| {
         let (tx, rx) = mpsc::channel::<()>();
@@ -212,7 +212,7 @@ fn snapshot(state: &AppState) {
     }
 }
 
-fn try_restore(app: &AppHandle, state: &AppState) -> Value {
+fn try_restore<R: Runtime>(app: &AppHandle<R>, state: &AppState) -> Value {
     // Restore is lazy (first getRestore call). If the user already loaded a
     // file, restoring now would kill their fresh worker and leave the UI
     // holding a session id the worker no longer serves — bail instead.
@@ -254,14 +254,14 @@ fn try_restore(app: &AppHandle, state: &AppState) -> Value {
 // ── the command ─────────────────────────────────────────────────────────────
 
 #[tauri::command]
-pub async fn rpc(app: AppHandle, method: String, params: Value) -> Result<Value, String> {
+pub async fn rpc<R: Runtime>(app: AppHandle<R>, method: String, params: Value) -> Result<Value, String> {
     // Worker I/O blocks (a `g N` can run minutes) — keep it off the event loop.
     tauri::async_runtime::spawn_blocking(move || dispatch(&app, &method, params))
         .await
         .map_err(|e| e.to_string())?
 }
 
-fn dispatch(app: &AppHandle, method: &str, params: Value) -> Result<Value, String> {
+fn dispatch<R: Runtime>(app: &AppHandle<R>, method: &str, params: Value) -> Result<Value, String> {
     let state: State<AppState> = app.state();
     match method {
         "getRestore" => {
@@ -478,4 +478,137 @@ fn base64_decode(s: &str) -> Option<Vec<u8>> {
         }
     }
     Some(out)
+}
+
+// ── unit tests for the pure/free-standing helpers above ────────────────────
+//
+// No worker, no libse, no fixtures — these run in milliseconds as part of
+// plain `cargo test`. End-to-end coverage against a real worker/AppHandle
+// lives in src-tauri/tests/{manager,dispatch}.rs.
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sanitize_strips_directory_components() {
+        assert_eq!(sanitize("../../etc/passwd"), "passwd");
+        assert_eq!(sanitize("/etc/passwd"), "passwd");
+        assert_eq!(sanitize("a/b/c.fe"), "c.fe");
+    }
+
+    #[test]
+    fn sanitize_replaces_unsafe_characters() {
+        assert_eq!(sanitize("weird name?.fe"), "weird_name_.fe");
+        assert_eq!(sanitize("ok-name_1.2.fe"), "ok-name_1.2.fe");
+    }
+
+    #[test]
+    fn base64_round_trips_arbitrary_bytes() {
+        for input in [&b""[..], b"a", b"ab", b"abc", b"surface evolver \0\xff"] {
+            let encoded = base64_encode_for_test(input);
+            assert_eq!(base64_decode(&encoded).unwrap(), input);
+        }
+    }
+
+    #[test]
+    fn base64_rejects_invalid_input() {
+        assert!(base64_decode("not base64!!").is_none());
+        assert!(base64_decode("@@@@").is_none());
+    }
+
+    fn base64_encode_for_test(bytes: &[u8]) -> String {
+        const TBL: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+        let mut out = String::new();
+        for chunk in bytes.chunks(3) {
+            let b = [chunk[0], *chunk.get(1).unwrap_or(&0), *chunk.get(2).unwrap_or(&0)];
+            out.push(TBL[(b[0] >> 2) as usize] as char);
+            out.push(TBL[(((b[0] & 0x03) << 4) | (b[1] >> 4)) as usize] as char);
+            out.push(if chunk.len() > 1 { TBL[(((b[1] & 0x0f) << 2) | (b[2] >> 6)) as usize] as char } else { '=' });
+            out.push(if chunk.len() > 2 { TBL[(b[2] & 0x3f) as usize] as char } else { '=' });
+        }
+        out
+    }
+
+    #[test]
+    fn now_iso_has_rfc3339_shape() {
+        let s = now_iso();
+        assert_eq!(s.len(), 20, "got: {s}");
+        assert!(s.ends_with('Z'), "got: {s}");
+        assert_eq!(&s[4..5], "-");
+        assert_eq!(&s[7..8], "-");
+        assert_eq!(&s[10..11], "T");
+    }
+
+    #[test]
+    fn session_from_stats_copies_the_expected_fields() {
+        let stats = json!({
+            "energy": 1.5, "area": 2.5, "scale": 0.1, "sdim": 3,
+            "vertex_count": 14, "edge_count": 24, "facet_count": 12,
+            "lagrange_order": 1,
+        });
+        let session = session_from_stats("sid-1", "cube.fe", &stats);
+        assert_eq!(session["session_id"], "sid-1");
+        assert_eq!(session["fe_file"], "cube.fe");
+        assert_eq!(session["vertex_count"], 14);
+        assert!(session["last_accessed"].is_string());
+    }
+
+    #[test]
+    fn get_session_rejects_a_stale_session_id() {
+        let state = AppState::default();
+        *lock(&state.session) = Some(json!({ "session_id": "current" }));
+        let err = get_session(&state, &json!({ "sessionId": "stale" })).unwrap_err();
+        assert!(err.contains("no longer loaded"), "got: {err}");
+    }
+
+    #[test]
+    fn get_session_requires_a_loaded_file() {
+        let state = AppState::default();
+        let err = get_session(&state, &json!({ "sessionId": "anything" })).unwrap_err();
+        assert_eq!(err, "No file is loaded");
+    }
+
+    #[test]
+    fn update_session_is_a_noop_if_the_session_was_replaced() {
+        let state = AppState::default();
+        *lock(&state.session) = Some(json!({ "session_id": "current", "energy": 1.0 }));
+        // A result for a session that's no longer the active one (e.g. a
+        // slow request that lost a race with a reload) must not clobber it.
+        update_session(&state, "old", &json!({ "energy": 999.0 }));
+        assert_eq!(lock(&state.session).as_ref().unwrap()["energy"], 1.0);
+
+        update_session(&state, "current", &json!({ "energy": 2.0 }));
+        assert_eq!(lock(&state.session).as_ref().unwrap()["energy"], 2.0);
+    }
+
+    #[test]
+    fn resolve_fe_path_prefers_the_user_file_over_the_bundled_one() {
+        let state_dir = std::env::temp_dir().join(format!("se-rpc-test-state-{}", std::process::id()));
+        let fe_dir = std::env::temp_dir().join(format!("se-rpc-test-fe-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&state_dir);
+        let _ = std::fs::remove_dir_all(&fe_dir);
+        std::fs::create_dir_all(state_dir.join("fe")).unwrap();
+        std::fs::create_dir_all(&fe_dir).unwrap();
+        std::fs::write(fe_dir.join("shared.fe"), "bundled").unwrap();
+        std::fs::write(state_dir.join("fe/shared.fe"), "user").unwrap();
+
+        // SAFETY: this is the only test in this module that touches these
+        // env vars, so there is no cross-test race within this binary.
+        unsafe {
+            std::env::set_var("SE_STATE_DIR", &state_dir);
+            std::env::set_var("SE_FE_DIR", &fe_dir);
+        }
+
+        let app = tauri::test::mock_app();
+        let handle = app.handle();
+        let resolved = resolve_fe_path(handle, "shared.fe");
+        assert_eq!(std::fs::read_to_string(&resolved).unwrap(), "user");
+
+        unsafe {
+            std::env::remove_var("SE_STATE_DIR");
+            std::env::remove_var("SE_FE_DIR");
+        }
+        let _ = std::fs::remove_dir_all(&state_dir);
+        let _ = std::fs::remove_dir_all(&fe_dir);
+    }
 }

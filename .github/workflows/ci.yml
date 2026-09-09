@@ -1,7 +1,8 @@
 # .github/workflows/ci.yml
 #
-# Three independent jobs: C engine tests (macOS + Linux), backend type-check,
-# frontend type-check + tests + build.
+# Three independent jobs: C engine tests (macOS + Linux), backend type-check +
+# tests (worker sidecar + the Tauri app crate), frontend type-check + tests +
+# build.
 
 name: CI
 
@@ -87,8 +88,18 @@ jobs:
           cmake -B build -DCMAKE_BUILD_TYPE=Release -DSE_HEADLESS=ON -DBUILD_TESTS=OFF
           cmake --build build --parallel 4
 
-      - name: Worker tests (ffi signature guard + smoke)
+      - name: Worker tests (ffi signature guard + smoke + all-fixtures)
         working-directory: src-tauri/worker
+        env:
+          SE_LIB_PATH: ${{ github.workspace }}/build/libse.so
+        run: cargo test --locked
+
+      # cargo test (not just check) picks up rpc.rs's own unit tests plus the
+      # manager.rs/dispatch.rs integration tests, which drive a real se-worker
+      # (built as a side effect of the step above) against real libse — see
+      # AGENTS.md BACKLOG A6, previously the only untested layer.
+      - name: App tests (rpc.rs unit tests + manager/dispatch integration tests)
+        working-directory: src-tauri
         env:
           SE_LIB_PATH: ${{ github.workspace }}/build/libse.so
         run: cargo test --locked
@@ -117,6 +128,9 @@ jobs:
 
       - name: TypeScript type-check
         run: bunx tsc --noEmit
+
+      - name: Unit + component tests
+        run: bun run test
 
       - name: Build production bundle
         run: bun run build

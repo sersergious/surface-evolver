@@ -10,53 +10,8 @@
 //! machine that has not built the C engine. CI builds libse first, so it runs
 //! there.
 
-use serde_json::Value;
-use std::io::Write;
-use std::path::PathBuf;
-use std::process::{Command, Stdio};
-
-fn repo() -> PathBuf {
-    // ../.. — this crate lives at src-tauri/worker/, so the repo root is two up.
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
-}
-
-/// Feed the worker a script of commands; collect one JSON reply per line.
-fn drive(lines: &[String]) -> Vec<Value> {
-    let bin = PathBuf::from(env!("CARGO_BIN_EXE_se-worker"));
-    let lib = std::env::var("SE_LIB_PATH").expect("checked by caller");
-
-    let mut child = Command::new(bin)
-        .env("SE_LIB_PATH", lib)
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::null())
-        .spawn()
-        .expect("spawn worker");
-    {
-        let stdin = child.stdin.as_mut().unwrap();
-        for l in lines {
-            writeln!(stdin, "{l}").unwrap();
-        }
-    }
-    let out = child.wait_with_output().expect("worker exited");
-    String::from_utf8_lossy(&out.stdout)
-        .lines()
-        .filter(|l| !l.trim().is_empty())
-        .map(|l| serde_json::from_str(l).unwrap_or_else(|e| panic!("bad JSON {l}: {e}")))
-        .collect()
-}
-
-fn cube() -> String {
-    format!(r#"{{"cmd":"load","path":"{}"}}"#, repo().join("fe/cube.fe").display())
-}
-
-fn skip() -> bool {
-    if std::env::var("SE_LIB_PATH").is_err() {
-        eprintln!("SE_LIB_PATH unset — skipping worker smoke test");
-        return true;
-    }
-    false
-}
+mod common;
+use common::{cube, drive, repo, skip};
 
 #[test]
 fn every_command_round_trips() {
