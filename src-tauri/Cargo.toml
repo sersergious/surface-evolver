@@ -17,5 +17,11 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 uuid = { version = "1", features = ["v4"] }
 
+# "test" pulls in tauri::test (MockRuntime) — dev-only, never ships in a
+# release build. rpc.rs is generic over R: Runtime specifically so tests can
+# drive it with MockRuntime instead of the real Wry.
+[dev-dependencies]
+tauri = { version = "2", features = ["test"] }
+
 [profile.release]
 strip = true

@@ -1,9 +1,7 @@
 // Prevents an extra console window on Windows in release builds.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-mod menu;
-mod rpc;
-mod worker;
+use surface_evolver::{menu, rpc};
 
 use tauri::Manager;
 
