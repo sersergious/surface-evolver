@@ -47,21 +47,33 @@ PATH — do **not** add it as an npm dependency (see *Landmine 10*).
 # C API tests (needs built libse)
 ctest --test-dir cmake-build-release --output-on-failure          # 56 assertions
 
-# Worker sidecar: FFI-signature guard + stdin/stdout smoke tests.
-# Without SE_LIB_PATH the smoke tests skip and only the signature guard runs.
+# Worker sidecar: FFI-signature guard, stdin/stdout smoke tests, and a fixture
+# test that loads every bundled .fe file and checks it meshes (automates the
+# end-to-end claim below). Without SE_LIB_PATH everything but the signature
+# guard skips.
 cd src-tauri/worker && \
-  SE_LIB_PATH=$PWD/../../cmake-build-release/libse.dylib cargo test   # 8 tests
+  SE_LIB_PATH=$PWD/../../cmake-build-release/libse.dylib cargo test   # 9 tests
 
-# Rust app
+# Rust app. `cargo check` is the fast gate; `cargo test` additionally runs
+# rpc.rs's own unit tests plus src-tauri/tests/{dispatch,manager}.rs, which
+# drive a real se-worker/libse through the app layer (22 tests total) — set
+# SE_LIB_PATH and either build the worker first or set SE_WORKER_PATH, or
+# those two integration-test binaries skip themselves rather than fail.
 cd src-tauri && cargo check
+SE_LIB_PATH=$PWD/../cmake-build-release/libse.dylib cargo test
 
-# Frontend type-check. There are no frontend unit tests; `bun run test` is
-# wired to vitest but matches zero files, so CI does not run it.
-cd ui && bunx tsc --noEmit
+# Frontend: type-check, then a real Vitest suite (jsdom + Testing Library) —
+# 47 tests across 8 files covering the RPC client, API wrapper contracts, four
+# components, the store and the menu-action hook. Both run in CI.
+cd ui && bunx tsc --noEmit && bun run test
 ```
 
 The end-to-end claim worth re-checking after engine or worker changes: **all 20
-bundled `.fe` datafiles load and produce facets.** Drive the worker directly:
+bundled `.fe` datafiles load and produce facets.** This is now enforced by
+`worker/tests/fixtures.rs::every_bundled_fe_file_loads_and_meshes` as part of
+the worker's `cargo test` above — a regression fails CI instead of waiting for
+someone to run a loop by hand. To reproduce a single-file failure directly
+(still the fastest debugging loop on the project), drive the worker yourself:
 
 ```bash
 cargo build --release --manifest-path src-tauri/worker/Cargo.toml
@@ -253,27 +265,29 @@ surface-evolver/
 │   ├── bindings/c/             # se_api.h / se_api.c — the C facade (ours)
 │   └── tools/callgraph.py      # standalone analysis tool; wired into no build
 ├── src-tauri/                  # ALL Rust lives here
-│   ├── src/{main,rpc,worker,menu}.rs
+│   ├── src/{main,lib,rpc,worker,menu}.rs   # lib.rs: library target so tests/ can link in
+│   ├── tests/{dispatch,manager}.rs         # app-layer integration tests, real worker+libse
 │   ├── worker/                 # se-worker sidecar — SEPARATE crate (see Landmine 3)
 │   │   ├── src/{main,ffi,handlers}.rs
-│   │   └── tests/{ffi_signatures,smoke}.rs
+│   │   └── tests/{ffi_signatures,fixtures,smoke}.rs
 │   ├── capabilities/           # Tauri ACL
 │   └── tauri.conf.json
 ├── ui/src/
-│   ├── components/             # FilePane, EditorPane, ViewerPane, CliPane
-│   ├── store/useStore.ts       # Zustand — single source of truth
-│   ├── api/                    # client.ts (rpc wrapper) + per-resource modules
+│   ├── components/             # FilePane, EditorPane, ViewerPane, CliPane — each with a *.test.tsx
+│   ├── store/useStore.ts       # Zustand — single source of truth (+ useStore.test.ts)
+│   ├── api/                    # client.ts (rpc wrapper) + per-resource modules (+ *.test.ts)
 │   └── hooks/                  # useMesh, useMenuAction, useThemeColors
 ├── fe/                         # 20 bundled .fe datafiles + OCTA.WLF
 ├── tests/c/test_se_api.c       # CTest suite for the C facade
 ├── scripts/                    # build-native, tauri-before, make-icons (Bun)
-├── BACKLOG.md                  # ranked work + foam and architecture audits
+├── ARCHITECTURE.md             # diagrams + detailed design, known limitations
 └── CHANGELOG.md                # per-release notes (Conventional Commits)
 ```
 
 `fe/OCTA.WLF` is the bundle's only cross-file dependency — `crystal.fe` loads it
-via `Wulff "octa.wlf"`. Note the case mismatch; it works on case-insensitive
-filesystems and would fail on Linux.
+via `Wulff "OCTA.WLF"`. Keep the reference's case matching the file on disk;
+a mismatch is silent on case-insensitive filesystems (macOS, Windows) but
+fails the load on Linux CI.
 
 ## Environment variables
 
@@ -294,20 +308,22 @@ packaged app.
 
 - **Commits**: Conventional Commits. `CHANGELOG.md` is per-release and
   user-facing — dev-tooling churn does not belong in it.
-- **`BACKLOG.md`** carries the ranked work plus two measured audits (foam/
-  cellular models, and architecture). Findings there are *measured*, not
-  estimated — keep it that way, and mark items resolved rather than deleting
-  them.
+- **`ARCHITECTURE.md`** carries the detailed design (with diagrams) plus a
+  measured "Known limitations & constraints" section — foam/cellular gaps,
+  the 2026-08-09 architecture audit, known bugs, and ideas assessed and
+  rejected. There is no backlog or roadmap file: this project has no planned
+  evolution, so that section is a snapshot of current edges, not a to-do
+  list. Findings there are *measured*, not estimated — keep it that way.
 - **Prefer deleting to adding.** Several rounds of trimming got this codebase to
   its current size; the `se_run` escape hatch is what makes that safe.
 - **Update the docs in the same change.** This repo has repeatedly shipped
-  stale documentation — numbers in `CHANGELOG.md`/`BACKLOG.md`/this file are
-  load-bearing for the next agent.
+  stale documentation — numbers in `CHANGELOG.md`/`ARCHITECTURE.md`/this file
+  are load-bearing for the next agent.
 
 ## Where to look next
 
-- `BACKLOG.md` — what is known-broken, what was assessed and deliberately not
-  built, and the two measured audits. Read before proposing work.
+- `ARCHITECTURE.md` — diagrams of every major flow, plus what is known-broken,
+  what was assessed and deliberately not built. Read before proposing work.
 - `CHANGELOG.md` — recent changes with rationale.
 - `engine/bindings/c/se_api.h` — the entire C surface, 28 functions, documented.
 - Official Surface Evolver manual: <https://kenbrakke.com/evolver/html/evolver.htm>

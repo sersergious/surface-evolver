@@ -2,7 +2,7 @@
 // Evolver data for cube of prescribed volume with
 //   crystalline surface energy.  Evolves into an octahedron.
 
-Wulff "octa.wlf"    // Wulff vectors for octahedral crystal
+Wulff "OCTA.WLF"    // Wulff vectors for octahedral crystal
 
 vertices
 1  0.0 0.0 0.0 

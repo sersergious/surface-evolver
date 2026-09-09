@@ -27,7 +27,6 @@ through `se_run`. Net C surface: 37 → 28 exports (10 cut, 1 added).
   storage without a symmetry group. *Measured:* `phelanc.fe` 103 of 368 edges
   hidden, remaining max/median edge length 1.49 (was a set of lines spanning the
   whole domain); `symtest.fe` and `twointor.fe` 41 each, max/median 1.00.
-  Closes BACKLOG F1.
 - **Stop button in the CLI pane.** The `cancel` RPC existed but had no caller;
   it is now reachable while a command is running. `se_run` is a blocking FFI
   call and cannot be interrupted in band, so this kills the worker process —
@@ -46,6 +45,29 @@ through `se_run`. Net C surface: 37 → 28 exports (10 cut, 1 added).
   mutation-tested to confirm it fails on both arg-type drift and header-only
   additions), and `tests/smoke.rs` drives the built binary over stdin. Both run
   in CI.
+- **Test coverage extended to the two layers that had none.** `rpc.rs` gained unit tests for its pure helpers (`sanitize`,
+  `resolve_fe_path`, base64 round-trip, session staleness bookkeeping) and
+  `src-tauri/tests/{dispatch,manager}.rs` are new integration tests that drive
+  a real `se-worker`/`libse` through the app layer — session lifecycle,
+  lazy restore, upload validation, and worker-crash recovery. That needed
+  `src-tauri/src/lib.rs` (new): the app is now also a library target so
+  `tests/` has something to link against, and `rpc()` (plus its private
+  helpers) is generic over `R: Runtime` so tests drive it with
+  `tauri::test::MockRuntime` instead of the real `Wry` webview. 22 Rust app
+  tests total, gated behind the same `SE_LIB_PATH` + built-worker
+  prerequisite as the worker's own suite.
+- **`worker/tests/fixtures.rs`** automates the standing claim that all bundled
+  `.fe` files load and produce facets — previously a manual shell loop, now a
+  real test (`every_bundled_fe_file_loads_and_meshes`) that fails CI on a
+  regression instead of waiting for someone to run the loop by hand.
+- **A frontend unit/component test suite, from zero.** Vitest + jsdom +
+  Testing Library: `api/client.test.ts` and `api/wrappers.test.ts` (RPC call
+  shapes and error handling), component tests for `CliPane`, `EditorPane`,
+  `FilePane` and `ViewerPane`, plus `useStore.test.ts` and
+  `useMenuAction.test.ts`. 47 tests across 8 files. `vite.config.ts` dedupes
+  `react`/`react-dom` for the test environment — without it, Vitest loaded a
+  second copy and broke hooks. CI now runs `bun run test`, not just the
+  type-check.
 
 ### Changed
 
