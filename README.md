@@ -1,6 +1,6 @@
 # Surface Evolver Desktop [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://www.apache.org/licenses/LICENSE-2.0)
 
-A native desktop app for macOS, Linux, and Windows that wraps Ken Brakke's [Surface Evolver](https://facstaff.susqu.edu/brakke/evolver/evolver.html) — a 190,000-line C engine for minimizing the energy of constrained surfaces — in a modern three-pane interface with a live WebGL viewer. It exists because the original ships as a terminal program with an X11 graphics window, which is a hard sell in 2026 even for the researchers who depend on it.
+A native desktop app for macOS, Linux, and Windows that wraps Ken Brakke's [Surface Evolver](https://facstaff.susqu.edu/brakke/evolver/evolver.html) — a 190,000-line C engine for minimizing the energy of constrained surfaces — in a modern three-pane interface with a live WebGL viewer. It exists because the original ships as a terminal program with an X11 graphics window, which is a hard sell in 2026 for the researchers who depend on it.
 
 **[Live Demo / Downloads](https://surface-evolver.vercel.app)**
 
@@ -22,7 +22,7 @@ Everything below is what the **desktop app** adds. The original engine's full co
 - **Live WebGL viewer**: Three.js rendering with solid / wireframe / X-ray modes, native SE per-element colors, an all-edge overlay, orbit controls and auto-fit camera. The original offers a basic X11/OpenGL window that many users never get working.
 - **Correct periodic (torus) rendering**: foam and crystal models wrap around a periodic cell. A new C accessor exposes SE's per-edge wrap codes so wrapped edges are hidden instead of drawn as long lines across the view — *measured:* 103 of 368 edges in `phelanc.fe`. Non-destructive, unlike the engine's own `detorus`.
 - **Syntax-highlighted datafile editor** with Save & Reload, so you edit geometry and re-run without leaving the app or restarting the engine.
-- **Click-to-inspect vertices**: click any vertex for its id, coordinates, constraints and attribute flags, plus body centre-of-mass markers. In the original this is a `print` statement and a wall of numbers.
+- **Click-to-inspect vertices**: click any vertex for its id, coordinates, constraints and attribute flags, plus body center-of-mass markers. In the original this is a `print` statement and a wall of numbers.
 - **One-click topology operations** with structured feedback: refine, equiangulate, vertex-average and pop, each reporting element deltas, named topology counters (pops, edgeswaps, dissolves) and ΔE — where the engine prints raw text you have to read.
 - **A real Stop button**: `se_run` is a blocking FFI call and cannot be interrupted in band, so cancelling kills the worker process. Your tab stays and the last auto-snapshot survives. In the original, Ctrl-C takes the whole program down with your surface.
 - **Crash isolation**: the engine runs in a separate process. An engine segfault or an `exit()` on an unrecoverable error costs you a session, not the application.
@@ -103,7 +103,7 @@ Surface Evolver assumes it *is* the process: `se_init()` corrupts the heap if ca
 
 **Solution** — Rather than fight the constraint, I made it the architecture: one engine instance per process, in a throwaway sidecar the backend spawns and kills. Loading a new file kills the old worker. That turned a liability into three features for free — crash isolation, cancel-by-kill, and a guaranteed-clean engine state on every load. I also kept the engine source pristine and put all coupling in a single C facade, which paid off directly: re-forking the engine from upstream later broke only three files.
 
-**Challenge — FFI, where a mistake is undefined behaviour rather than an error.**
+**Challenge — FFI, where a mistake is undefined behavior rather than an error.**
 Calling C from a managed runtime means hand-writing signatures the compiler cannot check, and passing raw buffers into code that trusts you about their size. For instance, a variable stride where the implementation always wrote three doubles — sizing a buffer from it would have silently overflowed the heap on 2-D models.
 
 **Solution** — A test that parses the C header and the Rust declarations and asserts they agree, so drift fails CI instead of corrupting memory. I mutation-tested it, because a guard that has never been seen to fail is worth nothing. Buffer lengths are now clamped to what was actually allocated rather than trusting the C return value.
@@ -150,9 +150,9 @@ The engine is Ken Brakke's original Surface Evolver; this repository is a wrappe
 
 ## Note on AI Use in the Project
 
-This project utilized AI to generate code, however all the final decisions and calls were made by me.
+This project utilized AI to generate code, however all the final decisions and calls were made by me - the developer.
 
-One takeaway from this project when it comes to AI assistance is it is easy to get carried away and lose track of everything. That was my main mistake at first. I first developed the prototype for this project. Subsequently - many bugs that affected the overall quality of the product.
+One takeaway from this project when it comes to AI assistance is it is easy to get carried away and lose track of the code being produced. That was my main mistake at first. When I developed the prototype for this project, I heavily relied on AI judgement of what was best. However, not all decisions that AI made were necessarily most optimal. Subsequently, many bugs followed that affected the overall quality of the app and its code.
 
-My main approach to resolving most of the bugs was simply adopting a more thorough code review and spec driven workflow. This in turn has helped to reduce the overall amount bugs that came with the inital "vibe coded" app.
+To recover, I had to change my ways. My main approach to resolving most of the bugs was simply adopting a more thorough code review and incremental workflow. This in turn has helped to reduce the overall amount bugs that came with the initial "vibe coded" app.
 
