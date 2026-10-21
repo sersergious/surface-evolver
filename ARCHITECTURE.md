@@ -280,7 +280,7 @@ change ever breaks loading or meshing any bundled datafile.
 
 ## Build & release pipeline
 
-Two independent workflows:
+Two workflows, chained — `build.yml` only ever sees a commit whose CI passed:
 
 ```mermaid
 flowchart LR
@@ -290,16 +290,21 @@ flowchart LR
         C2["backend-tests<br/>cargo check + cargo test<br/>worker (9) + app (22)"]
         C3["frontend-tests<br/>tsc --noEmit + bun run test (47)<br/>+ production build"]
     end
-    subgraph BUILD["build.yml — tag push (v*) or manual"]
+    subgraph BUILD["build.yml — workflow_run after a green push to main"]
         direction TB
         B1["macos-14 → .dmg"]
         B2["ubuntu-latest → .deb"]
         B3["windows-latest → NSIS .exe<br/>(libse via MinGW/MSYS2)"]
-        B1 --> REL["GitHub Release<br/>same tag, one asset per OS"]
+        B1 --> REL["publish: replace the rolling<br/>'latest' release as a whole"]
         B2 --> REL
         B3 --> REL
     end
+    CI -- "conclusion: success" --> BUILD
 ```
+
+There are no version tags. The `version` in `tauri.conf.json`, the Cargo
+manifests and `package.json` exists only because the installers require a
+semver; nothing bumps it.
 
 The macOS build is ad-hoc signed (no Developer ID/notarization) — first
 launch needs right-click ▸ Open, or `xattr -dr com.apple.quarantine`.

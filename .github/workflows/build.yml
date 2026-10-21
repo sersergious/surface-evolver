@@ -2,18 +2,31 @@ name: Build
 
 # Builds the native headless libse on each OS runner (scripts/tauri-before.ts
 # → build-native.ts + the compiled se-worker sidecar) and bundles the Tauri
-# app. macOS + Linux + Windows (MinGW libse). Trigger on version tags, or manually.
+# app. macOS + Linux + Windows (MinGW libse).
+#
+# There are no version tags. Every push to main whose CI run passes replaces
+# the single rolling `latest` release. A red CI run never reaches this file:
+# workflow_run only fires on completion, and the job checks the conclusion.
+# To rebuild, re-run the CI run (or this one) from the Actions tab.
 #
 # The macOS app is AD-HOC signed (bundle.macOS.signingIdentity "-" in
 # tauri.conf.json) — no Developer ID / notarization. First launch:
 # right-click → Open, or `xattr -dr com.apple.quarantine`.
 on:
-  push:
-    tags: ["v*"]
-  workflow_dispatch:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+
+# A newer green push supersedes an in-flight build; its publish replaces every
+# asset anyway, so cancelling the older one loses nothing.
+concurrency:
+  group: release-latest
+  cancel-in-progress: true
 
 jobs:
   build:
+    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push'
     strategy:
       fail-fast: false
       matrix:
@@ -26,9 +39,12 @@ jobs:
             artifact: windows-x64
     runs-on: ${{ matrix.os }}
     permissions:
-      contents: write   # create/update the GitHub Release on tag pushes
+      contents: read
     steps:
+      # The commit CI tested, not whatever main points at by now.
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
 
       - uses: oven-sh/setup-bun@v2
         with:
@@ -112,12 +128,34 @@ jobs:
           path: dist/*
           if-no-files-found: error
 
-      # On a version-tag push, attach the packaged app to the GitHub Release for
-      # that tag. Both matrix jobs target the same release; the action creates it
-      # if missing and appends each platform's file.
-      - name: Publish to GitHub Release
-        if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v2
+  # Runs once, after all three platforms built, so `latest` is never left with
+  # a mix of old and new installers. Delete + recreate moves the `latest` tag
+  # to the tested commit; the download URLs stay the same.
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v7
         with:
-          files: dist/*
-          fail_on_unmatched_files: true
+          path: dist
+          merge-multiple: true
+
+      - name: Replace the rolling `latest` release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+          SUBJECT: ${{ github.event.workflow_run.head_commit.message }}
+        run: |
+          set -euo pipefail
+          gh release delete latest --cleanup-tag --yes || true
+          gh api -X DELETE "repos/$GH_REPO/git/refs/tags/latest" 2>/dev/null || true  # orphaned tag
+          gh release create latest dist/* \
+            --target "$SHA" \
+            --title "Latest build" \
+            --latest \
+            --notes "Rolling build of \`main\` at ${SHA:0:7}: ${SUBJECT%%$'\n'*}
+
+          Replaced automatically on every push to \`main\` that passes CI. There are no versioned releases."

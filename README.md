@@ -48,7 +48,7 @@ Everything below is what the **desktop app** adds. The original engine's full co
 - **CMake** and a C compiler — Clang, GCC, or MinGW/MSYS2 on Windows
 - **Linux only**: `libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev libssl-dev`
 
-Just want to run it? Grab an installer from the [releases](../../releases) instead — no toolchain needed.
+Just want to run it? Grab an installer from the [latest build](../../releases/tag/latest) instead — no toolchain needed.
 
 ### Installation
 

@@ -306,8 +306,11 @@ packaged app.
 
 ## Conventions
 
-- **Commits**: Conventional Commits. `CHANGELOG.md` is per-release and
-  user-facing — dev-tooling churn does not belong in it.
+- **Commits**: Conventional Commits. `CHANGELOG.md` is user-facing, under
+  dated headings — dev-tooling churn does not belong in it.
+- **No version tags.** A push to `main` that passes CI replaces the rolling
+  `latest` release (`build.yml`, triggered by `workflow_run`). Don't create
+  `v*` tags; nothing consumes them.
 - **`ARCHITECTURE.md`** carries the detailed design (with diagrams) plus a
   measured "Known limitations & constraints" section — foam/cellular gaps,
   the 2026-08-09 architecture audit, known bugs, and ideas assessed and

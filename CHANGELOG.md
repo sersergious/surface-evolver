@@ -1,7 +1,25 @@
 # Changelog
 
-Notable changes per release. Generated from Conventional Commits; see `git log`
-for the full history.
+Notable user-facing changes, under dated headings. Generated from Conventional
+Commits; see `git log` for the full history.
+
+Version tags were retired on 2026-10-20: every push to `main` that passes CI
+replaces a single rolling [`latest`](../../releases/tag/latest) release. The
+numbered sections below are kept as history.
+
+## 2026-10-20
+
+### Changed
+
+- **Releases are a rolling `latest` build.** The `v0.1.0`–`v0.2.1` tags and
+  their releases are gone. `build.yml` now runs only after CI passes on `main`
+  and replaces the `latest` release as a whole. The old tag-triggered workflow
+  never checked CI, and published v0.2.1 from a commit whose CI had failed.
+
+### Fixed
+
+- **`crystal.fe` loads on Linux.** It referenced `octa.wlf` while the file is
+  `OCTA.WLF`; the published v0.2.1 `.deb` could not open it.
 
 ## 0.2.1 — 2026-08-13
 
