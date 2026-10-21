@@ -13,7 +13,7 @@ A native desktop app for macOS, Linux, and Windows that wraps Ken Brakke's [Surf
   <img alt="Surface Evolver desktop app: .fe datafile editor on the left, command log below, and a cube evolved into a sphere in the 3D viewer" src="docs/screenshot-light.png">
 </picture>
 
-*`cube.fe` refined twice and evolved to a sphere under its volume constraint — energy and area update live in the titlebar, mesh counts in the viewer.*
+*`cube.fe` refined three times and evolved to a sphere under its volume constraint — energy and area update live in the titlebar, mesh counts in the viewer.*
 
 ## Features
 
