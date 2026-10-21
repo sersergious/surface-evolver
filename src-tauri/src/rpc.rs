@@ -320,7 +320,7 @@ fn dispatch<R: Runtime>(app: &AppHandle<R>, method: &str, params: Value) -> Resu
         // mutex, so it works while the command still holds `io`, and the blocked
         // read then errors out. The in-memory surface goes with it, but the last
         // snapshot survives, so getRestore can bring it back.
-        // ponytail: real cancellation needs se_run chunking — BACKLOG "Skip".
+        // ponytail: kill is the ceiling — SIGINT aborts g N in-band and keeps the surface (issue #35).
         "cancel" => {
             state.manager.kill();
             *lock(&state.session) = None;
@@ -432,7 +432,7 @@ fn dispatch<R: Runtime>(app: &AppHandle<R>, method: &str, params: Value) -> Resu
             let (sid, _) = get_session(&state, &params)?;
             let op = params["op"].as_str().filter(|o| !o.is_empty()).ok_or("op is required")?;
             // No `n`: only `equi` would use it and the UI sends one pass per
-            // click. `u 5` via runCommand covers the rest. Was BACKLOG F7.
+            // click. `u 5` via runCommand covers the rest. (Formerly backlog item F7.)
             let req = json!({ "cmd": "topo", "op": op });
             let result = state.manager.request(&sid, req)?;
             update_session(&state, &sid, &result);

@@ -23,7 +23,7 @@ export async function updateFile(filename: string, content: string): Promise<{ f
 }
 
 /**
- * Save an export to ~/Downloads via the bun process (which also reveals it).
+ * Save an export to ~/Downloads via the Rust backend (which also reveals it).
  * A blob-URL <a download> is silently dropped by the embedded webview, so
  * downloads must go through native IPC.
  */

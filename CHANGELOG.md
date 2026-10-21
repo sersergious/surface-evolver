@@ -1,228 +1,95 @@
 # Changelog
 
-Notable user-facing changes, under dated headings. Generated from Conventional
-Commits; see `git log` for the full history.
+How the app got to where it is, stage by stage, summarised from the git
+history. There are no version numbers: every push to `main` that passes CI
+becomes the rolling [`latest`](../../releases/tag/latest) build. For a single
+change, see `git log`.
 
-Version tags were retired on 2026-10-20: every push to `main` that passes CI
-replaces a single rolling [`latest`](../../releases/tag/latest) release. The
-numbered sections below are kept as history.
+## Feb–Mar 2026 — Taming the engine
 
-## 2026-10-20
+- Imported Ken Brakke's Surface Evolver sources, manual and examples, and
+  dropped the VNC Docker setup in favour of running against a host X server.
+- Wrote the `se_api` C facade, the one place that knows both the engine's
+  internals and what an FFI caller needs, and stripped unused code from the
+  vendored engine.
+- Added a CMake build, C and Python API tests, a Python `ctypes` wrapper, and
+  CI. Wrote the first system-design notes and a call-graph analysis tool.
 
-### Changed
+## Mar–Apr 2026 — A web app
 
-- **Releases are a rolling `latest` build.** The `v0.1.0`–`v0.2.1` tags and
-  their releases are gone. `build.yml` now runs only after CI passes on `main`
-  and replaces the `latest` release as a whole. The old tag-triggered workflow
-  never checked CI, and published v0.2.1 from a commit whose CI had failed.
-- **Neutral theme.** The stock daisyUI light/dark palettes (violet primary,
-  blue-slate dark base) are replaced with hue-free neutrals matching the
-  project site: `#0a0a0a`/`#fafafa` grounds, the foreground as the primary
-  colour. The only hues left are the editor's numbers and strings (muted amber
-  and green) and status colours. The viewer draws light-grey facets with dark
-  edges, as Surface Evolver's own display does. Numbers in the light-mode
-  editor were `#ffbe00` on white and are now readable.
+- Built a FastAPI backend and a React + Three.js frontend, both in Docker,
+  with the engine in a worker subprocess and rate limiting in front of it.
+- Restyled the UI with Tailwind and served the Surface Evolver manual from the
+  frontend.
+- Tried a Docusaurus docs site and removed it the same day, then moved
+  everything under `app/`.
 
-### Fixed
+## Jun 2026 — Bun backend
 
-- **`crystal.fe` loads on Linux.** It referenced `octa.wlf` while the file is
-  `OCTA.WLF`; the published v0.2.1 `.deb` could not open it.
-- **Viewer colours ignored the theme in Chromium-based webviews** (Windows'
-  WebView2). Current Chromium returns `oklch(…)` from canvas `fillStyle`, which
-  three.js read as white; the colour is now read back as a painted pixel.
-- **No flash of the wrong theme at startup.** `index.html` named a theme
-  (`dim`) that was never configured.
+- Replaced the FastAPI backend with Bun/TypeScript, dropping the Python
+  bindings and tests along with it.
 
-## 0.2.1 — 2026-08-13
+## Late Jun – early Jul 2026 — Electrobun desktop app
 
-> Note: `se_api.h` lost 10 exports in this release, which is breaking for any
-> out-of-tree consumer of the C facade. Nothing in this repository is affected —
-> the worker moves in lockstep and is guarded by `tests/ffi_signatures.rs`.
+- Ported the app to an Electrobun desktop shell. The web server and the
+  async-iterate machinery became dead code and were deleted.
+- Grew the C facade substantially: edges, bounding box, topology counters,
+  named quantities, per-element colours, normals and user attributes.
+- New viewer features: edge rendering, colormaps, an "SE colours" render mode,
+  click-to-pick vertices, body centre-of-mass markers, and light/dark themes
+  that follow the OS.
+- A native macOS menu bar drives the whole app. Session persistence and a
+  file-browser modal arrived, and user `.fe` files shadow bundled ones.
+- Fixed scrambled geometry on 2-D and 4-D datafiles by always passing vertices
+  three coordinates wide, and stopped interactive commands from hanging the
+  worker.
+- Added the "SE" app icon and a release workflow producing macOS and Linux
+  archives. Windows was dropped at this stage.
 
-**Theme of this release: narrowing to a correct minimal geometry wrapper.**
-The app used to ship 27 bundled datafiles of which 17 rendered correctly; it now
-ships 20, and **all 20 render correctly**. The structured physics/named-quantity
-API was removed rather than fixed, because every bit of it stays reachable
-through `se_run`. Net C surface: 37 → 28 exports (10 cut, 1 added).
+## Jul 2026 — Tauri v2
 
-### Added
+- Ported the desktop app from Electrobun to Tauri v2 with a Rust backend
+  behind a single `rpc` command, and flattened the repository layout.
+- Brought Windows back (the engine built with MinGW). Linux ships as a `.deb`
+  after AppImage packaging failed on the bun sidecar.
+- Cleaned up dead code and fixed CI for the new layout.
 
-- **Periodic (torus) surfaces render correctly** — the last known-wrong render.
-  New C accessor `se_get_edge_wraps` exposes SE's per-edge wrap code (the
-  `+`/`-`/`*` notation from the datafile format) in `se_get_edges` row order;
-  the worker omits wrapped edges from the mesh and reports
-  `wrapped_edges_hidden`, which the viewer shows in its stat badge. Read-only —
-  unlike `detorus`, which genuinely unwraps but is irreversible and stays a
-  `run` escape hatch. Gated on `web.symmetry_flag`, since `E_WRAP_ATTR` has no
-  storage without a symmetry group. *Measured:* `phelanc.fe` 103 of 368 edges
-  hidden, remaining max/median edge length 1.49 (was a set of lines spanning the
-  whole domain); `symtest.fe` and `twointor.fe` 41 each, max/median 1.00.
-- **Stop button in the CLI pane.** The `cancel` RPC existed but had no caller;
-  it is now reachable while a command is running. `se_run` is a blocking FFI
-  call and cannot be interrupted in band, so this kills the worker process —
-  the in-memory surface goes with it, the tab stays so the file can be
-  reopened, and the last auto-snapshot is still on disk.
-- **Rust worker sidecar** (`src-tauri/worker/`) replacing the bun:ffi one.
-  Standalone crate depending only on `libloading` + `serde_json`; deliberately
-  not a workspace member. A workspace root would relocate `src-tauri/target/`
-  (which CI artifact paths and tauri's bundle output hard-code), and — the
-  decisive reason — Cargo ignores `[profile]` in workspace members, so sharing
-  one would force `panic = "abort"` onto the Tauri app and cost the sidecar its
-  345 KB release profile.
-- **Worker test suites** where there were none: `tests/ffi_signatures.rs` parses
-  `se_api.h` and `src/ffi.rs` and asserts they agree (these are unchecked
-  `unsafe extern "C"` declarations, so drift is UB rather than a compile error;
-  mutation-tested to confirm it fails on both arg-type drift and header-only
-  additions), and `tests/smoke.rs` drives the built binary over stdin. Both run
-  in CI.
-- **Test coverage extended to the two layers that had none.** `rpc.rs` gained unit tests for its pure helpers (`sanitize`,
-  `resolve_fe_path`, base64 round-trip, session staleness bookkeeping) and
-  `src-tauri/tests/{dispatch,manager}.rs` are new integration tests that drive
-  a real `se-worker`/`libse` through the app layer — session lifecycle,
-  lazy restore, upload validation, and worker-crash recovery. That needed
-  `src-tauri/src/lib.rs` (new): the app is now also a library target so
-  `tests/` has something to link against, and `rpc()` (plus its private
-  helpers) is generic over `R: Runtime` so tests drive it with
-  `tauri::test::MockRuntime` instead of the real `Wry` webview. 22 Rust app
-  tests total, gated behind the same `SE_LIB_PATH` + built-worker
-  prerequisite as the worker's own suite.
-- **`worker/tests/fixtures.rs`** automates the standing claim that all bundled
-  `.fe` files load and produce facets — previously a manual shell loop, now a
-  real test (`every_bundled_fe_file_loads_and_meshes`) that fails CI on a
-  regression instead of waiting for someone to run the loop by hand.
-- **A frontend unit/component test suite, from zero.** Vitest + jsdom +
-  Testing Library: `api/client.test.ts` and `api/wrappers.test.ts` (RPC call
-  shapes and error handling), component tests for `CliPane`, `EditorPane`,
-  `FilePane` and `ViewerPane`, plus `useStore.test.ts` and
-  `useMenuAction.test.ts`. 47 tests across 8 files. `vite.config.ts` dedupes
-  `react`/`react-dom` for the test environment — without it, Vitest loaded a
-  second copy and broke hooks. CI now runs `bun run test`, not just the
-  type-check.
+## Late Jul – mid Aug 2026 — Hardening and narrowing
 
-### Changed
+- Fixed a session-restore race, broken state after a failed load, and
+  persistence blocking the command path.
+- Audited the foam/cellular models against the professor's use case, with
+  measured findings.
+- Ported the worker sidecar from bun:ffi to Rust: 58 MB down to 345 KB. Added
+  an FFI signature guard and smoke tests, and fixed a build step that would
+  have broken on Windows.
+- Narrowed the app to what it can draw honestly. Periodic surfaces hide their
+  wrapped edges. STRING and SIMPLEX datafiles are rejected at load, and the
+  bundle went from 115 files to 21, all of which load. The physics and
+  named-quantity panels went too, since the command line covers them. The C
+  facade shrank from 49 exports to 28.
+- Recorded an architecture assessment and started this changelog.
 
-- **All Rust now lives under `src-tauri/`.** `worker-rs/` moved to
-  `src-tauri/worker/`, tracked by git as a rename so history survives. It stays
-  a **standalone crate, not a workspace member**, and gained a bare
-  `[workspace]` table to keep it that way. Cargo ignores `[profile]` in
-  workspace members, and `lto`/`panic` cannot be set per-package — so sharing a
-  workspace would force `panic = "abort"` onto the Tauri app (a panicking RPC
-  would kill the whole application instead of returning `Err`) and cost the
-  sidecar its 345 KB release profile. `src-tauri/target/release/bundle/` is
-  unchanged, so the hard-coded CI artifact paths still resolve.
-- **C API trimmed 37 → 28 exports; worker 10 → 6 commands.** Removed the
-  physics/named-quantity surface: `se_get_physics`, `se_set_physics`,
-  `se_get_mesh_params`, `se_set_mesh_params`, `se_get_quantity_count`,
-  `se_get_quantity`, `se_get_method_instance_count`, `se_get_method_instance`,
-  `se_get_total_time` and `se_set_scale` (the last had become unreachable once
-  the `setScale` RPC arm went). Worker commands `settings`, `set_settings`,
-  `quantities` and `set_scale` went with them, as did the `SettingsPanel`,
-  `QuantitiesPanel`, `useQuantities` hook, the two `panel:*` menu items and the
-  navbar `t` chip.
-  **No capability was lost** — verified against the worker, not assumed:
-  `set gravity_constant 980` applies, `print body[1].volume` prints, and `v`
-  lists every named quantity with target and actual value (the exact table
-  `QuantitiesPanel` drew), plus `print <quantity>.value` for a single one.
-  Only the structured duplicate is gone. Geometry, topology ops and the vertex
-  inspector are untouched.
-  The RPC seam narrowed with it: **17 → 13 methods**.
-- **Scope narrowed to the soapfilm model.** `se_load` now rejects `STRING` and
-  `SIMPLEX_REPRESENTATION` datafiles with an explanatory `se_last_error()`.
-  Neither model's cells can be expressed by `se_get_facets` — STRING facets are
-  arbitrary polygons, SIMPLEX cells are k-simplices — so both used to render as
-  a bare edge web or as nothing at all. Rejecting beats drawing a lie. The
-  engine still computes them; `se_run` is unaffected.
-  This removes `QUARANTINED_FE` (the filename allowlist it replaced) and the
-  `renderable` field from the `uploadFile` response.
-- **Bundled `fe/` trimmed 1.2 MB → 96 KB** (142 files → 21). Dropped 83 `.cmd`
-  scripts (overwhelmingly export-format converters — dxf, iges, maya, povray,
-  vrml, x3d, obj, ply, stl, collada — none reachable from the app), 27 `.dmp`
-  files (upstream's own dump outputs; the app generates its own), and the 7
-  datafiles using the now-rejected models: `100grain.fe`, `5pb.fe`,
-  `knotty.fe`, `metric.fe`, `popstr.fe`, `slidestr.fe`, `simplex3.fe`.
-  Kept `OCTA.WLF` — `crystal.fe` loads it via `Wulff "octa.wlf"`, the bundle's
-  only cross-file dependency. **20 of 20 remaining datafiles load with facets**,
-  up from 17 of 27.
-- **Sidecar 58 MB → 345 KB** (168x). Bundled `.app` ~12 MB, DMG 5.1 MB.
-- **The macOS codesign workaround is gone.** bun 1.3.14 emitted binary layouts
-  that failed `codesign` strict validation outright; that forced a strip/re-sign
-  step plus `--bytecode`. A normal Rust binary signs like any other, so
-  `scripts/tauri-before.ts` no longer touches `codesign` at all.
-- `se_api.c` **1343 → 780 lines**, header **228 → 171**, across two rounds: the
-  12 accessors the app never called (six vertex scalar fields, facet normals,
-  edge length/density, three generic attribute accessors) plus the two statics
-  they exclusively owned, and then the physics/named-quantity block above.
-  Everything is recoverable from git history if a feature ever needs it.
-- C test suite **95 → 56 assertions** — the coverage for the deleted code came
-  out with it, and `se_get_edge_wraps` added its own section back.
-- **Generated Tailwind output is no longer committed.**
-  `ui/src/styles/compiled.css` — 3,261 lines regenerated by
-  `scripts/tauri-before.ts` on every dev and build run — had been tracked and
-  churning in every diff, because its `.gitignore` rule still pointed at the
-  pre-Tauri `src/views/…` path from before the repo was flattened. `.gitignore`
-  also lost six other rules aimed at paths that no longer exist.
+## Late Aug – Sep 2026 — Documentation and tests
 
-### Fixed
+- Rewrote the README, added `AGENTS.md` as the canonical guide for coding
+  agents, and documented the C facade's contract.
+- Filled the testing gaps: a fixture test that loads and meshes every bundled
+  file, app-layer integration tests driving a real worker, and a 47-test
+  Vitest suite for the frontend.
+- Fixed `crystal.fe` failing on Linux (a case mismatch in its `OCTA.WLF`
+  reference) and folded the backlog into `ARCHITECTURE.md`.
 
-- **One return-value convention across the C facade**, documented at the top of
-  `se_api.h`: `-1` = bad arguments or genuine failure, `0` = "not applicable to
-  this surface", `>0` = elements written. `se_get_facet_colors` used to report a
-  non-SOAPFILM surface as `-1` (conflating it with a caller error) and
-  `se_get_body_cm` did the same for non-SOAPFILM/non-sdim-3; both now return
-  `0`. No behavioural change downstream — the worker already clamped `-1` to an
-  empty result — but the API no longer lies about what went wrong.
-- **Corrected two `se_api.c` comments** claiming the graphics pipeline is
-  "absent in the headless build". It is not: `CMakeLists.txt` links
-  `SE_GRAPHICS_COMMON` into `libse` unconditionally and `SE_HEADLESS` only swaps
-  `xgraph.c` for `nulgraph.c`. The globals are empty because nothing in the
-  facade ever calls `graphgen()` — linked but never invoked. The
-  recomputations in `se_get_bounding_box` / `se_get_body_cm` stay, now as a
-  deliberate choice rather than a forced one.
-- **Dead surface removed across the RPC seam.** All of it was computed,
-  transported and typed, but read by nothing: the `setScale` RPC arm and its
-  `ScaleResult` type; `vertex_ids` / `body_volumes` / `edge_colors` on
-  `MeshData`; `scale` / `sdim` / `vertex_count` / `facet_count` / `edge_count`
-  on `SessionState`; and the `[job` / `[ws]` log-line styling left over from
-  the removed bun/websocket sidecar. The worker still emits the mesh fields —
-  trimming the payload itself is BACKLOG A1 (binary transport), not this.
-- **BACKLOG F7** (`runTopo` never passed `n`) closed by removing the unused
-  parameter rather than inventing a count. Only `equi` consumed it; `u 5` in
-  the CLI covers repeated passes.
-- **Lagrange-order warning de-duplicated** into `lagrangeWarning()` in
-  `ui/src/api/sessions.ts`; `FilePane` and `EditorPane` had byte-identical
-  copies.
-- **Re-opening the active file after a cancel** now works — `handleSelect`
-  short-circuited on `activeFile === file` even when no live session remained.
-- **Session-restore race.** A slow lazy restore could kill the worker of a file
-  the user had already opened, leaving the UI holding a session id the worker no
-  longer served — dead until app restart. Guarded on three sides.
-- **Failed load left a broken worker registered** as the active session, with
-  undefined engine state after `se_load` failed.
-- **`persist()` blocked the command path.** The dump round-trip is MBs on a
-  refined mesh; it now runs on a background thread.
-- **`cp` in the build script would have broken Windows.** Bun Shell's
-  cross-platform builtins do not include `cp`, so it falls through to PATH,
-  which on Windows has none. Uses `copyFileSync` now. Not reproducible on macOS.
-- **Stale `se_get_vertices` header** documented an `sdim`-wide stride while the
-  implementation always writes exactly 3 doubles. Sizing a buffer from the
-  header would under-allocate on the `sdim=2` foam files and overflow the heap.
-- Worker mesh loops clamp to the allocated buffer rather than trusting the C
-  return value — load-bearing, since the sidecar builds with `panic = "abort"`,
-  so an out-of-bounds index is a process kill rather than a caught error.
+## Oct 2026 — Audit and cleanup
 
-<!-- Scope note: this log tracks functional changes only — documentation edits
-     are not listed. Also deliberately absent: the uncommitted `persist()` type
-     errors, the `engine/src/web.h` IDE reformat, and a `bun` runtime
-     dependency. All three were working-tree accidents corrected before they
-     reached a commit, so they never shipped. -->
-
-## 0.2.0 — 2026-07-08
-
-Ported the desktop app from Electrobun to **Tauri v2** (Rust backend + system
-webview), added **Windows** support (libse via MinGW/MSYS2) alongside macOS and
-Linux, re-forked the C engine to the flat upstream layout, and flattened the
-repo (`src/views` → `ui/`, `src/main` → `worker/`).
-
-## 0.1.1 — 2026-07-02
-
-Electrobun-era build with macOS + Linux artifacts.
+- Audited the whole codebase and filed every confirmed bug as a GitHub issue
+  on a project board.
+- Cleaned up the git history: accurate commit messages, split commits that hid
+  changes, and purged committed build output (90 MB → 8 MB clone).
+- Retired version tags. Releases are now a rolling `latest` build that is
+  published only after CI passes on `main`.
+- Gave the app a neutral theme matching the project site. This fixed viewer
+  colours that came out white in Chromium-based webviews (Windows), and
+  replaced the sidebar icon with the standard solid one.
+- Brought the README, `AGENTS.md`, `ARCHITECTURE.md` and code comments back in
+  line with the code.

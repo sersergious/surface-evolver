@@ -346,7 +346,7 @@ static void test_edge_wraps(void)
         free(w);
     }
 
-    /* phelanc.fe is TORUS_FILLED. BACKLOG F1 measured 103 of 368 edges as
+    /* phelanc.fe is TORUS_FILLED. foam audit item F1 measured 103 of 368 edges as
      * wrap-around; assert we see wraps, and that they are a strict minority. */
     if (se_load(FE_DIR "/phelanc.fe") == 0) {
         drain();

@@ -60,8 +60,8 @@ function buildGeometry(mesh: MeshData): THREE.BufferGeometry {
 }
 
 /**
- * Line rendering for edge geometry — the only geometry the STRING (1-D) model
- * produces, so curve/filament .fe files render here instead of MeshGeometry.
+ * Line rendering for edge geometry (the edge overlay). STRING (1-D) files are
+ * rejected at load now, so this always draws on top of facet geometry.
  */
 export function EdgeLines({ mesh, themeColors }: { mesh: MeshData; themeColors: ThemeColors }) {
   const geometry = useMemo(() => {

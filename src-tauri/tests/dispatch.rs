@@ -2,7 +2,7 @@
 //! AppHandle — MockRuntime stands in for the real webview/window, but
 //! everything below it is real: a real se-worker subprocess, real libse,
 //! real fe/ fixtures, real filesystem paths. This is `dispatch()`'s own
-//! coverage (BACKLOG A6): before this file, src-tauri/src/rpc.rs had zero
+//! coverage (audit item A6): before this file, src-tauri/src/rpc.rs had zero
 //! tests.
 //!
 //! `dispatch()` re-reads SE_LIB_PATH / SE_FE_DIR / SE_WORKER_PATH /

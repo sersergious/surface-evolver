@@ -1,7 +1,7 @@
 //! Raw FFI binding to libse, loaded at runtime with `libloading`.
 //!
 //! The library is leaked deliberately: this process owns exactly one libse
-//! instance for its whole life (`se_init` cannot run twice — see CLAUDE.md), so
+//! instance for its whole life (the engine cannot be reset or run twice — see AGENTS.md landmine 1), so
 //! there is nothing to unload and leaking lets the resolved function pointers
 //! be plain `fn` values instead of lifetime-bound `Symbol`s.
 //!

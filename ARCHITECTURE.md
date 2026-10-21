@@ -22,12 +22,12 @@ live WebGL viewer, and a command-line pane. Measured, not estimated:
 
 | | Lines | Files |
 |---|---|---|
-| App code (Rust + TypeScript, excluding tests) | 3,388 | — |
-| App test code (Rust integration + Vitest) | 1,423 | — |
+| App code (Rust + TypeScript + build scripts, excluding tests) | 3,369 | — |
+| App test code (Rust tests incl. `rpc.rs`'s test module, Vitest) | 1,580 | — |
 | C facade (`engine/bindings/c/`, ours) | 1,071 | 2 |
 | Vendored engine (`engine/src/`, never touched) | ~190,600 | 115 |
 
-Roughly **4,500 lines of app + facade code sit over a ~190,600-line vendored
+Roughly **4,400 lines of app + facade code sit over a ~190,600-line vendored
 engine** — a ~1:43 ratio. Almost every architectural decision below is an
 answer to *"how do we not own 190K lines of 1990s C"*.
 
@@ -114,9 +114,10 @@ behaviour, not a compile error).
 
 ### C facade — `engine/bindings/c/se_api.{h,c}`
 
-28 exported functions, trimmed from 37 in the 0.2.1 release (12
-never-called accessors deleted: facet normals, edge length/density, generic
-attributes, six vertex scalar fields). One return-value convention across
+28 exported functions, trimmed from 49 over the 0.2.1 release in two steps:
+12 never-called accessors deleted (facet normals, edge length/density,
+generic attributes, six vertex scalar fields) took it to 37, then the
+physics/named-quantity cut removed 10 more and added `se_get_edge_wraps`. One return-value convention across
 all of them: `-1` bad arguments/failure, `0` not applicable to this surface,
 `>0` elements written. This is the only file that is allowed to know both
 "how Surface Evolver represents a surface" and "what a byte buffer for an
@@ -177,7 +178,7 @@ stateDiagram-v2
     [*] --> NoSession
     NoSession --> Loading: createSession
     Loading --> Active: se_load ok
-    Loading --> NoSession: se_load fails
+    Loading --> NoSession: se_load fails (worker killed)
     Active --> Loading: createSession another file
     Active --> Active: runCommand / getMesh / topo / vertexInfo
     Active --> NoSession: cancel
@@ -188,19 +189,26 @@ stateDiagram-v2
 A few of those transitions hide a real decision:
 
 - **`se_load` fails** → the worker is discarded outright, not kept around —
-  engine state after a failed load is undefined.
+  engine state after a failed load is undefined. (`rpc.rs` keeps its session
+  record on this path and after a worker death, so today the UI holds a dead
+  session id until another file loads —
+  [#16](https://github.com/sersergious/surface-evolver/issues/16).)
 - **`createSession` while `Active`** → `kill()` runs *before* the new worker
   spawns, never after, so there's never a moment with two workers alive.
 - **`cancel`** → `kill()`; the in-memory surface is lost, but the last
   auto-snapshot survives on disk for `getRestore`.
 - **worker dies mid-request** → detected as an EOF on the read side, then
-  reaped — a bad JSON line or a transient pipe error does *not* count as a
-  death and leaves the worker running.
+  reaped. Any other read error — a pipe error or a non-JSON line — reaps the
+  worker too. That includes engine output that escapes capture onto stdout,
+  e.g. after `itdebug on`
+  ([#18](https://github.com/sersergious/surface-evolver/issues/18)).
 - **`getRestore`** → only fires if no session exists yet; it replays the
   last persisted `.dmp` snapshot.
 
-`cancel` is the only cancellation there is: `se_run` cannot be interrupted
-in-band, so "cancel" means killing the process. That's only possible because
+`cancel` is the only cancellation the app uses, and it kills the process.
+(SIGINT would abort a running `g N` in-band and keep the surface — measured,
+Unix only, not wired up:
+[#35](https://github.com/sersergious/surface-evolver/issues/35).) That's only possible because
 `Manager` splits its state across two mutexes instead of one:
 
 ```mermaid
@@ -315,8 +323,10 @@ launch needs right-click ▸ Open, or `xattr -dr com.apple.quarantine`.
 
 No roadmap exists for this project — what follows is a factual inventory of
 where the current implementation stops, not a backlog. Item ids (`F#`, `A#`,
-`P#`) match the historical identifiers still cited in source comments and
-`CHANGELOG.md`.
+`P#`) are historical identifiers from the retired BACKLOG.md, still cited in
+source comments. Concrete bugs are tracked as
+[GitHub issues](https://github.com/sersergious/surface-evolver/issues)
+(#15 onward); this section keeps the design-level limits.
 
 ### Model & representation
 
@@ -343,6 +353,12 @@ measured against (`100grain.fe`, `5pb.fe`) were removed from the bundle in
 0.2.1 along with the STRING-rejection change, which also closed the "2D
 cells don't render" finding those files demonstrated.
 
+- **Periodic rendering is edges-only.** Wrapped edges are hidden, but facets
+  that cross the cell boundary are not: measured on `phelanc.fe`, 109 of 276
+  facets have a side longer than 3× the median edge, and wireframe mode draws
+  the hidden edges again from those facets
+  ([#17](https://github.com/sersergious/surface-evolver/issues/17)).
+
 - **Body volumes/pressures are computed and sent on every `getMesh` call but
   have no frontend type or UI** — `MeshData` doesn't declare either field.
   Today's only way to read them is `print body[N].volume` or a
@@ -354,7 +370,7 @@ cells don't render" finding those files demonstrated.
   `g 500` coarsening run's pops/edgeswaps/dissolves (the physics of
   interest for foam) are invisible unless driven through a `topo` button.
   (F5)
-- **Only 4 topology operations have a button** (`refine`, `equi`,
+- **Only 4 topology operations have a Run-menu item** (`refine`, `equi`,
   `vertex_avg`, `pop` → `pop vertices`). Foam-relevant engine operations —
   `o`/`O` (pop edges/vertices variants), `t x` (tiny-edge removal),
   `t1_edgeswap`, `dissolve`, `pop_tri_to_edge`, `pop_edge_to_tri`,
@@ -399,7 +415,7 @@ test-suite work, which added coverage without touching any of these:
   `useMesh`) destructure the entire Zustand store with zero selectors — any
   single `appendLog` line re-renders all of them.
 - **`dispatch()` is one 13-arm match, ~180 lines**, with `get_session` /
-  `update_session` / `persist` called from 8 / 4 / 3 sites respectively.
+  `update_session` / `persist` called from 6 / 2 / 3 sites in it respectively.
   Fine at this size; will need restructuring if the method count grows
   further.
 
@@ -409,6 +425,8 @@ test-suite work, which added coverage without touching any of these:
   stdin the way a bare interactive command does — the `INTERACTIVE_CMDS`
   guard only catches the single-letter form. Reload to recover.
 - macOS builds are ad-hoc signed, not notarized.
+- The Windows installer is built and packaged on every release but has never
+  been run: CI has no Windows job (see the `windows`-labelled issues).
 - AppImage packaging is disabled in `build.yml`. The original blocker
   (linuxdeploy's `ldd` choking on the old statically-linked bun sidecar) is
   gone now that the sidecar is a normal dynamically-linked Rust binary, but
@@ -416,7 +434,8 @@ test-suite work, which added coverage without touching any of these:
 - `panic = "abort"` in the worker means a genuine bug kills the sidecar
   (session lost, last snapshot recoverable) instead of returning a clean
   error — an accepted trade-off for the 345 KB release profile.
-- `se_get_edge_colors` has no dedicated C-level test; it's exercised only
+- `se_get_edge_colors` and `se_get_constraint_name` have no dedicated C-level
+  test; `se_get_edge_colors` is exercised only
   indirectly through the worker's smoke tests.
 
 ### Assessed and deliberately not building

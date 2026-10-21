@@ -34,9 +34,12 @@ bun run dev      # tauri dev — stages libse + worker sidecar + CSS, then Vite
 bun run build    # → .app + .dmg under src-tauri/target/release/bundle/
 ```
 
-The build-directory *name* is arbitrary; `-DSE_HEADLESS=ON` is what matters.
-This repo currently has two: `cmake-build-release` (headless — what the tests
-use) and `build` (`SE_HEADLESS=OFF`, the standalone X11 CLI binary, optional).
+`bun run dev`/`build` run step 1 themselves (`scripts/build-native.ts` always
+builds `cmake-build-release`), so the manual step matters only for running the
+C tests first. `SE_HEADLESS` does not change `libse`, which always links
+`nulgraph.c`; it only decides whether the standalone CLI executable uses X11,
+and so whether configure requires X11. Other build directories you may find
+locally (`build`, `cmake-build-debug`) are IDE leftovers; nothing uses them.
 
 Requires: `cmake`, a C toolchain, `rustc`/`cargo`, `bun`. Bun is expected on
 PATH — do **not** add it as an npm dependency (see *Landmine 10*).
@@ -51,22 +54,25 @@ ctest --test-dir cmake-build-release --output-on-failure          # 56 assertion
 # test that loads every bundled .fe file and checks it meshes (automates the
 # end-to-end claim below). Without SE_LIB_PATH everything but the signature
 # guard skips.
-cd src-tauri/worker && \
-  SE_LIB_PATH=$PWD/../../cmake-build-release/libse.dylib cargo test   # 9 tests
+# All commands below run from the repo root. Use libse.so on Linux.
+export SE_LIB_PATH=$PWD/cmake-build-release/libse.dylib
+(cd src-tauri/worker && cargo test)                                 # 9 tests
 
 # Rust app. `cargo check` is the fast gate; `cargo test` additionally runs
 # rpc.rs's own unit tests plus src-tauri/tests/{dispatch,manager}.rs, which
 # drive a real se-worker/libse through the app layer (22 tests total) — set
 # SE_LIB_PATH and either build the worker first or set SE_WORKER_PATH, or
 # those two integration-test binaries skip themselves rather than fail.
-cd src-tauri && cargo check
-SE_LIB_PATH=$PWD/../cmake-build-release/libse.dylib cargo test
+(cd src-tauri && cargo check && cargo test)                         # 22 tests
 
 # Frontend: type-check, then a real Vitest suite (jsdom + Testing Library) —
 # 47 tests across 8 files covering the RPC client, API wrapper contracts, four
 # components, the store and the menu-action hook. Both run in CI.
-cd ui && bunx tsc --noEmit && bun run test
+(cd ui && bunx tsc --noEmit && bun run test)                        # 47 tests
 ```
+
+A skipped integration test prints `SE_LIB_PATH unset — skipping …` and still
+counts as passed, so check the output, not just the totals.
 
 The end-to-end claim worth re-checking after engine or worker changes: **all 20
 bundled `.fe` datafiles load and produce facets.** This is now enforced by
@@ -130,17 +136,22 @@ Non-obvious constraints. Each one has cost someone real time.
 
 ### 1. `libse` cannot be initialised twice in one process
 
-Calling `se_init()` a second time causes **heap corruption**. This is why there
-is a sidecar process at all: each `se-worker` owns exactly one `libse`. Loading
-a new file kills the previous worker and spawns a fresh one.
+The engine keeps all its state in globals, calls `exit()` on unrecoverable
+errors, installs process-wide signal handlers, and has no way to reset itself.
+(`se_init()` guards against a second call and returns 0, but nothing can unload
+a surface.) This is why there is a sidecar process at all: each `se-worker` owns
+exactly one `libse`. Loading a new file kills the previous worker and spawns a
+fresh one.
 
 `worker.rs` uses two mutexes on purpose — `io` for request/response, `proc` for
 the process handle. `kill()` takes only `proc`, so it can terminate a worker
 that is blocked holding `io`. That is the *only* escape from a hung `se_run`.
 **Do not merge these mutexes.**
 
-A *failed* load kills its worker and clears the session: engine state after a
-failed `se_load` is undefined.
+A *failed* load kills its worker, because engine state after a failed
+`se_load` is undefined. Note that `rpc.rs` does **not** yet clear its session
+record on that path, so the UI keeps a dead session id
+([#16](https://github.com/sersergious/surface-evolver/issues/16)).
 
 ### 2. `engine/src/` is vendored upstream — never reformat it
 
@@ -234,7 +245,10 @@ one result and nothing in between. Chunking on the caller side is the only way
 to get intermediate feedback.
 
 Cancellation kills the worker process. The in-memory surface dies with it; the
-last auto-snapshot survives on disk.
+last auto-snapshot survives on disk. SIGINT is a gentler alternative nothing
+uses yet: measured, it aborts a running `g N` with "Command aborted due to user
+interrupt" and leaves the worker and the surface alive (Unix only;
+[#35](https://github.com/sersergious/surface-evolver/issues/35)).
 
 ### 10. Build scripts run under Bun Shell
 
@@ -281,7 +295,7 @@ surface-evolver/
 ├── tests/c/test_se_api.c       # CTest suite for the C facade
 ├── scripts/                    # build-native, tauri-before, make-icons (Bun)
 ├── ARCHITECTURE.md             # diagrams + detailed design, known limitations
-└── CHANGELOG.md                # per-release notes (Conventional Commits)
+└── CHANGELOG.md                # the app's history, stage by stage
 ```
 
 `fe/OCTA.WLF` is the bundle's only cross-file dependency — `crystal.fe` loads it
@@ -306,8 +320,9 @@ packaged app.
 
 ## Conventions
 
-- **Commits**: Conventional Commits. `CHANGELOG.md` is user-facing, under
-  dated headings — dev-tooling churn does not belong in it.
+- **Commits**: Conventional Commits. `CHANGELOG.md` summarises the
+  app's evolution in dated stages, no versions — add to the latest stage (or
+  start a new one) when something user-visible changes.
 - **No version tags.** A push to `main` that passes CI replaces the rolling
   `latest` release (`build.yml`, triggered by `workflow_run`). Don't create
   `v*` tags; nothing consumes them.
@@ -317,6 +332,9 @@ packaged app.
   rejected. There is no backlog or roadmap file: this project has no planned
   evolution, so that section is a snapshot of current edges, not a to-do
   list. Findings there are *measured*, not estimated — keep it that way.
+- **Bugs live in GitHub issues** (#15 onward, on the "Surface Evolver — bugs"
+  project board with a Severity field). Check there before re-auditing, and
+  close the issue in the change that fixes it.
 - **Prefer deleting to adding.** Several rounds of trimming got this codebase to
   its current size; the `se_run` escape hatch is what makes that safe.
 - **Update the docs in the same change.** This repo has repeatedly shipped
@@ -327,6 +345,6 @@ packaged app.
 
 - `ARCHITECTURE.md` — diagrams of every major flow, plus what is known-broken,
   what was assessed and deliberately not built. Read before proposing work.
-- `CHANGELOG.md` — recent changes with rationale.
+- `CHANGELOG.md` — how the app evolved, stage by stage; `git log` for detail.
 - `engine/bindings/c/se_api.h` — the entire C surface, 28 functions, documented.
 - Official Surface Evolver manual: <https://kenbrakke.com/evolver/html/evolver.htm>

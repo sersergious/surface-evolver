@@ -140,7 +140,7 @@ fn periodic_wrap_edges_are_hidden() {
     if skip() { return }
     // phelanc.fe is TORUS_FILLED. An edge crossing a period boundary has no
     // honest straight-line form — drawn as-is it spans the domain, which is
-    // what BACKLOG F1 measured (103 of 368 edges). The mesh must omit those
+    // what audit item F1 measured (103 of 368 edges). The mesh must omit those
     // and report how many, without mutating the surface (no `detorus`).
     let path = repo().join("fe/phelanc.fe");
     let msgs = drive(&[

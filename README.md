@@ -1,6 +1,6 @@
 # Surface Evolver Desktop [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://www.apache.org/licenses/LICENSE-2.0)
 
-A native desktop app for macOS, Linux, and Windows that wraps Ken Brakke's [Surface Evolver](https://facstaff.susqu.edu/brakke/evolver/evolver.html) — a 190,000-line C engine for minimizing the energy of constrained surfaces — in a modern three-pane interface with a live WebGL viewer. It exists because the original ships as a terminal program with an X11 graphics window, which is a hard sell in 2026 for the researchers who depend on it.
+A native desktop app for macOS, Linux, and Windows that wraps Ken Brakke's [Surface Evolver](https://facstaff.susqu.edu/brakke/evolver/evolver.html) — a 190,000-line C engine for minimizing the energy of constrained surfaces — in one window: a datafile editor, a command line, and a live WebGL viewer. It exists because the original ships as a terminal program with an X11 graphics window, which is a hard sell in 2026 for the researchers who depend on it.
 
 **[Live Demo / Downloads](https://surface-evolver.vercel.app)**
 
@@ -13,28 +13,28 @@ A native desktop app for macOS, Linux, and Windows that wraps Ken Brakke's [Surf
   <img alt="Surface Evolver desktop app: .fe datafile editor on the left, command log below, and a cube evolved into a sphere in the 3D viewer" src="docs/screenshot-light.png">
 </picture>
 
-*`cube.fe` refined twice and evolved to a sphere under its volume constraint — energy, area and mesh counts update live in the titlebar.*
+*`cube.fe` refined twice and evolved to a sphere under its volume constraint — energy and area update live in the titlebar, mesh counts in the viewer.*
 
 ## Features
 
 Everything below is what the **desktop app** adds. The original engine's full command language is preserved verbatim — nothing was taken away.
 
-- **Live WebGL viewer**: Three.js rendering with solid / wireframe / X-ray modes, native SE per-element colors, an all-edge overlay, orbit controls and auto-fit camera. The original offers a basic X11/OpenGL window that many users never get working.
-- **Correct periodic (torus) rendering**: foam and crystal models wrap around a periodic cell. A new C accessor exposes SE's per-edge wrap codes so wrapped edges are hidden instead of drawn as long lines across the view — *measured:* 103 of 368 edges in `phelanc.fe`. Non-destructive, unlike the engine's own `detorus`.
-- **Syntax-highlighted datafile editor** with Save & Reload, so you edit geometry and re-run without leaving the app or restarting the engine.
+- **Live WebGL viewer**: Three.js rendering with solid / wireframe / X-ray modes, native SE per-element colors, an edge overlay, orbit controls and auto-fit camera, in a neutral light or dark theme that follows the OS. The original offers a basic X11/OpenGL window that many users never get working.
+- **Periodic (torus) surfaces**: foam and crystal models wrap around a periodic cell. A C accessor exposes SE's per-edge wrap codes so wrapped edges are hidden instead of drawn as long lines across the view — *measured:* 103 of 368 edges in `phelanc.fe`. Non-destructive, unlike the engine's own `detorus`. Facets that cross the cell boundary are not filtered yet, so solid mode still draws them across the view ([#17](../../issues/17)).
+- **Syntax-highlighted datafile editor** with Save & Reload, so you edit geometry and reload it in one click without leaving the app.
 - **Click-to-inspect vertices**: click any vertex for its id, coordinates, constraints and attribute flags, plus body center-of-mass markers. In the original this is a `print` statement and a wall of numbers.
-- **One-click topology operations** with structured feedback: refine, equiangulate, vertex-average and pop, each reporting element deltas, named topology counters (pops, edgeswaps, dissolves) and ΔE — where the engine prints raw text you have to read.
-- **A real Stop button**: `se_run` is a blocking FFI call and cannot be interrupted in band, so cancelling kills the worker process. Your tab stays and the last auto-snapshot survives. In the original, Ctrl-C takes the whole program down with your surface.
+- **Topology operations from the Run menu** with structured feedback: refine, equiangulate, vertex-average and pop, each reporting element deltas, named topology counters (pops, edgeswaps, dissolves) and ΔE — where the engine prints raw text you have to read.
+- **A Stop button**: cancelling a long command kills the worker process, so the app and the tab stay open. The in-memory surface goes with it; the last auto-snapshot is on disk and comes back on the next launch, as long as you don't reopen the file first ([#22](../../issues/22)).
 - **Crash isolation**: the engine runs in a separate process. An engine segfault or an `exit()` on an unrecoverable error costs you a session, not the application.
-- **Session auto-restore**: the surface is snapshotted in the background after every mutating command, so your *evolved* state — not the original datafile — comes back after a restart.
-- **Bundled datafile library**: 20 curated examples, all of which render correctly, loadable in one click, plus upload of your own `.fe` files.
+- **Session auto-restore**: the surface is snapshotted in the background after every mutating command, so your *evolved* state — not the original datafile — comes back when you relaunch the app.
+- **Bundled datafile library**: 20 curated examples, all of which load and mesh (checked in CI), loadable in one click, plus upload of your own `.fe` files.
 - **Export** the current surface as `.fe` or an exact-state `.dmp`, straight to Downloads.
-- **Installers for all three platforms** — no compiler, no X11, no build step for end users.
+- **Installers for all three platforms**, rebuilt as a rolling [`latest`](../../releases/tag/latest) release from every commit that passes CI — no compiler, no X11, no build step for end users. The Windows installer is built but has not yet been tested on a Windows machine.
 
 ## Tech Stack
 
-- **Core engine**: C — Ken Brakke's Surface Evolver (117 files, flat upstream layout), built headless as a shared library
-- **C API**: `engine/bindings/c/se_api.{h,c}` — a 28-function anti-corruption facade with stdout/stderr capture
+- **Core engine**: C — Ken Brakke's Surface Evolver (115 `.c`/`.h` files, flat upstream layout), built headless as a shared library
+- **C API**: `engine/bindings/c/se_api.{h,c}` — a 28-function anti-corruption facade that captures the engine's output streams
 - **Worker sidecar**: Rust — 345 KB binary, `libloading` (`dlopen`) + `serde_json`
 - **Backend**: Rust — Tauri v2, single `rpc(method, params)` command over 13 methods
 - **Frontend**: React + Vite, Zustand, Three.js / @react-three/fiber, Tailwind + daisyUI
@@ -57,25 +57,21 @@ Just want to run it? Grab an installer from the [latest build](../../releases/ta
    git clone https://github.com/sersergious/surface-evolver.git
    cd surface-evolver
    ```
-2. Build the headless C engine (required — the app dlopens it at runtime):
-   ```bash
-   cmake -B cmake-build-debug -DSE_HEADLESS=ON
-   cmake --build cmake-build-debug
-   ```
-3. Install frontend dependencies:
+2. Install frontend dependencies:
    ```bash
    bun install
    ```
-4. Start the development app:
+3. Start the development app. Each run first builds the headless engine into `cmake-build-release/` and the worker sidecar, then starts Vite:
    ```bash
    bun run dev
    ```
 
-There is no `.env` file — the app resolves everything from the bundle. Three optional variables override that for development (the example is based on MacOS):
+There is no `.env` file — the app resolves everything from the bundle. Four optional variables override that for development (paths shown for macOS):
 
 ```env
 SE_LIB_PATH=/path/to/libse.dylib     # engine shared library
 SE_WORKER_PATH=/path/to/se-worker    # worker sidecar binary
+SE_FE_DIR=/path/to/fe                # bundled .fe datafiles
 SE_STATE_DIR=~/.surface-evolver      # session snapshot location
 ```
 
@@ -87,19 +83,22 @@ bun run build   # → src-tauri/target/release/bundle/
 
 ### Tests
 
+Run from the repository root, after `bun run dev` or `bun run build` has built the engine and the worker once:
+
 ```bash
-ctest --test-dir cmake-build-debug --output-on-failure          # C API suite, 56 assertions
-cd src-tauri/worker && \
-  SE_LIB_PATH=$PWD/../../cmake-build-debug/libse.dylib cargo test  # FFI guard + smoke + fixtures, 9 tests
-cd src-tauri && cargo check                                     # Rust backend, type-check
-SE_LIB_PATH=$PWD/../cmake-build-debug/libse.dylib cargo test     # + rpc.rs unit + integration tests, 22 tests
-cd ui && bunx tsc --noEmit && bun run test                       # frontend types + 47 unit/component tests
+export SE_LIB_PATH=$PWD/cmake-build-release/libse.dylib    # .so on Linux
+ctest --test-dir cmake-build-release --output-on-failure   # C API suite, 56 assertions
+(cd src-tauri/worker && cargo test)                        # FFI guard + smoke + fixtures, 9 tests
+(cd src-tauri && cargo test)                               # rpc.rs unit + integration tests, 22 tests
+(cd ui && bunx tsc --noEmit && bun run test)               # frontend types + 47 unit/component tests
 ```
+
+Without `SE_LIB_PATH`, the worker and app integration tests print "skipping" and still count as passed.
 
 ## Challenges & Learnings
 
 **Challenge — Driving a 1990s C engine that was never designed to be embedded.**
-Surface Evolver assumes it *is* the process: `se_init()` corrupts the heap if called twice, unrecoverable errors call `exit()`, it installs process-wide signal handlers, and a failed file open can drop into an interactive stdin prompt. Every one of those is fatal inside a GUI application.
+Surface Evolver assumes it *is* the process: its globals cannot be initialised twice, unrecoverable errors call `exit()`, it installs process-wide signal handlers, and a failed file open can drop into an interactive stdin prompt. Every one of those is fatal inside a GUI application.
 
 **Solution** — Rather than fight the constraint, I made it the architecture: one engine instance per process, in a throwaway sidecar the backend spawns and kills. Loading a new file kills the old worker. That turned a liability into three features for free — crash isolation, cancel-by-kill, and a guaranteed-clean engine state on every load. I also kept the engine source pristine and put all coupling in a single C facade, which paid off directly: re-forking the engine from upstream later broke only three files.
 
@@ -118,7 +117,7 @@ Full-stack here spans four languages and a rendering pipeline, and the interesti
 
 **Solution** — Put a test on every seam, then reduce the number of seams. The C facade carries its own suite (56 assertions), the FFI boundary has the signature guard described above, and the worker protocol is exercised by tests that drive the real binary over stdin the way the backend does. When I replaced the sidecar wholesale, I kept the old implementation building alongside the new one and diffed their parsed responses command by command instead of trusting the rewrite.
 
-The other half was refusing to grow. The C facade went from 37 exports to 28 and the worker from 10 commands to 6, because anything already reachable through the engine's own command language did not need a second structured path to keep correct. Narrowing the models the app *claims* to support — rejecting the two it could never draw honestly — took the bundled library from 17 of 27 datafiles rendering correctly to 20 of 20. Less surface, fewer places for the layers to disagree.
+The other half was refusing to grow. The C facade went from 49 exports to 28 and the worker from 10 commands to 6, because anything already reachable through the engine's own command language did not need a second structured path to keep correct. Narrowing the models the app *claims* to support — rejecting the two it could never draw honestly — took the bundled library from 17 of 27 datafiles rendering to 20 of 20 loading and meshing. Less surface, fewer places for the layers to disagree.
 
 ## Design decisions & constraints
 
@@ -127,7 +126,7 @@ The other half was refusing to grow. The C facade went from 37 exports to 28 and
 - **The C facade is kept to what the app calls.** Accessors built for removed features were deleted rather than left to rot; they are recoverable from git history.
 - **Structured API only where it earns its place.** The physics and named-quantity panels were removed because `set gravity_constant 980`, `print body[1].volume` and `v` already do the job through the command line — a structured duplicate is a second thing to keep correct.
 - **Power features are CLI-only** (they work, there are just no buttons): Hessian/eigenvalue stability analysis, `edgeswap`, `dissolve`, `jiggle`, `optimize`, `conj_grad`, `saddle`.
-- **Known rough edges**: curved Lagrange patches render as straight edges; a compound interactive command such as `f; g` can still block the worker (reload to recover); macOS builds are ad-hoc signed, not notarized, so first launch needs right-click → Open.
+- **Known rough edges**: curved Lagrange patches render as straight edges; periodic facets that cross the cell boundary still draw across the view; a compound interactive command such as `f; g` can still block the worker (reload to recover); macOS builds are ad-hoc signed, not notarized, so first launch needs right-click → Open; the Windows build is untested. Everything known is tracked in the [issues](../../issues).
 
 ## Architecture
 
@@ -139,7 +138,7 @@ flowchart LR
     RPC --> Mgr["worker.rs<br/>lifecycle + mutex"]
     Mgr <-->|"line-delimited JSON<br/>stdin/stdout"| W["se-worker sidecar<br/>src-tauri/worker/"]
     W <-->|"dlopen + FFI"| Facade["se_api.c<br/>28-function facade"]
-    Facade --> Engine["Surface Evolver<br/>C engine, ~117 files"]
+    Facade --> Engine["Surface Evolver<br/>C engine, 115 files"]
 ```
 
 ## License

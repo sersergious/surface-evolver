@@ -195,7 +195,7 @@ impl Worker {
         let ecount = unsafe { (self.se.get_edge_count)() };
         // Periodic surfaces: an edge that crosses a period boundary has no
         // honest straight-line form — drawn as-is it spans the whole domain
-        // (103 of 368 edges in phelanc.fe, BACKLOG F1). Drop those rather than
+        // (103 of 368 edges in phelanc.fe, audit item F1). Drop those rather than
         // draw a lie. Read-only: `se_get_edge_wraps` mutates nothing, unlike
         // SE's `detorus`, which stays available through `run`.
         // Returns 0 for a non-periodic surface, so this is a no-op there.

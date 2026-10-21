@@ -9,7 +9,7 @@
 //!   stdout -> {"type":"result","ok":true|false, ...}
 //!          -> {"type":"fatal","error":...}  if dlopen / se_init fails
 //!
-//! Cancellation: the manager kills the process (SIGTERM). No in-band cancel.
+//! Cancellation: the manager kills the process (SIGKILL). SIGINT would abort in-band; unused (#35).
 //!
 //! Ported from worker/se-worker.ts (bun:ffi). Output is semantically identical;
 //! serde_json renders an integral f64 as `2.0` where JSON.stringify wrote `2`,

@@ -1,6 +1,6 @@
 //! Integration tests for `worker::Manager` — the Tauri app's own session/
 //! worker-lifecycle code (src-tauri/src/worker.rs), which had zero coverage
-//! before this (BACKLOG A6). `Manager` takes plain paths, not an AppHandle,
+//! before this (audit item A6). `Manager` takes plain paths, not an AppHandle,
 //! so this drives it directly against a real se-worker subprocess, real
 //! libse, and real fe/ fixtures — no mocking needed for this layer.
 

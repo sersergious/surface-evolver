@@ -34,7 +34,7 @@ export interface TopoResponse {
 
 // No count parameter: only `equi` would use one (worker maps it to `u N`), and
 // one menu click = one pass is the honest behaviour. Repeated passes are `u 5`
-// in the CLI pane. Was BACKLOG F7.
+// in the CLI pane. (Formerly backlog item F7.)
 export async function runTopo(id: string, op: TopoOp): Promise<TopoResponse> {
   return rpc<TopoResponse>('topo', { sessionId: id, op })
 }

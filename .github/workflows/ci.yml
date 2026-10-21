@@ -97,7 +97,7 @@ jobs:
       # cargo test (not just check) picks up rpc.rs's own unit tests plus the
       # manager.rs/dispatch.rs integration tests, which drive a real se-worker
       # (built as a side effect of the step above) against real libse — see
-      # AGENTS.md BACKLOG A6, previously the only untested layer.
+      # audit item A6: previously the only untested layer.
       - name: App tests (rpc.rs unit tests + manager/dispatch integration tests)
         working-directory: src-tauri
         env:
