@@ -2,38 +2,41 @@ import { useState, useEffect } from 'react'
 import * as THREE from 'three'
 
 export interface ThemeColors {
-  surface:  THREE.Color   // default surface fill (daisyUI primary)
+  surface:  THREE.Color   // default surface fill (theme --mesh)
   specular: THREE.Color   // phong highlight
-  line:     THREE.Color   // edges / wireframe
+  line:     THREE.Color   // edges / wireframe (theme --mesh-edge)
 }
 
 // Normalise any computed CSS colour (rgb, oklch, color() …) to a THREE.Color
-// via a canvas — its fillStyle setter parses every CSS colour form and the
-// getter returns a hex string THREE can read. Avoids hand-parsing oklch.
+// via a canvas: its fillStyle setter parses every CSS colour form, and a
+// painted pixel reads back as plain sRGB bytes. (Don't read fillStyle back —
+// current Chromium returns "oklch(…)" from the getter, which THREE parses as
+// white.) Avoids hand-parsing oklch.
 const ctx = typeof document !== 'undefined'
   ? document.createElement('canvas').getContext('2d')
   : null
 
-// Read a daisyUI colour CSS variable (e.g. --p, --bc) straight off :root, where
-// it is always defined for the active [data-theme]. The value is bare oklch
-// components ("65% 0.2 275"); wrap in oklch() and normalise via canvas (its
-// parser handles oklch even where THREE.Color does not).
+// Read a theme colour CSS variable (e.g. --mesh) straight off :root, where it
+// is always defined for the active [data-theme]. The value is bare oklch
+// components ("65% 0.2 275"); wrap in oklch() and normalise via canvas.
 function varColor(name: string, fallback: string): THREE.Color {
   if (!ctx) return new THREE.Color(fallback)
   const raw = getComputedStyle(document.documentElement).getPropertyValue(name).trim()
   ctx.fillStyle = fallback
   if (raw) ctx.fillStyle = `oklch(${raw})`
-  return new THREE.Color(ctx.fillStyle as string)
+  ctx.fillRect(0, 0, 1, 1)
+  const [r, g, b] = ctx.getImageData(0, 0, 1, 1).data
+  return new THREE.Color().setRGB(r / 255, g / 255, b / 255, THREE.SRGBColorSpace)
 }
 
 function read(): ThemeColors {
-  // base-content is the neutral content colour — light on dark themes, dark on
-  // light — so the surface always contrasts the background and reads cleanly.
-  const surface = varColor('--bc', '#2d9a5e')
+  // --mesh / --mesh-edge are app-specific theme variables (tailwind.config.js):
+  // light-grey facets with near-black edges in both modes, as SE draws them.
+  const surface = varColor('--mesh', '#d4d4d4')
   return {
     surface,
     specular: surface.clone().lerp(new THREE.Color('#ffffff'), 0.6),
-    line:     varColor('--p', '#94d4b0'),   // primary accent for edges
+    line:     varColor('--mesh-edge', '#0a0a0a'),
   }
 }
 

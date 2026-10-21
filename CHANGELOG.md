@@ -15,11 +15,23 @@ numbered sections below are kept as history.
   their releases are gone. `build.yml` now runs only after CI passes on `main`
   and replaces the `latest` release as a whole. The old tag-triggered workflow
   never checked CI, and published v0.2.1 from a commit whose CI had failed.
+- **Neutral theme.** The stock daisyUI light/dark palettes (violet primary,
+  blue-slate dark base) are replaced with hue-free neutrals matching the
+  project site: `#0a0a0a`/`#fafafa` grounds, the foreground as the primary
+  colour. The only hues left are the editor's numbers and strings (muted amber
+  and green) and status colours. The viewer draws light-grey facets with dark
+  edges, as Surface Evolver's own display does. Numbers in the light-mode
+  editor were `#ffbe00` on white and are now readable.
 
 ### Fixed
 
 - **`crystal.fe` loads on Linux.** It referenced `octa.wlf` while the file is
   `OCTA.WLF`; the published v0.2.1 `.deb` could not open it.
+- **Viewer colours ignored the theme in Chromium-based webviews** (Windows'
+  WebView2). Current Chromium returns `oklch(…)` from canvas `fillStyle`, which
+  three.js read as white; the colour is now read back as a painted pixel.
+- **No flash of the wrong theme at startup.** `index.html` named a theme
+  (`dim`) that was never configured.
 
 ## 0.2.1 — 2026-08-13
 

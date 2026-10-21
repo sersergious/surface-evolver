@@ -108,11 +108,12 @@ function StatChip({ label, value }: { label: string; value: string }) {
   )
 }
 
+// The standard sidebar-toggle glyph: a window frame with its left panel filled.
 function SidebarIcon() {
   return (
-    <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-      <rect x="0.6" y="0.6" width="3.5" height="12.8" rx="1" stroke="currentColor" strokeWidth="1.2"/>
-      <rect x="5.9" y="0.6" width="7.5" height="12.8" rx="1" stroke="currentColor" strokeWidth="1.2"/>
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <rect x="1" y="2" width="14" height="12" rx="2.5" stroke="currentColor" strokeWidth="1.5"/>
+      <path d="M3.5 2H5.75V14H3.5A2.5 2.5 0 0 1 1 11.5V4.5A2.5 2.5 0 0 1 3.5 2Z" fill="currentColor"/>
     </svg>
   )
 }
