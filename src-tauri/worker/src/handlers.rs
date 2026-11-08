@@ -1,4 +1,5 @@
-//! Command handlers — a 1:1 port of worker/se-worker.ts.
+//! Command handlers, one per worker command. Originally a 1:1 port of the
+//! retired bun/TypeScript worker, whose response shapes they keep.
 //!
 //! Output shapes are semantically identical to the TS worker (same keys, same
 //! value types, same present/absent behaviour). Byte-identity is not a goal:

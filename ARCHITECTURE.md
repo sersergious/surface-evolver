@@ -41,7 +41,7 @@ flowchart TB
     RPC["rpc.rs — API layer<br/>one Tauri command, 13 methods"]
     MGR["worker.rs::Manager — Tauri services<br/>process lifecycle, io/proc mutexes"]
     WRK["se-worker sidecar — src-tauri/worker/<br/>separate Cargo crate, 6 commands"]
-    FACADE["se_api.c facade — engine/bindings/c/<br/>28 exports, ours"]
+    FACADE["se_api.c facade — engine/bindings/c/<br/>29 exports, ours"]
     ENGINE["engine/src/ — Surface Evolver upstream<br/>115 files, vendored, never reformatted"]
 
     UI -- "invoke('rpc', {method, params})" --> RPC
@@ -114,10 +114,12 @@ behaviour, not a compile error).
 
 ### C facade — `engine/bindings/c/se_api.{h,c}`
 
-28 exported functions, trimmed from 49 over the 0.2.1 release in two steps:
-12 never-called accessors deleted (facet normals, edge length/density,
+29 exported functions. Trimmed from 49 to 28 over the 0.2.1 release in two
+steps: 12 never-called accessors deleted (facet normals, edge length/density,
 generic attributes, six vertex scalar fields) took it to 37, then the
-physics/named-quantity cut removed 10 more and added `se_get_edge_wraps`. One return-value convention across
+physics/named-quantity cut removed 10 more and added `se_get_edge_wraps`.
+`se_get_facet_coords` (periodic facets drawn unwrapped, #17) made it 29. One
+return-value convention across
 all of them: `-1` bad arguments/failure, `0` not applicable to this surface,
 `>0` elements written. This is the only file that is allowed to know both
 "how Surface Evolver represents a surface" and "what a byte buffer for an
@@ -246,9 +248,9 @@ stdin/stdout, one JSON object per line, no batching:
 | `cmd` | Purpose | Notable response fields |
 |---|---|---|
 | `load` | Open a `.fe` file (chdir's to its directory first, for relative includes) | `energy area scale sdim` element counts, `bbox_min/max` |
-| `run` | Execute one raw SE command string via `se_run` | `output energy area` |
+| `run` | Execute one raw SE command string via `se_run`. Blank or comment-only input succeeds; `load` is refused (use File ▸ Open) | `output energy area`. `output` also carries the command's own warnings, and ends with `[output truncated at 256 KB]` when the capture buffer filled |
 | `mesh` | Fetch vertices/edges/facets (+ optional colours) for rendering | `vertices facets edges body_cms`, optional `facet_colors edge_colors`, optional `wrapped_edges_hidden` and `unwrap_source` (periodic only) |
-| `topo` | One of 4 mapped topology ops (`refine equi vertex_avg pop`) | `output counts` (non-zero deltas only) `energy energy_delta area` |
+| `topo` | One of 4 mapped topology ops (`refine equi vertex_avg pop`) | `output counts` (non-zero deltas only) `energy energy_delta area`; `output` includes warnings, as for `run` |
 | `vertex_info` | Detail for one vertex by position | `id xyz attr constraints` |
 | `dump` | Write `.dmp` state to a temp path, read it back | `content` |
 

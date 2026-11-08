@@ -1,4 +1,4 @@
-//! SE subprocess manager — port of src/main/src/se-manager.ts.
+//! SE subprocess manager: spawns, talks to, and kills the se-worker sidecar.
 //!
 //! Each load kills the previous worker and spawns a fresh `se-worker` sidecar
 //! that owns exactly one libse instance (se_init cannot run twice in one
@@ -57,7 +57,7 @@ fn read_result(stdout: &mut BufReader<ChildStdout>) -> Result<Value, String> {
                     msg["error"].as_str().unwrap_or("unknown error")
                 ))
             }
-            _ => continue, // progress lines are dropped (parity with se-manager.ts)
+            _ => continue, // progress lines are dropped
         }
     }
 }
@@ -94,7 +94,7 @@ impl Manager {
         lib_path: &PathBuf,
     ) -> Result<Value, String> {
         // Kill BEFORE taking `io`: a hung command holds `io` until its blocked
-        // read fails, so killing first breaks the deadlock (se-manager.ts note).
+        // read fails, so killing first breaks the deadlock.
         self.kill();
         let mut io = lock(&self.io);
         *io = None;

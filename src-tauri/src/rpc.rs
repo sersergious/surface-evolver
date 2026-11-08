@@ -155,7 +155,7 @@ fn update_session(state: &AppState, sid: &str, result: &Value) {
     s["last_accessed"] = json!(now_iso());
 }
 
-// ── persistence (port of persistence.ts — best-effort, never surfaces) ─────
+// ── persistence (best-effort, never surfaces an error) ──────────────────────
 
 fn persist_file() -> PathBuf {
     state_dir().join("last-session.json")

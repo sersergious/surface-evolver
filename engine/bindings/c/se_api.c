@@ -1,15 +1,13 @@
 /*************************************************************
 *  Surface Evolver C API  —  se_api.c
 *
-*  Provides a clean, FFI-friendly facade over the SE runtime
-*  for use with Python ctypes (or any other foreign caller).
+*  Provides a clean, FFI-friendly facade over the SE runtime for
+*  any foreign caller (the app's Rust se-worker dlopen()s it).
 *
 *  Compilation note
 *  ────────────────
 *  This file must be compiled together with all other SE object
-*  files.  The shared-library target in the Makefile is `libse`:
-*
-*    make libse          →  builds libse.so
+*  files: the CMake target `se` builds libse.dylib / libse.so.
 *
 *  Output produced by SE (via outstring / erroutstring) is
 *  silently redirected to in-memory streams.  Call se_pop_output()
@@ -225,10 +223,12 @@ int se_init(void)
  * Parses a .fe datafile into the global `web` and computes its initial energy.
  *
  * Failure is detected three different ways, because SE reports it three ways:
- * an UNRECOVERABLE error longjmps out of startup() (caught below), a parse
- * error writes to the captured stderr while leaving zero vertices, and an
- * unsupported model parses cleanly but cannot be drawn. Each sets
- * se_last_error() and returns -1.
+ * a recoverable-class error (datafile, parse) longjmps out of startup() via
+ * kb_error's bailout (caught below), a parse error can instead write to the
+ * captured stderr while leaving zero vertices, and an unsupported model parses
+ * cleanly but cannot be drawn. Each sets se_last_error() and returns -1. An
+ * UNRECOVERABLE error calls exit(): nothing here can catch that, which is one
+ * reason the engine lives in a disposable worker process.
  *
  * On failure the engine is left in a half-initialised state that no subsequent
  * call can clean up — the caller must discard the process rather than retry.
@@ -238,8 +238,8 @@ int se_load(const char *filename)
     if (!se_initialized)
         return -1;
 
-    /* kb_error(UNRECOVERABLE,...) longjmps to jumpbuf[subshell_depth].
-     * Catch it here so the caller gets a clean error return. */
+    /* Recoverable-class kb_error()s longjmp to jumpbuf[subshell_depth].
+     * Catch them here so the caller gets a clean error return. */
     subshell_depth = 0;
     if (setjmp(jumpbuf[0]) != 0) {
         /* The bailout closed both capture streams: salvage the engine's own
@@ -837,7 +837,7 @@ int se_get_body_cm(int body_idx, double *out_xyz)
  * Detail for the vertex at sequential position `vpos` (matching se_get_vertices
  * row order).  out_id ← 1-based SE ordinal; out_xyz ← ALWAYS 3 doubles, zero-
  * padded above sdim exactly as se_get_vertices does (NOT sdim coords — sizing
- * this buffer from se_get_sdim() would under-allocate on sdim>3 files);
+ * this buffer from se_get_sdim() would under-allocate on 2-D files);
  * out_attr ← the attribute bitmap (FIXED 0x40, BOUNDARY 0x80, CONSTRAINT 0x400,
  * …); out_cons ← active constraint indices (up to cons_max).  Any out param may
  * be NULL.  Returns the number of constraints on the vertex, which may exceed

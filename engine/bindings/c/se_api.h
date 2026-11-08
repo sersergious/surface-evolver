@@ -1,9 +1,9 @@
 /*************************************************************
 *  Surface Evolver C API
-*  Facade for use with Python ctypes or other FFI callers.
+*  Facade for FFI callers (the app's Rust se-worker dlopen()s it).
 *
-*  Build: see Makefile target `libse`
-*  Usage: #include "se_api.h", link against libse.so
+*  Build: CMake target `se` -> libse.dylib (macOS) / libse.so (Linux)
+*  Usage: #include "se_api.h", link against or dlopen libse
 *************************************************************/
 
 #ifndef SE_API_H
@@ -210,9 +210,10 @@ int se_get_constraint_name(int con_idx, char *buf, int size);
  * Returns bytes copied excluding the NUL, or -1 on bad arguments. */
 int se_pop_output(char *buf, int bufsize);
 
-/* Same contract, for SE's stderr / error messages. Note se_run() already drains
- * this stream into se_last_error() when a command fails, so a failed command
- * usually leaves nothing here. */
+/* Same contract, for SE's stderr / error messages. When a RECOVERABLE error
+ * ends a command or load, se_run()/se_load() move this stream's text into
+ * se_last_error() and leave it empty; after an ordinary command error the text
+ * is in both. A successful command's warnings stay here until popped. */
 int se_pop_errout(char *buf, int bufsize);
 
 /* Description of the last API-level error, NUL-terminated and never NULL.

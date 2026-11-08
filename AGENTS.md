@@ -133,7 +133,10 @@ engine/src/                    ← Surface Evolver upstream, 115 files, flat ←
 `topo`, `vertex_info`, `dump`. stdout returns
 `{"type":"result","ok":true|false,…}`, or `{"type":"fatal","error":…}` if
 dlopen/`se_init` fails at startup. There is no `iterate` command — the Run menu
-sends `g N` through `run`.
+sends `g N` through `run`. Only JSON ever reaches stdout: the worker replies on
+a private dup of the pipe and points fd 1 at stderr, so engine `printf`s (e.g.
+`itdebug on`) land in the app log. Errors that end the session are prefixed
+`Session ended:` by `rpc.rs` (see Landmine 1).
 
 **RPC methods** (`rpc.rs`): `getRestore` `listFiles` `createSession` `cancel`
 `uploadFile` `exportDmp` `exportFe` `updateFile` `saveExport` `runCommand`

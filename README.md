@@ -34,11 +34,12 @@ Everything below is what the **desktop app** adds. The original engine's full co
 ## Tech Stack
 
 - **Core engine**: C — Ken Brakke's Surface Evolver (115 `.c`/`.h` files, flat upstream layout), built headless as a shared library
-- **C API**: `engine/bindings/c/se_api.{h,c}` — a 28-function anti-corruption facade that captures the engine's output streams
+- **C API**: `engine/bindings/c/se_api.{h,c}` — a 29-function anti-corruption facade that captures the engine's output streams
 - **Worker sidecar**: Rust — 345 KB binary, `libloading` (`dlopen`) + `serde_json`
 - **Backend**: Rust — Tauri v2, single `rpc(method, params)` command over 13 methods
 - **Frontend**: React + Vite, Zustand, Three.js / @react-three/fiber, Tailwind + daisyUI
-- **Build**: CMake (engine), Cargo (app + sidecar), Bun (frontend), Tauri bundler; GitHub Actions matrix for macOS / Linux
+- **Build**: CMake (engine), Cargo (app + sidecar), Bun (frontend), Tauri bundler; GitHub Actions matrix for macOS / Linux on pinned runner images
+- **Testing**: CTest (C facade), `cargo test` (worker protocol and app layer, against the shipped release worker), Vitest + Testing Library with Tauri's own `mockIPC`, ESLint
 
 ## Getting Started
 
@@ -87,13 +88,13 @@ Run from the repository root, after `bun run dev` or `bun run build` has built t
 
 ```bash
 export SE_LIB_PATH=$PWD/cmake-build-release/libse.dylib    # .so on Linux
-ctest --test-dir cmake-build-release --output-on-failure   # C API suite, 56 assertions
-(cd src-tauri/worker && cargo test)                        # FFI guard + smoke + fixtures, 9 tests
-(cd src-tauri && cargo test)                               # rpc.rs unit + integration tests, 22 tests
-(cd ui && bunx tsc --noEmit && bun run test)               # frontend types + 47 unit/component tests
+ctest --test-dir cmake-build-release --output-on-failure   # C API suite, 81 checks
+(cd src-tauri/worker && cargo test)                        # FFI guard + smoke + fixtures, 14 tests
+(cd src-tauri && cargo test)                               # rpc.rs unit + integration tests, 25 tests
+(cd ui && bun run lint && bunx tsc --noEmit && bun run test)  # lint, types, 60 tests
 ```
 
-Without `SE_LIB_PATH`, the worker and app integration tests print "skipping" and still count as passed.
+Without `SE_LIB_PATH`, the worker and app integration tests print "skipping" and still count as passed locally. In CI (`CI` set) they fail instead, so a misconfigured run can't pass silently.
 
 ## Challenges & Learnings
 
@@ -115,14 +116,15 @@ The UI is TypeScript in a webview, the backend is Rust, the engine is C in a *di
 **Challenge — Owning the whole stack**
 Full-stack here spans four languages and a rendering pipeline, and the interesting bugs live *between* the layers — a race between session restore and a user-initiated load, a persistence call blocking the command path, a build script using a shell builtin that does not exist on Windows.
 
-**Solution** — Put a test on every seam, then reduce the number of seams. The C facade carries its own suite (56 assertions), the FFI boundary has the signature guard described above, and the worker protocol is exercised by tests that drive the real binary over stdin the way the backend does. When I replaced the sidecar wholesale, I kept the old implementation building alongside the new one and diffed their parsed responses command by command instead of trusting the rewrite.
+**Solution** — Put a test on every seam, then reduce the number of seams. The C facade carries its own suite (81 checks), the FFI boundary has the signature guard described above, and the worker protocol is exercised by tests that drive the real binary over stdin the way the backend does. When I replaced the sidecar wholesale, I kept the old implementation building alongside the new one and diffed their parsed responses command by command instead of trusting the rewrite.
 
-The other half was refusing to grow. The C facade went from 49 exports to 28 and the worker from 10 commands to 6, because anything already reachable through the engine's own command language did not need a second structured path to keep correct. Narrowing the models the app *claims* to support — rejecting the two it could never draw honestly — took the bundled library from 17 of 27 datafiles rendering to 20 of 20 loading and meshing. Less surface, fewer places for the layers to disagree.
+The other half was refusing to grow. The C facade went from 49 exports to 28 (29 today, with the periodic-facet accessor) and the worker from 10 commands to 6, because anything already reachable through the engine's own command language did not need a second structured path to keep correct. Narrowing the models the app *claims* to support — rejecting the two it could never draw honestly — took the bundled library from 17 of 27 datafiles rendering to 20 of 20 loading and meshing. Less surface, fewer places for the layers to disagree.
 
 ## Design decisions & constraints
 
 - **Soapfilm model only.** `STRING` and `SIMPLEX` datafiles are rejected at load with an explanation. Neither model's cells can be expressed by the triangulated-facet mesh API, so they used to render as a bare edge web or as nothing at all. Rejecting beats drawing a lie — the engine still computes them, and `se_run` reaches them.
 - **One live session at a time**, a direct consequence of one-engine-per-process. Open files are tabs; switching reloads.
+- **macOS and Linux only.** Windows support was dropped: its native build crashed on every recoverable engine error, and no user runs Windows. Shipping nothing beats shipping a broken installer.
 - **The C facade is kept to what the app calls.** Accessors built for removed features were deleted rather than left to rot; they are recoverable from git history.
 - **Structured API only where it earns its place.** The physics and named-quantity panels were removed because `set gravity_constant 980`, `print body[1].volume` and `v` already do the job through the command line — a structured duplicate is a second thing to keep correct.
 - **Power features are CLI-only** (they work, there are just no buttons): Hessian/eigenvalue stability analysis, `edgeswap`, `dissolve`, `jiggle`, `optimize`, `conj_grad`, `saddle`.
@@ -137,7 +139,7 @@ flowchart LR
     UI["React + Three.js<br/>ui/"] -->|"Tauri invoke — rpc(method, params)"| RPC["Rust backend<br/>src-tauri/src/rpc.rs"]
     RPC --> Mgr["worker.rs<br/>lifecycle + mutex"]
     Mgr <-->|"line-delimited JSON<br/>stdin/stdout"| W["se-worker sidecar<br/>src-tauri/worker/"]
-    W <-->|"dlopen + FFI"| Facade["se_api.c<br/>28-function facade"]
+    W <-->|"dlopen + FFI"| Facade["se_api.c<br/>29-function facade"]
     Facade --> Engine["Surface Evolver<br/>C engine, 115 files"]
 ```
 

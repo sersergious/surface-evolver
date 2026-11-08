@@ -11,7 +11,7 @@
 //!
 //! Cancellation: the manager kills the process (SIGKILL). SIGINT would abort in-band; unused (#35).
 //!
-//! Ported from worker/se-worker.ts (bun:ffi). Output is semantically identical;
+//! Ported from the retired bun/TypeScript worker. Output is semantically identical;
 //! serde_json renders an integral f64 as `2.0` where JSON.stringify wrote `2`,
 //! which parses to the same JS number.
 
