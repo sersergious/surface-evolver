@@ -48,7 +48,7 @@ PATH — do **not** add it as an npm dependency (see *Landmine 10*).
 
 ```bash
 # C API tests (needs built libse)
-ctest --test-dir cmake-build-release --output-on-failure          # 72 checks
+ctest --test-dir cmake-build-release --output-on-failure          # 77 checks
 
 # Worker sidecar: FFI-signature guard, stdin/stdout smoke tests, and a fixture
 # test that loads every bundled .fe file and checks it meshes (automates the
@@ -56,7 +56,7 @@ ctest --test-dir cmake-build-release --output-on-failure          # 72 checks
 # guard skips.
 # All commands below run from the repo root. Use libse.so on Linux.
 export SE_LIB_PATH=$PWD/cmake-build-release/libse.dylib
-(cd src-tauri/worker && cargo test)                                 # 13 tests
+(cd src-tauri/worker && cargo test)                                 # 14 tests
 # SE_WORKER_PATH=<path to se-worker> points both Rust suites at a specific
 # binary; CI uses it to test the shipped release build (panic = "abort", LTO).
 

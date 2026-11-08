@@ -33,7 +33,9 @@ int se_init(void);
  * Only the SOAPFILM (2-D triangulated) model is accepted: STRING and SIMPLEX
  * datafiles are rejected with an se_last_error() explaining why, because
  * se_get_facets() cannot express their cells.  Engine state after a failed
- * load is undefined — discard the process or reload a valid file. */
+ * load is undefined — discard the process or reload a valid file. Output
+ * capture keeps working either way, and se_last_error() carries the engine's
+ * own error text where there is one. */
 int se_load(const char *filename);
 
 /* ── command execution ────────────────────────────────────────────────── */

@@ -266,11 +266,11 @@ Closed the last untested layer (September 2026) after an audit found
 ```mermaid
 flowchart TB
     subgraph C["C facade"]
-        CT["tests/c/test_se_api.c<br/>72 checks"]
+        CT["tests/c/test_se_api.c<br/>77 checks"]
     end
     subgraph Worker["se-worker crate"]
         WF["ffi_signatures.rs — 1 test<br/>se_api.h ⇄ ffi.rs agree"]
-        WS["smoke.rs — 11 tests<br/>drive the built binary over stdin"]
+        WS["smoke.rs — 12 tests<br/>drive the built binary over stdin"]
         WX["fixtures.rs — 1 test<br/>all 20 bundled .fe load + mesh"]
     end
     subgraph App["Tauri app crate"]
@@ -298,7 +298,7 @@ flowchart LR
     subgraph CI["ci.yml — push / PR to main"]
         direction TB
         C1["c-tests<br/>macos-26 + ubuntu-26.04<br/>ctest"]
-        C2["backend-tests<br/>cargo check + cargo test<br/>worker (13) + app (25),<br/>against the release worker"]
+        C2["backend-tests<br/>cargo check + cargo test<br/>worker (14) + app (25),<br/>against the release worker"]
         C3["frontend-tests<br/>lint + tsc --noEmit + bun run test (60)<br/>+ production build"]
         C4["windows-tests (non-blocking)<br/>MinGW libse: ctest + worker tests"]
     end

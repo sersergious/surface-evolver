@@ -15,6 +15,13 @@
 
 #include "se_api.h"
 
+#ifdef _WIN32
+#  include <direct.h>
+#  define getcwd _getcwd
+#else
+#  include <unistd.h>
+#endif
+
 /* ── Minimal harness ────────────────────────────────────────────────────── */
 
 static int g_run    = 0;
@@ -315,6 +322,42 @@ static void test_run_load_is_refused(void)
     drain();
 }
 
+/* #19: a datafile error ends in the engine's bailout, which fclose()s both
+ * capture streams. se_load used to return with them closed, so afterwards SE
+ * printed to the real stdout (the worker's IPC pipe) and the parse error was
+ * replaced by a generic message. */
+static void test_failed_load_keeps_capture(void)
+{
+    SECTION("se_load (datafile error keeps output capture)");
+    /* Absolute, like every path the app passes: the engine's path_open reads
+     * one byte before the name for a relative path (utility.c), which ASan
+     * flags. */
+    char bad[1024];
+    if (!getcwd(bad, sizeof(bad) - 32)) strcpy(bad, ".");
+    strcat(bad, "/se_test_broken.fe");
+    FILE *f = fopen(bad, "w");
+    fputs("vertices\n1 0 0 0\n2 1 0 0\n3 0 1 0\n"
+          "edges\n1 1 2\n2 2 3\n3 3 1\n"
+          "faces\n1 1 2 99\n", f);          /* edge 99 does not exist */
+    fclose(f);
+
+    CHECK(se_load(bad) != 0);
+    CHECK(strncmp(se_last_error(), "Error loading", 13) != 0);  /* the real error */
+    remove(bad);
+
+    /* The issue's repro: straight after the failed load, output must still be
+     * captured rather than leak to the real stdout. No drain() first: popping
+     * used to fclose the already-closed stream and reopen it, hiding the bug
+     * behind a double fclose. */
+    CHECK(se_run("print 4242") == 0);
+    char buf[256] = {0};
+    se_pop_output(buf, sizeof(buf));
+    CHECK(strstr(buf, "4242") != NULL);
+
+    CHECK(se_load(FE_CUBE) == 0);   /* the tests after this need a surface */
+    drain();
+}
+
 static void test_topo_and_params(void)
 {
     SECTION("topo counts");
@@ -425,6 +468,7 @@ int main(void)
     test_run_error();
     test_run_noop_and_error_state();
     test_run_load_is_refused();
+    test_failed_load_keeps_capture();
     test_topo_and_params();   /* mutates the mesh (refine) */
     test_element_colors();
     test_edge_wraps();

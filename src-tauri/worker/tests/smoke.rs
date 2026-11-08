@@ -11,7 +11,7 @@
 //! there.
 
 mod common;
-use common::{cube, drive, repo, skip, load};
+use common::{cube, drive, drive_env, repo, skip, load};
 
 #[test]
 fn every_command_round_trips() {
@@ -273,4 +273,18 @@ fn periodic_facets_are_drawn_unwrapped() {
         let longest = dist(i[0], i[1]).max(dist(i[1], i[2])).max(dist(i[2], i[0]));
         assert!(longest < median * 5.0, "facet {i:?} spans the domain: side {longest} vs median edge {median}");
     }
+}
+
+#[test]
+fn dump_works_when_the_temp_path_has_backslashes() {
+    if skip() { return }
+    // #26: the dump path goes into an SE string literal, where `\x` is an
+    // escape. Windows paths are all backslashes; a Unix directory may hold
+    // one too, which reproduces the bug off Windows.
+    let tmp = std::env::temp_dir().join(format!("se-bs\\dir-{}", std::process::id()));
+    std::fs::create_dir_all(&tmp).unwrap();
+    let msgs = drive_env(&[cube(), r#"{"cmd":"dump"}"#.into()], &[("TMPDIR", &tmp), ("TEMP", &tmp), ("TMP", &tmp)]);
+    let _ = std::fs::remove_dir_all(&tmp);
+    assert_eq!(msgs[1]["ok"], true, "{}", msgs[1]);
+    assert!(msgs[1]["content"].as_str().unwrap().contains("vertices"));
 }

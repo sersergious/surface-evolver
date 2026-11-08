@@ -19,6 +19,11 @@ pub fn repo() -> PathBuf {
 
 /// Feed the worker a script of commands; collect one JSON reply per line.
 pub fn drive(lines: &[String]) -> Vec<Value> {
+    drive_env(lines, &[])
+}
+
+/// `drive`, with extra environment variables for the worker process.
+pub fn drive_env(lines: &[String], env: &[(&str, &std::path::Path)]) -> Vec<Value> {
     // SE_WORKER_PATH lets CI drive the shipped release build (panic = "abort",
     // LTO, opt-level "z") instead of the dev-profile binary cargo test builds.
     let bin = std::env::var_os("SE_WORKER_PATH")
@@ -28,6 +33,7 @@ pub fn drive(lines: &[String]) -> Vec<Value> {
 
     let mut child = Command::new(bin)
         .env("SE_LIB_PATH", lib)
+        .envs(env.iter().copied())
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::null())

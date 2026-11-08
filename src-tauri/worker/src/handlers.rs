@@ -41,6 +41,15 @@ fn cstring(s: &str) -> Vec<u8> {
     v
 }
 
+/// `s` as an SE string literal. SE's lexer reads `\x` as an escape
+/// (`reduce_string`: `\\` is a backslash, `\q` a double quote, anything else
+/// drops the backslash), so a raw Windows path lost every separator (#26).
+/// Never ends in an escaped backslash for the paths we pass: SE's lexer would
+/// then take the closing quote as escaped.
+fn se_quote(s: &str) -> String {
+    format!("\"{}\"", s.replace('\\', "\\\\").replace('"', "\\q"))
+}
+
 /// Decode a fixed C buffer up to its NUL. Lossy: SE writes raw bytes with no
 /// UTF-8 guarantee, and JS's TextDecoder substitutes U+FFFD rather than failing.
 fn cstr(buf: &[u8]) -> String {
@@ -448,7 +457,7 @@ impl Worker {
         let path = std::env::temp_dir().join(format!("se-dump-{}.dmp", std::process::id()));
         let p = path.to_string_lossy().into_owned();
 
-        let ret = unsafe { (self.se.run)(cstring(&format!("dump \"{p}\"")).as_ptr()) };
+        let ret = unsafe { (self.se.run)(cstring(&format!("dump {}", se_quote(&p))).as_ptr()) };
         if ret != 0 {
             let msg = self.se_error("dump failed");
             let _ = std::fs::remove_file(&path);
