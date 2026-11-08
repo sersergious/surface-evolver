@@ -359,6 +359,21 @@ static void test_run_noop_and_error_state(void)
     CHECK(se_last_error()[0] == '\0');
 }
 
+/* A RECOVERABLE engine error raised inside se_run (here 1212, an illegal
+ * constraint number) goes through kb_error's bailout and lands in se_run's
+ * own jumpbuf handler, not command()'s: the engine's text must come back and
+ * capture must keep working afterwards. */
+static void test_run_recoverable_error(void)
+{
+    SECTION("se_run (RECOVERABLE error)");
+    CHECK(se_run("set vertex[1] constraint 99") != 0);
+    CHECK(strstr(se_last_error(), "1212") != NULL);
+    CHECK(se_run("print 5150") == 0);
+    char buf[256] = {0};
+    se_pop_output(buf, sizeof(buf));
+    CHECK(strstr(buf, "5150") != NULL);
+}
+
 /* #20: SE's `load` longjmps to a buffer only the standalone main() sets.
  * It must fail like any other command, leaving the surface alone. */
 static void test_run_load_is_refused(void)
@@ -521,8 +536,9 @@ int main(void)
     test_output_capture();
     test_run_error();
     test_run_noop_and_error_state();
-    test_run_load_is_refused();
-    test_failed_load_keeps_capture();
+    test_run_recoverable_error();      /* se_run's own jumpbuf handler */
+    test_failed_load_keeps_capture();  /* se_load's jumpbuf handler (#19) */
+    test_run_load_is_refused();        /* loadjumpbuf (#20) */
     test_topo_and_params();   /* mutates the mesh (refine) */
     test_element_colors();
     test_edge_wraps();
