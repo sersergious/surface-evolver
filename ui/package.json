@@ -9,7 +9,7 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "test": "vitest run --passWithNoTests",
+    "test": "vitest run",
     "css": "tailwindcss -i src/styles/global.css -o src/styles/compiled.css",
     "css:watch": "tailwindcss -i src/styles/global.css -o src/styles/compiled.css --watch"
   },

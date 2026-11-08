@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom/vitest'
-import { afterEach, vi } from 'vitest'
+import { afterEach, beforeEach, vi } from 'vitest'
 import { cleanup } from '@testing-library/react'
 
 afterEach(cleanup)
@@ -21,10 +21,7 @@ Element.prototype.getClientRects = () => ({
   length: 0, item: () => null, [Symbol.iterator]: function* () {},
 }) as unknown as DOMRectList
 
-// Safe default so any component tree that transitively imports api/client.ts
-// (which calls `listen()` as a module-level side effect) doesn't crash
-// outside a real Tauri webview. Test files that care about `invoke`/`listen`
-// behavior directly (e.g. api/client.test.ts) declare their own more
-// specific vi.mock, which takes precedence for that file.
-vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn().mockResolvedValue(null) }))
-vi.mock('@tauri-apps/api/event', () => ({ listen: vi.fn().mockResolvedValue(() => {}) }))
+// Tauri IPC is faked once for the whole file by Tauri's own mockIPC (see
+// ./ipc.ts). Must run before any test module imports api/client.ts.
+import { ipc } from './ipc'
+beforeEach(() => { ipc.mockReset().mockReturnValue(null) })

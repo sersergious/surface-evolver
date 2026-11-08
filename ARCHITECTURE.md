@@ -263,7 +263,7 @@ Closed the last untested layer (September 2026) after an audit found
 ```mermaid
 flowchart TB
     subgraph C["C facade"]
-        CT["tests/c/test_se_api.c<br/>56 assertions"]
+        CT["tests/c/test_se_api.c<br/>66 checks"]
     end
     subgraph Worker["se-worker crate"]
         WF["ffi_signatures.rs — 1 test<br/>se_api.h ⇄ ffi.rs agree"]
@@ -275,7 +275,7 @@ flowchart TB
         AI["tests/{dispatch,manager}.rs — 12<br/>real worker + real libse"]
     end
     subgraph FE["Frontend"]
-        FT["Vitest + Testing Library<br/>47 tests / 8 files"]
+        FT["Vitest + Testing Library<br/>51 tests / 9 files"]
     end
     CT --> WF --> AU --> FT
 ```
@@ -295,7 +295,7 @@ flowchart LR
     subgraph CI["ci.yml — push / PR to main"]
         direction TB
         C1["c-tests<br/>macOS + Linux matrix<br/>ctest"]
-        C2["backend-tests<br/>cargo check + cargo test<br/>worker (9) + app (22)"]
+        C2["backend-tests<br/>cargo check + cargo test<br/>worker (11) + app (23)"]
         C3["frontend-tests<br/>tsc --noEmit + bun run test (47)<br/>+ production build"]
     end
     subgraph BUILD["build.yml — workflow_run after a green push to main"]

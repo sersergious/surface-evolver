@@ -115,3 +115,30 @@ fn worker_dying_mid_session_is_reported_and_recovered_from() {
         .expect("load after a crashed worker must still work");
     assert_eq!(stats["vertex_count"], 14);
 }
+
+#[test]
+fn kill_unblocks_an_in_flight_request() {
+    if skip() { return }
+    // The reason for the io/proc mutex split: Stop must not wait for the
+    // running command. kill() takes only `proc`, so the blocked reader gets
+    // EOF and the request returns an error instead of running to completion.
+    // Detached threads + a channel timeout: if kill() regresses to waiting on
+    // `io`, this fails in 10 s instead of hanging the whole test run.
+    let mgr = std::sync::Arc::new(Manager::default());
+    mgr.load_session("s1", &fe("cube.fe").to_string_lossy(), &worker_bin(), &lib_path())
+        .expect("load cube.fe");
+    let (tx, rx) = std::sync::mpsc::channel();
+    let m = mgr.clone();
+    std::thread::spawn(move || {
+        let _ = tx.send(m.request("s1", json!({ "cmd": "run", "command": "r; r; r; r; r; r; g 100000" })));
+    });
+    std::thread::sleep(std::time::Duration::from_millis(500));
+    let m = mgr.clone();
+    std::thread::spawn(move || m.kill());
+    let res = rx
+        .recv_timeout(std::time::Duration::from_secs(10))
+        .expect("kill did not unblock the in-flight request");
+    let err = res.expect_err("a killed command must not report success");
+    assert!(err.contains("crashed"), "got: {err}");
+    assert!(mgr.request("s1", json!({ "cmd": "mesh" })).is_err(), "no session survives a kill");
+}

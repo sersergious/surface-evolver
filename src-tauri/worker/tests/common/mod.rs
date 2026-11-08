@@ -47,8 +47,11 @@ pub fn cube() -> String {
     format!(r#"{{"cmd":"load","path":"{}"}}"#, repo().join("fe/cube.fe").display())
 }
 
+/// Skip when no engine is configured, so a fresh checkout stays green — except
+/// under CI (GitHub Actions sets CI=true), where a skip would be a silent pass.
 pub fn skip() -> bool {
     if std::env::var("SE_LIB_PATH").is_err() {
+        assert!(std::env::var_os("CI").is_none(), "SE_LIB_PATH unset under CI — refusing to skip");
         eprintln!("SE_LIB_PATH unset — skipping worker smoke test");
         return true;
     }

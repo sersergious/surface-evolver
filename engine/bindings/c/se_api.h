@@ -44,8 +44,10 @@ int se_load(const char *filename);
  * Output is captured; retrieve it with se_pop_output().
  * A RECOVERABLE engine error is caught here (the capture streams are torn down
  * by the engine's bailout path and reopened before returning), and its text is
- * left in se_last_error().
- * Returns 0 on success, -1 on a parse or runtime error. */
+ * left in se_last_error(); so is the text of an ordinary command error.
+ * se_last_error() is cleared on entry, so it is empty after a success.
+ * Returns 0 on success (including blank or comment-only input), -1 on a parse
+ * or runtime error. */
 int se_run(const char *cmd);
 
 /* ── scalar state ─────────────────────────────────────────────────────── */

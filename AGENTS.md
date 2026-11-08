@@ -48,7 +48,7 @@ PATH — do **not** add it as an npm dependency (see *Landmine 10*).
 
 ```bash
 # C API tests (needs built libse)
-ctest --test-dir cmake-build-release --output-on-failure          # 56 assertions
+ctest --test-dir cmake-build-release --output-on-failure          # 66 checks
 
 # Worker sidecar: FFI-signature guard, stdin/stdout smoke tests, and a fixture
 # test that loads every bundled .fe file and checks it meshes (automates the
@@ -56,23 +56,26 @@ ctest --test-dir cmake-build-release --output-on-failure          # 56 assertion
 # guard skips.
 # All commands below run from the repo root. Use libse.so on Linux.
 export SE_LIB_PATH=$PWD/cmake-build-release/libse.dylib
-(cd src-tauri/worker && cargo test)                                 # 9 tests
+(cd src-tauri/worker && cargo test)                                 # 11 tests
 
 # Rust app. `cargo check` is the fast gate; `cargo test` additionally runs
 # rpc.rs's own unit tests plus src-tauri/tests/{dispatch,manager}.rs, which
-# drive a real se-worker/libse through the app layer (22 tests total) — set
+# drive a real se-worker/libse through the app layer (23 tests total) — set
 # SE_LIB_PATH and either build the worker first or set SE_WORKER_PATH, or
 # those two integration-test binaries skip themselves rather than fail.
-(cd src-tauri && cargo check && cargo test)                         # 22 tests
+(cd src-tauri && cargo check && cargo test)                         # 23 tests
 
 # Frontend: type-check, then a real Vitest suite (jsdom + Testing Library) —
-# 47 tests across 8 files covering the RPC client, API wrapper contracts, four
-# components, the store and the menu-action hook. Both run in CI.
-(cd ui && bunx tsc --noEmit && bun run test)                        # 47 tests
+# 51 tests across 9 files covering the RPC client, API wrapper contracts, four
+# components, the store, the menu-action hook and the native menu routes. Tauri
+# IPC is faked once per file by Tauri's own mockIPC (ui/src/test/ipc.ts), so
+# tests assert what crosses the IPC boundary. Both run in CI.
+(cd ui && bunx tsc --noEmit && bun run test)                        # 51 tests
 ```
 
-A skipped integration test prints `SE_LIB_PATH unset — skipping …` and still
-counts as passed, so check the output, not just the totals.
+Locally, a skipped integration test prints `SE_LIB_PATH unset — skipping …` and
+still counts as passed, so check the output, not just the totals. Under CI
+(`CI` set) a missing `SE_LIB_PATH` or worker binary fails the test instead.
 
 The end-to-end claim worth re-checking after engine or worker changes: **all 20
 bundled `.fe` datafiles load and produce facets.** This is now enforced by

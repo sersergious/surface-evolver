@@ -291,6 +291,8 @@ int se_run(const char *cmd)
      * kb_error's bailout also closes our capture streams and resets
      * outfd/erroutfd to stdout/stderr, so we must re-open them on error. */
     subshell_depth = 0;
+    se_errmsg_buf[0] = '\0';   /* a success must not leave an older failure */
+    last_error = 0;            /* every kb_error() sets it; see below */
     if (setjmp(jumpbuf[0]) != 0) {
         /* A RECOVERABLE error escaped command()'s cmdbuf handler.
          * Flush and save errout content BEFORE reopening streams (which
@@ -312,12 +314,36 @@ int se_run(const char *cmd)
         return -1;
     }
 
+    /* SE's `load` command longjmps to loadjumpbuf, which only the standalone
+     * main() sets: in libse it is zeroed, so `load` used to crash the process
+     * (#20). Catch it and turn it into an ordinary RECOVERABLE error, whose
+     * bailout does the cleanup and lands in the jumpbuf[0] handler above.
+     * Refused rather than performed: the host owns which file a session has. */
+    if (setjmp(loadjumpbuf) != 0)
+        kb_error(9001, "The load command is not available here: "
+                       "use File > Open to open another datafile.\n",
+                 RECOVERABLE);
+
     /* old_menu() calls command() which has its own cmdbuf setjmp for
      * parse/command errors, then calls recalc() if change_flag is set.
      * command() returns 1 on normal success, 0 on parse/runtime error,
-     * END_COMMANDS on quit.  Normalise to POSIX: 0 = success, -1 = error. */
+     * END_COMMANDS on quit.  Normalise to POSIX: 0 = success, -1 = error.
+     * command() also returns 0 for input with nothing to run (blank, comment
+     * only); that path raises no kb_error(), so last_error is still 0. */
     int retval = old_menu((char *)cmd);
-    return (retval == 1) ? 0 : -1;
+    if (retval == 1 || last_error == 0)
+        return 0;
+    /* Ordinary error, caught by command()'s own handler: copy (not drain) the
+     * engine's message so se_last_error() describes this failure. */
+    int n = (int)cap_copy(cap_err_fd, cap_err_buf, cap_err_size,
+                          se_errmsg_buf, sizeof(se_errmsg_buf) - 1);
+    while (n > 0 && (se_errmsg_buf[n-1] == '\n' || se_errmsg_buf[n-1] == '\r'))
+        n--;
+    se_errmsg_buf[n] = '\0';
+    if (n == 0)
+        snprintf(se_errmsg_buf, sizeof(se_errmsg_buf),
+                 "SE error %d during command: %s", last_error, cmd);
+    return -1;
 }
 
 /* ── scalar state accessors ───────────────────────────────────────────── */

@@ -24,10 +24,14 @@ fn worker_bin_str() -> Option<String> {
     if let Ok(p) = std::env::var("SE_WORKER_PATH") {
         return Some(p);
     }
-    ["release", "debug"].iter().find_map(|profile| {
-        let p = repo_root().join("src-tauri/worker/target").join(profile).join("se-worker");
-        p.exists().then(|| p.to_string_lossy().into_owned())
-    })
+    // Newest build wins: preferring release blindly tested a stale binary
+    // left by `bun run dev` after every worker edit.
+    ["release", "debug"]
+        .iter()
+        .map(|profile| repo_root().join("src-tauri/worker/target").join(profile).join("se-worker"))
+        .filter_map(|p| Some((p.metadata().ok()?.modified().ok()?, p)))
+        .max_by_key(|(mtime, _)| *mtime)
+        .map(|(_, p)| p.to_string_lossy().into_owned())
 }
 
 pub fn worker_bin() -> PathBuf {
@@ -38,12 +42,18 @@ pub fn worker_bin() -> PathBuf {
 /// failing) when either is missing keeps `cargo test` green on a machine
 /// that hasn't run the C engine / worker build steps — same contract as
 /// worker/tests/smoke.rs.
+///
+/// Under CI (GitHub Actions sets CI=true) a missing prerequisite fails instead:
+/// there, a skip would be a silent pass.
 pub fn skip() -> bool {
+    let ci = std::env::var_os("CI").is_some();
     if std::env::var("SE_LIB_PATH").is_err() {
+        assert!(!ci, "SE_LIB_PATH unset under CI — refusing to skip");
         eprintln!("SE_LIB_PATH unset — skipping app-layer integration test");
         return true;
     }
     if worker_bin_str().is_none() {
+        assert!(!ci, "se-worker binary not found under CI — refusing to skip");
         eprintln!("se-worker binary not found (set SE_WORKER_PATH or build src-tauri/worker) — skipping");
         return true;
     }

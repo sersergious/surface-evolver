@@ -294,6 +294,37 @@ static void test_run_error(void)
     CHECK(rc != 0 || strlen(err) > 0);
 }
 
+/* #30: input with nothing to execute is not a failure, and a success clears
+ * the previous failure's message instead of leaving it for the next caller. */
+static void test_run_noop_and_error_state(void)
+{
+    SECTION("se_run (comment-only input, error state)");
+    CHECK(se_run("// just a note") == 0);
+    CHECK(se_run("   ") == 0);
+    drain();
+
+    CHECK(se_run("this_is_not_a_valid_se_command_xyz") != 0);
+    CHECK(se_last_error()[0] != '\0');
+    drain();
+    CHECK(se_run("print 1") == 0);
+    drain();
+    CHECK(se_last_error()[0] == '\0');
+}
+
+/* #20: SE's `load` longjmps to a buffer only the standalone main() sets.
+ * It must fail like any other command, leaving the surface alone. */
+static void test_run_load_is_refused(void)
+{
+    SECTION("se_run (load command)");
+    int v0 = se_get_vertex_count();
+    CHECK(se_run("load \"" FE_CUBE "\"") != 0);
+    CHECK(strstr(se_last_error(), "File") != NULL);
+    drain();
+    CHECK(se_get_vertex_count() == v0);
+    CHECK(se_run("print 1") == 0);   /* engine still usable */
+    drain();
+}
+
 static void test_topo_and_params(void)
 {
     SECTION("topo counts");
@@ -390,6 +421,8 @@ int main(void)
     test_body_cm_and_inspector();
     test_output_capture();
     test_run_error();
+    test_run_noop_and_error_state();
+    test_run_load_is_refused();
     test_topo_and_params();   /* mutates the mesh (refine) */
     test_element_colors();
     test_edge_wraps();

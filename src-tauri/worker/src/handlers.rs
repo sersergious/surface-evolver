@@ -51,7 +51,24 @@ fn cstr(buf: &[u8]) -> String {
 impl Worker {
     fn pop_output(&mut self) -> String {
         let n = unsafe { (self.se.pop_output)(self.out_buf.as_mut_ptr(), OUT_BUF_SIZE as i32) };
-        if n > 0 { String::from_utf8_lossy(&self.out_buf[..n as usize]).into_owned() } else { String::new() }
+        if n <= 0 { return String::new() }
+        let mut s = String::from_utf8_lossy(&self.out_buf[..n as usize]).into_owned();
+        // A full buffer means se_pop_output dropped the rest (#31). The API
+        // cannot say how much, so say that it happened.
+        // ponytail: output of exactly OUT_BUF_SIZE-1 bytes is flagged too.
+        if n as usize >= OUT_BUF_SIZE - 1 {
+            s.push_str("\n… [output truncated at 256 KB]\n");
+        }
+        s
+    }
+
+    /// What a successful command printed, plus any warnings it raised. SE
+    /// writes warnings to errout; left there, they used to be glued onto the
+    /// next failure's message instead of this reply (#30).
+    fn command_output(&mut self) -> String {
+        let mut s = self.pop_output();
+        s.push_str(&self.pop_errout());
+        s
     }
 
     fn pop_errout(&mut self) -> String {
@@ -147,7 +164,7 @@ impl Worker {
             let msg = self.se_error("se_run() failed");
             return json!({ "ok": false, "se_error": msg });
         }
-        let output = self.pop_output();
+        let output = self.command_output();
         unsafe {
             json!({
                 "ok": true,
@@ -349,7 +366,7 @@ impl Worker {
             if d != 0 { counts.insert(TOPO_NAMES[i].into(), json!(d)); }
         }
 
-        let output = self.pop_output();
+        let output = self.command_output();
         let energy = unsafe { (self.se.get_energy)() };
         unsafe {
             json!({
@@ -413,7 +430,7 @@ impl Worker {
             let _ = std::fs::remove_file(&path);
             return json!({ "ok": false, "se_error": msg });
         }
-        self.pop_output();
+        self.command_output(); // discarded, but drains warnings too
 
         let out = match std::fs::read(&path) {
             Ok(bytes) => json!({ "ok": true, "content": String::from_utf8_lossy(&bytes) }),

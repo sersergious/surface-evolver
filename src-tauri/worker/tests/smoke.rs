@@ -188,3 +188,33 @@ fn non_periodic_mesh_hides_nothing() {
         "no edge may be dropped from a non-periodic surface"
     );
 }
+
+#[test]
+fn warnings_reply_with_their_command_not_the_next_failure() {
+    if skip() { return }
+    // #30: `U` with a fixed scale succeeds with WARNING 1639. It belongs in
+    // that command's reply, not glued onto whichever command fails next.
+    let msgs = drive(&[
+        cube(),
+        r#"{"cmd":"run","command":"m 0.1"}"#.into(),
+        r#"{"cmd":"run","command":"U"}"#.into(),
+        r#"{"cmd":"run","command":"foo := 1/0"}"#.into(),
+    ]);
+    assert_eq!(msgs[2]["ok"], true);
+    assert!(msgs[2]["output"].as_str().unwrap().contains("WARNING 1639"), "{}", msgs[2]);
+    let err = msgs[3]["se_error"].as_str().unwrap();
+    assert!(err.contains("Divide by zero") && !err.contains("WARNING"), "got: {err}");
+}
+
+#[test]
+fn oversized_output_says_it_was_truncated() {
+    if skip() { return }
+    // #31: a refined mesh lists far more than the 256 KB capture buffer.
+    let msgs = drive(&[
+        cube(),
+        r#"{"cmd":"run","command":"r; r; r; r; r; list vertices"}"#.into(),
+    ]);
+    let out = msgs[1]["output"].as_str().unwrap();
+    assert!(out.len() > 200_000, "test needs output bigger than the buffer, got {} bytes", out.len());
+    assert!(out.ends_with("[output truncated at 256 KB]\n"), "tail: {:?}", &out[out.len() - 120..]);
+}
