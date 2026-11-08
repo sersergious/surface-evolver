@@ -164,25 +164,39 @@ jobs:
       - uses: msys2/setup-msys2@v2
         with:
           msystem: MINGW64
-          install: mingw-w64-x86_64-gcc mingw-w64-x86_64-cmake mingw-w64-x86_64-ninja
+          install: mingw-w64-x86_64-gcc mingw-w64-x86_64-cmake mingw-w64-x86_64-ninja mingw-w64-x86_64-gdb
 
+      # RelWithDebInfo: same optimisation as the installer's Release build,
+      # plus symbols, so a crash below gets a readable backtrace.
       - name: Build libse + C tests (MinGW, as the Windows installer does)
         shell: msys2 {0}
         run: |
-          cmake -B build -G Ninja -DSE_HEADLESS=ON -DBUILD_TESTS=ON -DCMAKE_BUILD_TYPE=Release
+          cmake -B build -G Ninja -DSE_HEADLESS=ON -DBUILD_TESTS=ON -DCMAKE_BUILD_TYPE=RelWithDebInfo
           cmake --build build
 
       - name: Run C API tests (ctest)
+        id: ctest
         shell: msys2 {0}
         run: ctest --test-dir build --output-on-failure --timeout 120
 
+      - name: Backtrace of the C test crash (gdb)
+        if: failure() && steps.ctest.outcome == 'failure'
+        shell: msys2 {0}
+        run: gdb -batch -ex "set pagination off" -ex run -ex bt -ex "info registers rip" build/tests/test_se_api.exe
+
+      # The steps below run even if the C tests failed, so one Windows bug
+      # does not hide the worker's results. No MinGW runtime is put on PATH:
+      # libse.dll has to load the way the shipped installer loads it.
       - uses: dtolnay/rust-toolchain@stable
+        if: ${{ !cancelled() }}
 
       - uses: Swatinem/rust-cache@v2
+        if: ${{ !cancelled() }}
         with:
           workspaces: src-tauri/worker
 
       - name: Worker tests
+        if: ${{ !cancelled() }}
         working-directory: src-tauri/worker
         env:
           SE_LIB_PATH: ${{ github.workspace }}\build\libse.dll

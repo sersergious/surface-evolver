@@ -399,6 +399,11 @@ static void test_edge_wraps(void)
 
 int main(void)
 {
+    /* Unbuffered, so a crash still leaves the last section and checks in
+     * the log; buffered output used to vanish with the process. */
+    setvbuf(stdout, NULL, _IONBF, 0);
+    setvbuf(stderr, NULL, _IONBF, 0);
+
     printf("Surface Evolver C API test suite\n");
     printf("=================================\n");
     printf("FE_DIR = %s\n", FE_DIR);
