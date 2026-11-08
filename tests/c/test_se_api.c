@@ -27,7 +27,8 @@
 /* Windows-only crash report. The suite crashed natively on Windows but passed
  * under gdb, so the debugger was changing the behaviour. This prints the
  * exception and the faulting stack as module+offset lines, which CI resolves
- * with addr2line against the RelWithDebInfo symbols. */
+ * with addr2line against the RelWithDebInfo symbols. Remove once Windows is
+ * green. */
 static void print_frame(DWORD64 pc)
 {
     HMODULE mod = NULL;
@@ -40,10 +41,21 @@ static void print_frame(DWORD64 pc)
             (unsigned long long)(pc - (DWORD64)(ULONG_PTR)mod));
 }
 
+/* Vectored, not SetUnhandledExceptionFilter: an unhandled filter never ran,
+ * which points at a fault raised while longjmp unwinds the stack. A vectored
+ * handler sees every exception first; report only fatal codes, once. */
 static LONG WINAPI report_crash(EXCEPTION_POINTERS *ep)
 {
+    static volatile LONG reported = 0;
+    DWORD code = ep->ExceptionRecord->ExceptionCode;
+    if (code != EXCEPTION_ACCESS_VIOLATION && code != EXCEPTION_STACK_OVERFLOW &&
+        code != 0xC0000409 /* fast fail */ && code != 0xC0000028 /* bad stack */ &&
+        code != 0xC0000026 /* invalid disposition */ && code != 0xC0000417 /* CRT invalid parameter */)
+        return EXCEPTION_CONTINUE_SEARCH;
+    if (InterlockedExchange(&reported, 1))
+        return EXCEPTION_CONTINUE_SEARCH;
     CONTEXT ctx = *ep->ContextRecord;
-    fprintf(stderr, "\nCRASH code=0x%08lx\n", ep->ExceptionRecord->ExceptionCode);
+    fprintf(stderr, "\nCRASH code=0x%08lx flags=0x%lx\n", code, ep->ExceptionRecord->ExceptionFlags);
     for (int i = 0; i < 16 && ctx.Rip; i++) {
         DWORD64 base = 0;
         print_frame(ctx.Rip);
@@ -486,7 +498,7 @@ int main(void)
     setvbuf(stdout, NULL, _IONBF, 0);
     setvbuf(stderr, NULL, _IONBF, 0);
 #if defined(_WIN64)
-    SetUnhandledExceptionFilter(report_crash);
+    AddVectoredExceptionHandler(1, report_crash);
 #endif
 
     printf("Surface Evolver C API test suite\n");
