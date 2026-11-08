@@ -279,8 +279,7 @@ fn periodic_facets_are_drawn_unwrapped() {
 fn dump_works_when_the_temp_path_has_backslashes() {
     if skip() { return }
     // #26: the dump path goes into an SE string literal, where `\x` is an
-    // escape. Windows paths are all backslashes; a Unix directory may hold
-    // one too, which reproduces the bug off Windows.
+    // escape, so a temp directory whose name holds a backslash broke dumps.
     let tmp = std::env::temp_dir().join(format!("se-bs\\dir-{}", std::process::id()));
     std::fs::create_dir_all(&tmp).unwrap();
     let msgs = drive_env(&[cube(), r#"{"cmd":"dump"}"#.into()], &[("TMPDIR", &tmp), ("TEMP", &tmp), ("TMP", &tmp)]);

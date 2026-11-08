@@ -53,8 +53,8 @@ pub fn drive_env(lines: &[String], env: &[(&str, &std::path::Path)]) -> Vec<Valu
         .collect()
 }
 
-/// A `load` request. Built with serde_json so a Windows path's backslashes
-/// are escaped; hand-formatted JSON made them invalid escapes.
+/// A `load` request, built with serde_json so any path is escaped correctly
+/// (a backslash or quote in a hand-formatted one made invalid JSON).
 pub fn load(path: &std::path::Path) -> String {
     serde_json::json!({ "cmd": "load", "path": path }).to_string()
 }

@@ -48,7 +48,7 @@ PATH — do **not** add it as an npm dependency (see *Landmine 10*).
 
 ```bash
 # C API tests (needs built libse)
-ctest --test-dir cmake-build-release --output-on-failure          # 77 checks
+ctest --test-dir cmake-build-release --output-on-failure          # 81 checks
 
 # Worker sidecar: FFI-signature guard, stdin/stdout smoke tests, and a fixture
 # test that loads every bundled .fe file and checks it meshes (automates the
@@ -82,10 +82,15 @@ still counts as passed, so check the output, not just the totals. Under CI
 (`CI` set) a missing `SE_LIB_PATH` or worker binary fails the test instead.
 
 CI runner images and the bun version are **pinned** (`ubuntu-26.04`,
-`macos-26`, `windows-2025`, bun `1.4.4`, in both workflows). Floating labels
-broke `main` twice without a code change: `ubuntu-latest` moving to GCC 15, and
-the `macos-14` retirement. Bump them on purpose, in both files. The Windows job
-is `continue-on-error` until the `windows`-labelled issues are fixed.
+`macos-26`, bun `1.4.4`, in both workflows). Floating labels broke `main` twice
+without a code change: `ubuntu-latest` moving to GCC 15, and the `macos-14`
+retirement. Bump them on purpose, in both files.
+
+**macOS and Linux only.** Windows support was dropped on purpose (no CI job, no
+installer, no `_WIN32` code in `engine/bindings/c/`): its native `longjmp` back
+into the C facade crashed on every recoverable engine error, for a platform no
+user runs. Don't add Windows branches back. The vendored `engine/src/` keeps
+its own `WIN32` ifdefs untouched (Landmine 2).
 
 The end-to-end claim worth re-checking after engine or worker changes: **all 20
 bundled `.fe` datafiles load and produce facets.** This is now enforced by
@@ -274,9 +279,8 @@ interrupt" and leaves the worker and the surface alive (Unix only;
 
 `scripts/*.ts` use Bun Shell (`$`), whose cross-platform builtins are only:
 `cd ls rm echo pwd bun cat touch mkdir which mv exit true false yes seq dirname
-basename`. Anything else falls through to PATH — notably **`cp` does not exist
-on Windows**, and this is invisible on macOS/Linux. Use `node:fs`
-(`copyFileSync`, `mkdirSync`) instead of shelling out.
+basename`. Anything else falls through to PATH. Prefer `node:fs`
+(`copyFileSync`, `mkdirSync`) to shelling out.
 
 Bun itself must come from PATH or CI's `oven-sh/setup-bun`. Do **not** add `bun`
 to `dependencies` — that pulls a ~90 MB platform binary and undoes the entire
@@ -331,7 +335,7 @@ or run `git submodule update --init` afterwards.
 
 `fe/OCTA.WLF` is the bundle's only cross-file dependency — `crystal.fe` loads it
 via `Wulff "OCTA.WLF"`. Keep the reference's case matching the file on disk;
-a mismatch is silent on case-insensitive filesystems (macOS, Windows) but
+a mismatch is silent on a case-insensitive filesystem (macOS) but
 fails the load on Linux CI.
 
 ## Environment variables

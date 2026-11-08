@@ -28,134 +28,53 @@
 
 /* ── output capture ───────────────────────────────────────────────────── */
 /*
- * POSIX: open_memstream gives us an in-memory FILE* whose buffer/size we can
- * read directly.  Windows (MinGW) has no open_memstream, so we capture into a
- * named file in %TEMP% and read it back through cap_size()/cap_copy().
+ * open_memstream gives us an in-memory FILE* whose buffer/size we can read
+ * directly. (macOS and Linux only: Windows support was dropped.)
  *
  * The engine's kb_error bailout (userio.c, `bailout:`) fclose()s outfd and
  * erroutfd, which are these streams, and points them back at stdout/stderr
  * before it longjmps. From then on cap_out_fd/cap_err_fd dangle: nothing may
- * fflush, ftell or fclose them (#19). A stream is "closed by the bailout" when
- * SE's pointer no longer matches ours; cap_recover_after_bailout() salvages
- * what it held and reopens it.
+ * fflush or fclose them (#19). A stream is "closed by the bailout" when SE's
+ * pointer no longer matches ours; cap_recover_after_bailout() salvages what
+ * it held and reopens it. fclose() leaves open_memstream's buffer and size
+ * holding the final contents, so the salvage needs no FILE* at all.
  */
-
-#define CAP_PATH_MAX 1024
 
 static char   *cap_out_buf  = NULL;
 static size_t  cap_out_size = 0;
 static FILE   *cap_out_fd   = NULL;
-static char    cap_out_path[CAP_PATH_MAX];   /* Windows only */
 
 static char   *cap_err_buf  = NULL;
 static size_t  cap_err_size = 0;
 static FILE   *cap_err_fd   = NULL;
-static char    cap_err_path[CAP_PATH_MAX];   /* Windows only */
 
-#ifdef _WIN32
-#include <process.h>   /* _getpid */
-/* Not tmpfile(): that file is deleted the moment it is closed, so the bailout
- * took the captured error text with it, and MSVCRT creates it in the drive
- * root, which can need admin rights (#27). A named file survives the close
- * and is reopened by path; the name is fixed per stream for the process. */
-static FILE *cap_open(char **buf, size_t *size, char *path)
-{
-    static int seq = 0;
-    (void)buf;
-    *size = 0;
-    if (!path[0]) {
-        const char *dir = getenv("TEMP");
-        if (!dir) dir = getenv("TMP");
-        if (!dir) dir = ".";
-        snprintf(path, CAP_PATH_MAX, "%s\\se-capture-%d-%d.txt", dir, _getpid(), seq++);
-    }
-    return fopen(path, "w+b");   /* truncates on every reopen */
-}
-static size_t cap_size(FILE *fd, size_t memsize)
-{
-    long p;
-    (void)memsize;
-    fflush(fd);
-    p = ftell(fd);
-    return p < 0 ? 0 : (size_t)p;
-}
-/* Copy up to outmax captured bytes into out; leaves the stream position at
- * the end so subsequent writes keep appending. */
-static size_t cap_copy(FILE *fd, const char *membuf, size_t memsize,
+/* Copy up to outmax captured bytes of a live stream into out. Buffer and size
+ * are read through pointers after fflush: open_memstream updates both on a
+ * flush and may move the buffer, so values taken before it can be stale. */
+static size_t cap_copy(FILE *fd, char *const *membuf, const size_t *memsize,
                        char *out, size_t outmax)
 {
-    size_t n = cap_size(fd, memsize);
-    (void)membuf;
-    if (n > outmax) n = outmax;
-    rewind(fd);
-    n = fread(out, 1, n, fd);
-    fseek(fd, 0, SEEK_END);
+    size_t n;
+    fflush(fd);
+    n = *memsize < outmax ? *memsize : outmax;
+    memcpy(out, *membuf, n);
     return n;
 }
-/* What a stream held when the bailout closed it: reopen the file by name. */
-static size_t cap_read_closed(const char *membuf, size_t memsize,
-                              const char *path, char *out, size_t outmax)
+
+/* Copy what a stream held when the bailout closed it, then free its buffer
+ * (ours once the stream is closed). */
+static size_t cap_take_closed(char **buf, size_t *size, char *out, size_t outmax)
 {
     size_t n = 0;
-    FILE *f = fopen(path, "rb");
-    (void)membuf; (void)memsize;
-    if (f) { n = fread(out, 1, outmax, f); fclose(f); }
-    return n;
-}
-static void cap_discard_closed(char **buf, size_t *size)
-{
-    (void)buf;
-    *size = 0;   /* the next cap_open truncates the file */
-}
-/* ponytail: only runs on a normal exit; a killed worker leaves its two small
- * files in %TEMP%. */
-static void cap_remove_files(void)
-{
-    if (outfd == cap_out_fd && cap_out_fd)  fclose(cap_out_fd);
-    if (erroutfd == cap_err_fd && cap_err_fd) fclose(cap_err_fd);
-    outfd = stdout; erroutfd = stderr;
-    remove(cap_out_path);
-    remove(cap_err_path);
-}
-#else
-static FILE *cap_open(char **buf, size_t *size, char *path)
-{
-    (void)path;
-    return open_memstream(buf, size);
-}
-static size_t cap_size(FILE *fd, size_t memsize)
-{
-    fflush(fd);
-    return memsize;
-}
-/* POSIX twin of the Windows cap_copy above: open_memstream keeps the bytes in a
- * buffer we already hold, so this is a memcpy with no stream repositioning. */
-static size_t cap_copy(FILE *fd, const char *membuf, size_t memsize,
-                       char *out, size_t outmax)
-{
-    size_t n = cap_size(fd, memsize);
-    if (n > outmax) n = outmax;
-    memcpy(out, membuf, n);
-    return n;
-}
-/* fclose() leaves open_memstream's buffer and size holding the final contents
- * (POSIX), so what the bailout closed is still readable without the FILE*. */
-static size_t cap_read_closed(const char *membuf, size_t memsize,
-                              const char *path, char *out, size_t outmax)
-{
-    size_t n = memsize < outmax ? memsize : outmax;
-    (void)path;
-    if (!membuf) return 0;
-    memcpy(out, membuf, n);
-    return n;
-}
-static void cap_discard_closed(char **buf, size_t *size)
-{
-    free(*buf);   /* ours to free once the stream is closed */
+    if (out && *buf) {
+        n = *size < outmax ? *size : outmax;
+        memcpy(out, *buf, n);
+    }
+    free(*buf);
     *buf  = NULL;
     *size = 0;
+    return n;
 }
-#endif
 
 /* Last API-level error description (not the same as SE's errmsg). */
 static char se_errmsg_buf[4096];
@@ -166,8 +85,8 @@ static int se_initialized = 0;
  * pointers at them. */
 static void open_capture_streams(void)
 {
-    cap_out_fd = cap_open(&cap_out_buf, &cap_out_size, cap_out_path);
-    cap_err_fd = cap_open(&cap_err_buf, &cap_err_size, cap_err_path);
+    cap_out_fd = open_memstream(&cap_out_buf, &cap_out_size);
+    cap_err_fd = open_memstream(&cap_err_buf, &cap_err_size);
     outfd    = cap_out_fd;
     erroutfd = cap_err_fd;
 }
@@ -175,14 +94,12 @@ static void open_capture_streams(void)
 /* Flush, close, free, and reopen a single capture stream.
  * *global_fd is updated so SE's outfd / erroutfd stay valid. A stream the
  * bailout already closed is not closed again (that was a double fclose). */
-static void reset_cap(FILE **fd, char **buf, size_t *sz, FILE **global_fd, char *path)
+static void reset_cap(FILE **fd, char **buf, size_t *sz, FILE **global_fd)
 {
-    if (*global_fd == *fd) {
-        fflush(*fd);
+    if (*global_fd == *fd)
         fclose(*fd);
-    }
-    cap_discard_closed(buf, sz);
-    *fd = cap_open(buf, sz, path);
+    cap_take_closed(buf, sz, NULL, 0);
+    *fd = open_memstream(buf, sz);
     *global_fd = *fd;
 }
 
@@ -194,17 +111,15 @@ static size_t cap_recover_after_bailout(char *out, size_t outmax)
 {
     size_t n = 0;
     if (erroutfd != cap_err_fd) {
-        if (out)
-            n = cap_read_closed(cap_err_buf, cap_err_size, cap_err_path, out, outmax);
-        cap_discard_closed(&cap_err_buf, &cap_err_size);
-        cap_err_fd = cap_open(&cap_err_buf, &cap_err_size, cap_err_path);
+        n = cap_take_closed(&cap_err_buf, &cap_err_size, out, outmax);
+        cap_err_fd = open_memstream(&cap_err_buf, &cap_err_size);
         erroutfd = cap_err_fd;
     } else if (out) {
-        n = cap_copy(cap_err_fd, cap_err_buf, cap_err_size, out, outmax);
+        n = cap_copy(cap_err_fd, &cap_err_buf, &cap_err_size, out, outmax);
     }
     if (outfd != cap_out_fd) {
-        cap_discard_closed(&cap_out_buf, &cap_out_size);
-        cap_out_fd = cap_open(&cap_out_buf, &cap_out_size, cap_out_path);
+        cap_take_closed(&cap_out_buf, &cap_out_size, NULL, 0);
+        cap_out_fd = open_memstream(&cap_out_buf, &cap_out_size);
         outfd = cap_out_fd;
     }
     return n;
@@ -265,11 +180,8 @@ int se_init(void)
         return -1;
     }
 
-    /* redirect SE output to in-memory buffers (named %TEMP% files on Windows) */
+    /* redirect SE output to in-memory buffers */
     open_capture_streams();
-#ifdef _WIN32
-    atexit(cap_remove_files);
-#endif
 
     /* SE internal initializations that main() performs */
     print_express(NULL, 0);   /* initialise string-expression allocation */
@@ -344,8 +256,9 @@ int se_load(const char *filename)
     recalc();
 
     /* If startup produced error output and loaded no vertices, report failure */
-    if (cap_size(cap_err_fd, cap_err_size) > 0 && web.skel[VERTEX].count == 0) {
-        int n = (int)cap_copy(cap_err_fd, cap_err_buf, cap_err_size,
+    fflush(cap_err_fd);   /* brings cap_err_size up to date */
+    if (cap_err_size > 0 && web.skel[VERTEX].count == 0) {
+        int n = (int)cap_copy(cap_err_fd, &cap_err_buf, &cap_err_size,
                               se_errmsg_buf, sizeof(se_errmsg_buf) - 1);
         while (n > 0 && (se_errmsg_buf[n-1] == '\n' || se_errmsg_buf[n-1] == '\r'))
             n--;
@@ -427,7 +340,7 @@ int se_run(const char *cmd)
         return 0;
     /* Ordinary error, caught by command()'s own handler: copy (not drain) the
      * engine's message so se_last_error() describes this failure. */
-    int n = (int)cap_copy(cap_err_fd, cap_err_buf, cap_err_size,
+    int n = (int)cap_copy(cap_err_fd, &cap_err_buf, &cap_err_size,
                           se_errmsg_buf, sizeof(se_errmsg_buf) - 1);
     while (n > 0 && (se_errmsg_buf[n-1] == '\n' || se_errmsg_buf[n-1] == '\r'))
         n--;
@@ -989,10 +902,10 @@ int se_pop_output(char *buf, int bufsize)
     int n;
     if (!buf || bufsize <= 0)
         return -1;
-    n = (int)cap_copy(cap_out_fd, cap_out_buf, cap_out_size,
+    n = (int)cap_copy(cap_out_fd, &cap_out_buf, &cap_out_size,
                       buf, (size_t)(bufsize - 1));
     buf[n] = '\0';
-    reset_cap(&cap_out_fd, &cap_out_buf, &cap_out_size, &outfd, cap_out_path);
+    reset_cap(&cap_out_fd, &cap_out_buf, &cap_out_size, &outfd);
     return n;
 }
 
@@ -1001,10 +914,10 @@ int se_pop_errout(char *buf, int bufsize)
     int n;
     if (!buf || bufsize <= 0)
         return -1;
-    n = (int)cap_copy(cap_err_fd, cap_err_buf, cap_err_size,
+    n = (int)cap_copy(cap_err_fd, &cap_err_buf, &cap_err_size,
                       buf, (size_t)(bufsize - 1));
     buf[n] = '\0';
-    reset_cap(&cap_err_fd, &cap_err_buf, &cap_err_size, &erroutfd, cap_err_path);
+    reset_cap(&cap_err_fd, &cap_err_buf, &cap_err_size, &erroutfd);
     return n;
 }
 

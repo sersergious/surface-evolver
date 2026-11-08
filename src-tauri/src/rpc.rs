@@ -35,7 +35,6 @@ fn state_dir() -> PathBuf {
 
 fn dirs_home() -> PathBuf {
     std::env::var("HOME")
-        .or_else(|_| std::env::var("USERPROFILE")) // Windows
         .map(PathBuf::from)
         .unwrap_or_else(|_| PathBuf::from("."))
 }
@@ -58,13 +57,8 @@ fn lib_path<R: Runtime>(app: &AppHandle<R>) -> PathBuf {
     if let Ok(p) = std::env::var("SE_LIB_PATH") {
         return PathBuf::from(p);
     }
-    let (os, ext) = if cfg!(target_os = "macos") {
-        ("macos", "dylib")
-    } else if cfg!(target_os = "windows") {
-        ("windows", "dll")
-    } else {
-        ("linux", "so")
-    };
+    // macOS and Linux only.
+    let (os, ext) = if cfg!(target_os = "macos") { ("macos", "dylib") } else { ("linux", "so") };
     let arch = if cfg!(target_arch = "aarch64") { "arm64" } else { "x64" };
     resource_dir(app).join("native").join(format!("libse-{os}-{arch}.{ext}"))
 }
@@ -74,9 +68,8 @@ fn worker_bin<R: Runtime>(_app: &AppHandle<R>) -> PathBuf {
         return PathBuf::from(p);
     }
     // Tauri places externalBin next to the app executable in dev and bundle.
-    let name = if cfg!(target_os = "windows") { "se-worker.exe" } else { "se-worker" };
     let exe = std::env::current_exe().unwrap_or_default();
-    exe.parent().map(|d| d.join(name)).unwrap_or_default()
+    exe.parent().map(|d| d.join("se-worker")).unwrap_or_default()
 }
 
 fn sanitize(name: &str) -> String {

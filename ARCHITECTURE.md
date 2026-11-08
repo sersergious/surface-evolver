@@ -203,8 +203,7 @@ A few of those transitions hide a real decision:
   worker too. Engine output that escapes capture (SE `printf`s straight to
   fd 1, e.g. after `itdebug on`) can no longer cause that on Unix: the worker
   replies on a private dup of the pipe and points fd 1 at stderr
-  ([#18](https://github.com/sersergious/surface-evolver/issues/18); Windows
-  still unfixed).
+  ([#18](https://github.com/sersergious/surface-evolver/issues/18)).
 - **`getRestore`** → only fires if no session exists yet; it replays the
   last persisted `.dmp` snapshot.
 
@@ -266,7 +265,7 @@ Closed the last untested layer (September 2026) after an audit found
 ```mermaid
 flowchart TB
     subgraph C["C facade"]
-        CT["tests/c/test_se_api.c<br/>77 checks"]
+        CT["tests/c/test_se_api.c<br/>81 checks"]
     end
     subgraph Worker["se-worker crate"]
         WF["ffi_signatures.rs — 1 test<br/>se_api.h ⇄ ffi.rs agree"]
@@ -300,16 +299,13 @@ flowchart LR
         C1["c-tests<br/>macos-26 + ubuntu-26.04<br/>ctest"]
         C2["backend-tests<br/>cargo check + cargo test<br/>worker (14) + app (25),<br/>against the release worker"]
         C3["frontend-tests<br/>lint + tsc --noEmit + bun run test (60)<br/>+ production build"]
-        C4["windows-tests (non-blocking)<br/>MinGW libse: ctest + worker tests"]
     end
     subgraph BUILD["build.yml — workflow_run after a green push to main"]
         direction TB
         B1["macos-26 → .dmg"]
         B2["ubuntu-26.04 → .deb"]
-        B3["windows-2025 → NSIS .exe<br/>(libse via MinGW/MSYS2)"]
         B1 --> REL["publish: replace the rolling<br/>'latest' release as a whole"]
         B2 --> REL
-        B3 --> REL
     end
     CI -- "conclusion: success" --> BUILD
 ```
@@ -429,9 +425,9 @@ test-suite work, which added coverage without touching any of these:
   stdin the way a bare interactive command does — the `INTERACTIVE_CMDS`
   guard only catches the single-letter form. Reload to recover.
 - macOS builds are ad-hoc signed, not notarized.
-- The Windows installer is built and packaged on every release but has never
-  been run. CI's Windows job runs the C and worker tests against the MinGW
-  libse, but is non-blocking until the `windows`-labelled issues are fixed.
+- macOS and Linux only. Windows support was dropped: the native `longjmp`
+  from the engine back into the C facade crashed there on every recoverable
+  engine error, and no user runs Windows.
 - AppImage packaging is disabled in `build.yml`. The original blocker
   (linuxdeploy's `ldd` choking on the old statically-linked bun sidecar) is
   gone now that the sidecar is a normal dynamically-linked Rust binary, but

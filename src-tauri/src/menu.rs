@@ -4,8 +4,8 @@
 //! useMenuAction already listens for.
 //!
 //! Platform notes: the app submenu (About/Hide/…), the Window submenu, and
-//! the Undo/Redo/Hide predefined items are macOS-only in muda — on Linux and
-//! Windows we fold About + Quit into File and skip the rest.
+//! the Undo/Redo/Hide predefined items are macOS-only in muda — on Linux we
+//! fold About + Quit into File and skip the rest.
 
 use tauri::menu::{AboutMetadata, Menu, MenuBuilder, MenuItemBuilder, PredefinedMenuItem, SubmenuBuilder};
 use tauri::{App, Emitter, Wry};

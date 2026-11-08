@@ -43,7 +43,8 @@ fn cstring(s: &str) -> Vec<u8> {
 
 /// `s` as an SE string literal. SE's lexer reads `\x` as an escape
 /// (`reduce_string`: `\\` is a backslash, `\q` a double quote, anything else
-/// drops the backslash), so a raw Windows path lost every separator (#26).
+/// drops the backslash), so any backslash in a path was lost (#26: a temp
+/// directory whose name contains one).
 /// Never ends in an escaped backslash for the paths we pass: SE's lexer would
 /// then take the closing quote as escaped.
 fn se_quote(s: &str) -> String {

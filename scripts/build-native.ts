@@ -1,34 +1,25 @@
 /**
  * Builds the headless libse for the current platform
  * and stage it at build-native/libse-<os>-<arch>.<ext> so the Tauri bundle
- * resources can copy it into the app bundle. Runs on each CI runner (macOS/Windows/Linux).
+ * resources can copy it into the app bundle. Runs on each CI runner (macOS/Linux).
  *
  * Requires cmake + a C toolchain on PATH (the runner provides them).
  */
 import { $ } from "bun";
-import { mkdirSync, copyFileSync, existsSync } from "fs";
+import { mkdirSync, copyFileSync } from "fs";
 import { join } from "path";
 
-const os   = process.platform === "darwin" ? "macos"
-           : process.platform === "win32"  ? "windows" : "linux";
+// macOS and Linux only; Windows support was dropped.
+const os   = process.platform === "darwin" ? "macos" : "linux";
 const arch = process.arch === "arm64" ? "arm64" : "x64";
-const ext  = process.platform === "darwin" ? "dylib"
-           : process.platform === "win32"  ? "dll" : "so";
+const ext  = process.platform === "darwin" ? "dylib" : "so";
 const BUILD = "cmake-build-release";
-
-// CI (Windows) builds libse in an MSYS2 shell and stages it before tauri runs;
-// don't rebuild with whatever generator/toolchain this shell would pick.
-if (process.env.SE_SKIP_NATIVE && existsSync(join("build-native", `libse-${os}-${arch}.${ext}`))) {
-  console.log("build-native: SE_SKIP_NATIVE set and staged lib exists — skipping");
-  process.exit(0);
-}
 
 await $`cmake -B ${BUILD} -DSE_HEADLESS=ON -DCMAKE_BUILD_TYPE=Release`;
 await $`cmake --build ${BUILD} --config Release`;
 
-// Locate the produced shared library (name/location differs per toolchain:
-// mac libse.dylib, linux libse.so, Windows se.dll possibly under Release/).
-const glob = new Bun.Glob(`**/{libse,se}.${ext}`);
+// Locate the produced shared library (mac libse.dylib, linux libse.so).
+const glob = new Bun.Glob(`**/libse.${ext}`);
 let built: string | undefined;
 for await (const p of glob.scan({ cwd: BUILD, absolute: true })) { built = p; break; }
 if (!built) throw new Error(`build-native: no libse.${ext} found under ${BUILD}/`);

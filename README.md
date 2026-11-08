@@ -1,6 +1,6 @@
 # Surface Evolver Desktop [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://www.apache.org/licenses/LICENSE-2.0)
 
-A native desktop app for macOS, Linux, and Windows that wraps Ken Brakke's [Surface Evolver](https://facstaff.susqu.edu/brakke/evolver/evolver.html) — a 190,000-line C engine for minimizing the energy of constrained surfaces — in one window: a datafile editor, a command line, and a live WebGL viewer. It exists because the original ships as a terminal program with an X11 graphics window, which is a hard sell in 2026 for the researchers who depend on it.
+A native desktop app for macOS and Linux that wraps Ken Brakke's [Surface Evolver](https://facstaff.susqu.edu/brakke/evolver/evolver.html) — a 190,000-line C engine for minimizing the energy of constrained surfaces — in one window: a datafile editor, a command line, and a live WebGL viewer. It exists because the original ships as a terminal program with an X11 graphics window, which is a hard sell in 2026 for the researchers who depend on it.
 
 **[Live Demo / Downloads](https://surface-evolver.vercel.app)**
 
@@ -29,7 +29,7 @@ Everything below is what the **desktop app** adds. The original engine's full co
 - **Session auto-restore**: the surface is snapshotted in the background after every mutating command, so your *evolved* state — not the original datafile — comes back when you relaunch the app.
 - **Bundled datafile library**: 20 curated examples, all of which load and mesh (checked in CI), loadable in one click, plus upload of your own `.fe` files.
 - **Export** the current surface as `.fe` or an exact-state `.dmp`, straight to Downloads.
-- **Installers for all three platforms**, rebuilt as a rolling [`latest`](../../releases/tag/latest) release from every commit that passes CI — no compiler, no X11, no build step for end users. The Windows installer is built but has not yet been tested on a Windows machine.
+- **Installers for macOS and Linux**, rebuilt as a rolling [`latest`](../../releases/tag/latest) release from every commit that passes CI — no compiler, no X11, no build step for end users. Windows is not supported.
 
 ## Tech Stack
 
@@ -38,14 +38,14 @@ Everything below is what the **desktop app** adds. The original engine's full co
 - **Worker sidecar**: Rust — 345 KB binary, `libloading` (`dlopen`) + `serde_json`
 - **Backend**: Rust — Tauri v2, single `rpc(method, params)` command over 13 methods
 - **Frontend**: React + Vite, Zustand, Three.js / @react-three/fiber, Tailwind + daisyUI
-- **Build**: CMake (engine), Cargo (app + sidecar), Bun (frontend), Tauri bundler; GitHub Actions matrix for macOS / Linux / Windows
+- **Build**: CMake (engine), Cargo (app + sidecar), Bun (frontend), Tauri bundler; GitHub Actions matrix for macOS / Linux
 
 ## Getting Started
 
 ### Prerequisites
 
 - **Rust** (stable) and **Bun**
-- **CMake** and a C compiler — Clang, GCC, or MinGW/MSYS2 on Windows
+- **CMake** and a C compiler — Clang or GCC
 - **Linux only**: `libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev libssl-dev`
 
 Just want to run it? Grab an installer from the [latest build](../../releases/tag/latest) instead — no toolchain needed.
@@ -126,7 +126,7 @@ The other half was refusing to grow. The C facade went from 49 exports to 28 and
 - **The C facade is kept to what the app calls.** Accessors built for removed features were deleted rather than left to rot; they are recoverable from git history.
 - **Structured API only where it earns its place.** The physics and named-quantity panels were removed because `set gravity_constant 980`, `print body[1].volume` and `v` already do the job through the command line — a structured duplicate is a second thing to keep correct.
 - **Power features are CLI-only** (they work, there are just no buttons): Hessian/eigenvalue stability analysis, `edgeswap`, `dissolve`, `jiggle`, `optimize`, `conj_grad`, `saddle`.
-- **Known rough edges**: curved Lagrange patches render as straight edges; a compound interactive command such as `f; g` can still block the worker (reload to recover); macOS builds are ad-hoc signed, not notarized, so first launch needs right-click → Open; the Windows build is only exercised by a non-blocking CI job (C and worker tests), never run as an app. Everything known is tracked in the [issues](../../issues).
+- **Known rough edges**: curved Lagrange patches render as straight edges; a compound interactive command such as `f; g` can still block the worker (reload to recover); macOS builds are ad-hoc signed, not notarized, so first launch needs right-click → Open. Windows is not supported. Everything known is tracked in the [issues](../../issues).
 
 ## Architecture
 

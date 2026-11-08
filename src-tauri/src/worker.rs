@@ -104,11 +104,6 @@ impl Manager {
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::inherit());
-        #[cfg(windows)]
-        {
-            use std::os::windows::process::CommandExt;
-            cmd.creation_flags(0x0800_0000); // CREATE_NO_WINDOW — no console flash
-        }
         let mut child = cmd
             .spawn()
             .map_err(|e| format!("failed to spawn SE worker ({}): {e}", worker_bin.display()))?;

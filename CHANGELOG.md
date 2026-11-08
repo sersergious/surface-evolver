@@ -106,3 +106,9 @@ change, see `git log`.
 - Closed test gaps: Stop unblocking a running command, the native menu
   routes, and Tauri's own `mockIPC` for frontend tests. Integration tests now
   fail under CI instead of skipping.
+- Fixed CI after GitHub moved its runners (GCC 15, the macos-14 retirement);
+  pinned runner images and bun, added ESLint, and upgraded the test and build
+  tooling.
+- Dropped Windows. A Windows CI job showed the native installer crashing on
+  every recoverable engine error, and no user runs Windows, so the app now
+  ships for macOS and Linux only.

@@ -2,7 +2,7 @@
 #
 # Independent jobs: C engine tests (macOS + Linux), backend type-check + tests
 # (worker sidecar + the Tauri app crate, against the shipped release worker),
-# frontend lint + type-check + tests + build, and a non-blocking Windows job.
+# and frontend lint + type-check + tests + build. macOS and Linux only.
 #
 # Runner images and the bun version are pinned on purpose: `ubuntu-latest`
 # moving to 26.04 (GCC 15) and the macos-14 retirement both broke main
@@ -149,66 +149,3 @@ jobs:
 
       - name: Build production bundle
         run: bun run build
-
-  # ── Windows: non-blocking until the Windows bugs (#26, #27, #29) are fixed ───
-  # Reports breakage without holding back `latest`: a failed job here does not
-  # fail the run. Drop continue-on-error once it is green.
-  windows-tests:
-    name: Windows (non-blocking)
-    runs-on: windows-2025
-    continue-on-error: true
-
-    steps:
-      - uses: actions/checkout@v7
-
-      - uses: msys2/setup-msys2@v2
-        with:
-          msystem: MINGW64
-          install: mingw-w64-x86_64-gcc mingw-w64-x86_64-cmake mingw-w64-x86_64-ninja mingw-w64-x86_64-gdb
-
-      # RelWithDebInfo: same optimisation as the installer's Release build,
-      # plus symbols, so a crash below gets a readable backtrace.
-      - name: Build libse + C tests (MinGW, as the Windows installer does)
-        shell: msys2 {0}
-        run: |
-          cmake -B build -G Ninja -DSE_HEADLESS=ON -DBUILD_TESTS=ON -DCMAKE_BUILD_TYPE=RelWithDebInfo
-          cmake --build build
-
-      - name: Run C API tests (ctest)
-        id: ctest
-        shell: msys2 {0}
-        run: ctest --test-dir build --output-on-failure --timeout 120
-
-      # Not gdb: the suite passed under gdb while crashing natively. The test's
-      # own crash handler prints module+offset frames; resolve ours here.
-      - name: Locate the native C test crash
-        if: failure() && steps.ctest.outcome == 'failure'
-        shell: msys2 {0}
-        run: |
-          build/tests/test_se_api.exe > crash.txt 2>&1 || true
-          grep -E "^\[|CRASH|frame" crash.txt | tail -25
-          echo "--- resolved:"
-          grep -oE "frame .+\+0x[0-9a-f]+" crash.txt | sed 's/^frame //' | while IFS= read -r line; do
-            mod=$(cygpath -u "${line%+0x*}"); rva=${line##*+}
-            case "$mod" in *"/build/"*) ;; *) echo "$line (system module)"; continue ;; esac
-            base=$(objdump -p "$mod" | awk '/^ImageBase/ {print $2}')
-            printf '%s: ' "$line"; addr2line -f -i -p -e "$mod" "$(printf '0x%x' $((0x$base + rva)))"
-          done
-
-      # The steps below run even if the C tests failed, so one Windows bug
-      # does not hide the worker's results. No MinGW runtime is put on PATH:
-      # libse.dll has to load the way the shipped installer loads it.
-      - uses: dtolnay/rust-toolchain@stable
-        if: ${{ !cancelled() }}
-
-      - uses: Swatinem/rust-cache@v2
-        if: ${{ !cancelled() }}
-        with:
-          workspaces: src-tauri/worker
-
-      - name: Worker tests
-        if: ${{ !cancelled() }}
-        working-directory: src-tauri/worker
-        env:
-          SE_LIB_PATH: ${{ github.workspace }}\build\libse.dll
-        run: cargo test --locked

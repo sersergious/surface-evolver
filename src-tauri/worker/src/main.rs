@@ -30,7 +30,6 @@ static PIPE: OnceLock<Mutex<Box<dyn Write + Send>>> = OnceLock::new();
 /// which is the JSON pipe; one stray line used to end the session (#18).
 /// Keep a private dup of the pipe for replies, then point fd 1 at stderr, so
 /// engine output lands in the app's log instead of the protocol.
-#[cfg(unix)]
 fn take_json_pipe() -> Box<dyn Write + Send> {
     use std::os::fd::AsFd;
     extern "C" { fn dup2(src: i32, dst: i32) -> i32; }
@@ -40,13 +39,6 @@ fn take_json_pipe() -> Box<dyn Write + Send> {
         eprintln!("se-worker: dup2(stderr, stdout) failed; engine output may corrupt IPC");
     }
     Box::new(std::fs::File::from(pipe))
-}
-
-// ponytail: Windows unchanged. Its CRT fd 1 and Win32 STD_OUTPUT_HANDLE are
-// separate, and _dup2 closes the pipe handle; needs SetStdHandle + a Windows CI job.
-#[cfg(not(unix))]
-fn take_json_pipe() -> Box<dyn Write + Send> {
-    Box::new(std::io::stdout())
 }
 
 fn send(v: &Value) {
