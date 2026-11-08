@@ -218,3 +218,59 @@ fn oversized_output_says_it_was_truncated() {
     assert!(out.len() > 200_000, "test needs output bigger than the buffer, got {} bytes", out.len());
     assert!(out.ends_with("[output truncated at 256 KB]\n"), "tail: {:?}", &out[out.len() - 120..]);
 }
+
+#[test]
+fn engine_printf_does_not_corrupt_the_json_pipe() {
+    if skip() { return }
+    // #18: with itdebug on, SE printf()s straight to fd 1. Every stdout line
+    // must still be a JSON reply (drive() panics on any that is not), and
+    // the session must survive.
+    let msgs = drive(&[
+        cube(),
+        r#"{"cmd":"run","command":"itdebug on"}"#.into(),
+        r#"{"cmd":"run","command":"g 2"}"#.into(),
+        r#"{"cmd":"mesh"}"#.into(),
+    ]);
+    assert_eq!(msgs.len(), 4, "one reply per command, nothing else");
+    assert!(msgs.iter().all(|m| m["ok"] == true), "{msgs:?}");
+}
+
+#[test]
+fn periodic_facets_are_drawn_unwrapped() {
+    if skip() { return }
+    // #17: a facet crossing the cell boundary used to be sent with its
+    // vertices on opposite sides of the cell (109 of 276 in phelanc.fe), so
+    // it was drawn across the whole domain. Unwrapped, every facet side is
+    // about as long as an ordinary edge, and no facet is dropped.
+    let path = repo().join("fe/phelanc.fe");
+    let msgs = drive(&[
+        format!(r#"{{"cmd":"load","path":"{}"}}"#, path.display()),
+        r#"{"cmd":"mesh","colors":true}"#.into(),
+    ]);
+    let mesh = &msgs[1];
+    let verts: Vec<Vec<f64>> = mesh["vertices"].as_array().unwrap().iter()
+        .map(|v| v.as_array().unwrap().iter().map(|c| c.as_f64().unwrap()).collect())
+        .collect();
+    let facets = mesh["facets"].as_array().unwrap();
+    assert_eq!(facets.len() as u64, msgs[0]["facet_count"].as_u64().unwrap(), "no facet may be dropped");
+    assert_eq!(mesh["facet_colors"].as_array().unwrap().len(), facets.len());
+
+    // Every appended duplicate maps back to a real engine vertex, so picking it works.
+    let engine_n = msgs[0]["vertex_count"].as_u64().unwrap() as usize;
+    let src = mesh["unwrap_source"].as_array().expect("periodic mesh must report unwrap_source");
+    assert_eq!(verts.len(), engine_n + src.len());
+    assert_eq!(mesh["vertex_ids"].as_array().unwrap().len(), verts.len());
+    assert!(src.iter().all(|p| (p.as_u64().unwrap() as usize) < engine_n));
+
+    let dist = |a: usize, b: usize| (0..3).map(|k| (verts[a][k] - verts[b][k]).powi(2)).sum::<f64>().sqrt();
+    let mut edge_lens: Vec<f64> = mesh["edges"].as_array().unwrap().iter()
+        .map(|e| dist(e[0].as_u64().unwrap() as usize, e[1].as_u64().unwrap() as usize))
+        .collect();
+    edge_lens.sort_by(|a, b| a.partial_cmp(b).unwrap());
+    let median = edge_lens[edge_lens.len() / 2];
+    for f in facets {
+        let i: Vec<usize> = f.as_array().unwrap().iter().map(|x| x.as_u64().unwrap() as usize).collect();
+        let longest = dist(i[0], i[1]).max(dist(i[1], i[2])).max(dist(i[2], i[0]));
+        assert!(longest < median * 5.0, "facet {i:?} spans the domain: side {longest} vs median edge {median}");
+    }
+}

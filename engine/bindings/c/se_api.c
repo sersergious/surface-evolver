@@ -602,6 +602,52 @@ int se_get_edge_wraps(int *out, int max_count)
 }
 
 
+/* ── se_get_facet_coords ──────────────────────────────────────────────── */
+/*
+ * Facet corner coordinates with each facet unwrapped across period
+ * boundaries, so a facet that crosses the cell is returned whole, next to its
+ * first vertex, instead of with corners on opposite sides of the domain (#17).
+ * Same walk as SE's own "connected" display (graphgen.c): start at the first
+ * corner with the identity wrap and compose each edge's wrap going round.
+ *
+ * 9 doubles per facet (3 corners x stride 3, z = 0 below sdim 3), in exactly
+ * the se_get_facets order and filter, so row i is the same facet in both.
+ * Returns 0 if the surface is not periodic (callers use se_get_facets alone),
+ * gated on symmetry_flag for the reason given at se_get_edge_wraps.
+ */
+int se_get_facet_coords(double *out, int max_count)
+{
+    facet_id f_id;
+    int n = 0;
+    if (!se_initialized || !out || max_count <= 0)
+        return -1;
+    if (web.representation != SOAPFILM || !web.symmetry_flag)
+        return 0;
+    FOR_ALL_FACETS(f_id) {
+        facetedge_id fe;
+        WRAPTYPE wrap = 0;   /* identity: no period crossed yet */
+        int k, j;
+        if (n >= max_count)
+            break;
+        if (inverted(f_id))
+            continue;
+        fe = get_facet_fe(f_id);
+        if (!valid_id(fe))
+            continue;
+        for (k = 0; k < 3; k++) {
+            REAL y[MAXCOORD];
+            (*sym_wrap)(get_coord(get_fe_tailv(fe)), y, wrap);
+            for (j = 0; j < 3; j++)
+                out[n * 9 + k * 3 + j] = j < SDIM ? (double)y[j] : 0.0;
+            wrap = (*sym_compose)(wrap, get_fe_wrap(fe));
+            fe = get_next_edge(fe);
+        }
+        n++;
+    }
+    return n;
+}
+
+
 /* ── se_get_bounding_box ──────────────────────────────────────────────── */
 /*
  * Axis-aligned bounds of the current surface, min[] and max[] over sdim

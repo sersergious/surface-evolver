@@ -256,9 +256,30 @@ fn try_restore<R: Runtime>(app: &AppHandle<R>, state: &AppState) -> Value {
 #[tauri::command]
 pub async fn rpc<R: Runtime>(app: AppHandle<R>, method: String, params: Value) -> Result<Value, String> {
     // Worker I/O blocks (a `g N` can run minutes) — keep it off the event loop.
-    tauri::async_runtime::spawn_blocking(move || dispatch(&app, &method, params))
-        .await
-        .map_err(|e| e.to_string())?
+    tauri::async_runtime::spawn_blocking(move || {
+        let result = dispatch(&app, &method, params);
+        result.map_err(|e| end_session_if_worker_gone(&app.state(), e))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Prefix of every error that means "the session is gone" — the frontend
+/// clears its session on it (ui/src/api/client.ts). Keep the two in step.
+pub const SESSION_ENDED: &str = "Session ended:";
+
+/// Any failure that leaves no worker alive also ends the session: a failed
+/// createSession (the old worker is killed before the load) or a worker that
+/// died mid-request. Leaving `state.session` set made every later command fail
+/// with "No active SE worker" while the UI showed a dead surface (#16).
+fn end_session_if_worker_gone(state: &AppState, err: String) -> String {
+    if state.manager.has_worker() {
+        return err;
+    }
+    match lock(&state.session).take() {
+        Some(_) => format!("{SESSION_ENDED} {err}"),
+        None => err,
+    }
 }
 
 fn dispatch<R: Runtime>(app: &AppHandle<R>, method: &str, params: Value) -> Result<Value, String> {

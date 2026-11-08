@@ -135,6 +135,13 @@ int se_get_edge_colors(int *out, int max_count);
  * Read-only: unlike SE's `detorus`, this mutates nothing. */
 int se_get_edge_wraps(int *out, int max_count);
 
+/* Facet corners unwrapped across period boundaries: 9 doubles per facet
+ * (3 corners, fixed stride 3), in se_get_facets row order. A facet crossing
+ * the cell comes back whole instead of spanning the domain. Returns the count
+ * written, 0 if the surface is not periodic, or -1 on error. Read-only.
+ * Caller must allocate: double out[max_count * 9]. */
+int se_get_facet_coords(double *out, int max_count);
+
 /* Axis-aligned bounds over sdim coords, computed from vertex positions.
  * out_min[] / out_max[] must hold se_get_sdim() doubles each.
  * Returns sdim on success, 0 if no vertices, -1 on error. */

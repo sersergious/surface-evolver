@@ -49,7 +49,9 @@ export default function EditorPane() {
   }, [fileContent])
 
   const handleSave = useCallback(async () => {
-    if (!activeFile || !sessionId || saving) return
+    // Clean buffer: nothing to save, and reloading would discard the evolved
+    // surface (#15). The button is disabled too; this also covers ⌘S.
+    if (!activeFile || !sessionId || saving || !dirty) return
     const content = viewRef.current?.state.doc.toString() ?? ''
     setSaving(true)
     try {
@@ -66,7 +68,7 @@ export default function EditorPane() {
     } catch (err: unknown) {
       appendLog(`[error] Save failed: ${err instanceof Error ? err.message : String(err)}`)
     } finally { setSaving(false) }
-  }, [activeFile, sessionId, saving, appendLog, setSession, setStats, setFileContent])
+  }, [activeFile, sessionId, saving, dirty, appendLog, setSession, setStats, setFileContent])
 
   const handleDownload = useCallback(async (type: 'fe' | 'dmp') => {
     if (!sessionId || exporting) return

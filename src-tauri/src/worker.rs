@@ -80,6 +80,12 @@ impl Manager {
         }
     }
 
+    /// Whether a worker process is alive (or at least not yet reaped). Takes
+    /// only `proc`, like kill(), so it never waits behind a running command.
+    pub fn has_worker(&self) -> bool {
+        lock(&self.proc).is_some()
+    }
+
     pub fn load_session(
         &self,
         session_id: &str,

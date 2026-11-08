@@ -10,6 +10,10 @@ export interface MeshData {
   // period boundary, which the worker drops because a straight line between
   // their endpoints would span the whole domain.
   wrapped_edges_hidden?: number
+  // Periodic surfaces only: facets crossing the cell are drawn unwrapped, so
+  // their shifted corners are appended to `vertices` after the engine's own.
+  // Entry i is the engine position of vertex (vertices.length - length + i).
+  unwrap_source?: number[]
 }
 
 export interface RunCommandResponse {

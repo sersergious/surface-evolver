@@ -185,9 +185,9 @@ impl Worker {
         let vcount = unsafe { (self.se.get_vertex_count)() };
         let mut vertices: Vec<Value> = Vec::new();
         let mut vertex_ids: Vec<i32> = Vec::new();
+        let mut vbuf = vec![0f64; vcount.max(0) as usize * 3];
+        let mut idbuf = vec![0i32; vcount.max(0) as usize];
         if vcount > 0 {
-            let mut vbuf = vec![0f64; vcount as usize * 3];
-            let mut idbuf = vec![0i32; vcount as usize];
             // Clamp: the loop indexes vbuf, so trust the buffer size over the
             // C return value. se_api.c never exceeds max_count, but an
             // out-of-range return here would be an abort (panic = "abort").
@@ -201,11 +201,32 @@ impl Worker {
 
         let fcount = unsafe { (self.se.get_facet_count)() };
         let mut facets: Vec<Value> = Vec::new();
+        let mut unwrap_source: Vec<usize> = Vec::new();
         if fcount > 0 {
             let mut fbuf = vec![0i32; fcount as usize * 3];
             let fn_ = unsafe { (self.se.get_facets)(fbuf.as_mut_ptr(), fcount) }.clamp(0, fcount);
+            // Periodic surfaces (#17): a facet crossing the cell has corners on
+            // opposite sides of the domain. Draw it whole: any corner whose
+            // unwrapped position differs from the shared vertex becomes an
+            // appended duplicate, mapped back to its engine vertex through
+            // `unwrap_source` so picking still resolves. 0 rows when not periodic.
+            // ponytail: one duplicate per facet corner, not shared between
+            // facets; dedupe by (vertex, shift) if mesh size ever matters.
+            let mut cbuf = vec![0f64; fcount as usize * 9];
+            let cn = unsafe { (self.se.get_facet_coords)(cbuf.as_mut_ptr(), fcount) }.clamp(0, fn_) as usize;
             for i in 0..fn_.max(0) as usize {
-                facets.push(json!([fbuf[i * 3], fbuf[i * 3 + 1], fbuf[i * 3 + 2]]));
+                let mut tri = [fbuf[i * 3], fbuf[i * 3 + 1], fbuf[i * 3 + 2]];
+                for (k, idx) in tri.iter_mut().enumerate() {
+                    let v = *idx as usize;
+                    if i >= cn || v >= vertex_ids.len() { continue }
+                    let c = &cbuf[i * 9 + k * 3..i * 9 + k * 3 + 3];
+                    if (0..3).all(|j| (c[j] - vbuf[v * 3 + j]).abs() < 1e-9) { continue }
+                    *idx = vertices.len() as i32;
+                    vertices.push(json!([c[0], c[1], c[2]]));
+                    vertex_ids.push(idbuf[v]);
+                    unwrap_source.push(v);
+                }
+                facets.push(json!(tri));
             }
         }
 
@@ -296,6 +317,9 @@ impl Worker {
         }
         // Only present when something was actually dropped — the UI surfaces it
         // so the omission is visible rather than silent.
+        if !unwrap_source.is_empty() {
+            out.insert("unwrap_source".into(), json!(unwrap_source));
+        }
         if wrapped_hidden > 0 {
             out.insert("wrapped_edges_hidden".into(), json!(wrapped_hidden));
         }

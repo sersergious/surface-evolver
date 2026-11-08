@@ -56,21 +56,21 @@ ctest --test-dir cmake-build-release --output-on-failure          # 66 checks
 # guard skips.
 # All commands below run from the repo root. Use libse.so on Linux.
 export SE_LIB_PATH=$PWD/cmake-build-release/libse.dylib
-(cd src-tauri/worker && cargo test)                                 # 11 tests
+(cd src-tauri/worker && cargo test)                                 # 13 tests
 
 # Rust app. `cargo check` is the fast gate; `cargo test` additionally runs
 # rpc.rs's own unit tests plus src-tauri/tests/{dispatch,manager}.rs, which
-# drive a real se-worker/libse through the app layer (23 tests total) — set
+# drive a real se-worker/libse through the app layer (25 tests total) — set
 # SE_LIB_PATH and either build the worker first or set SE_WORKER_PATH, or
 # those two integration-test binaries skip themselves rather than fail.
-(cd src-tauri && cargo check && cargo test)                         # 23 tests
+(cd src-tauri && cargo check && cargo test)                         # 25 tests
 
 # Frontend: type-check, then a real Vitest suite (jsdom + Testing Library) —
-# 51 tests across 9 files covering the RPC client, API wrapper contracts, four
-# components, the store, the menu-action hook and the native menu routes. Tauri
+# 56 tests across 10 files covering the RPC client, API wrapper contracts, four
+# components, the store, the menu-action hook, the native menu routes and the session lifecycle. Tauri
 # IPC is faked once per file by Tauri's own mockIPC (ui/src/test/ipc.ts), so
 # tests assert what crosses the IPC boundary. Both run in CI.
-(cd ui && bunx tsc --noEmit && bun run test)                        # 51 tests
+(cd ui && bunx tsc --noEmit && bun run test)                        # 56 tests
 ```
 
 Locally, a skipped integration test prints `SE_LIB_PATH unset — skipping …` and
@@ -152,9 +152,11 @@ that is blocked holding `io`. That is the *only* escape from a hung `se_run`.
 **Do not merge these mutexes.**
 
 A *failed* load kills its worker, because engine state after a failed
-`se_load` is undefined. Note that `rpc.rs` does **not** yet clear its session
-record on that path, so the UI keeps a dead session id
-([#16](https://github.com/sersergious/surface-evolver/issues/16)).
+`se_load` is undefined. Any RPC failure that leaves no worker alive (a failed
+load, or a worker death) also clears `rpc.rs`'s session record and prefixes the
+error `Session ended:`; `ui/src/api/client.ts` clears the frontend session on
+that prefix ([#16](https://github.com/sersergious/surface-evolver/issues/16)).
+The prefix is a contract between the two files — change both or neither.
 
 ### 2. `engine/src/` is vendored upstream — never reformat it
 
@@ -218,9 +220,14 @@ to render as a bare edge web or nothing at all. Rejecting beats drawing a lie.
 The per-accessor SOAPFILM guards remain as a safety net for callers driving the
 engine another way.
 
-**Periodicity is handled by omission.** `se_get_edge_wraps` reports each edge's
-wrap code in `se_get_edges` row order; the worker drops wrapped edges and
-reports `wrapped_edges_hidden`, which the viewer surfaces in its stat badge.
+**Periodicity: edges by omission, facets by unwrapping.** `se_get_edge_wraps`
+reports each edge's wrap code in `se_get_edges` row order; the worker drops
+wrapped edges and reports `wrapped_edges_hidden`, which the viewer surfaces in
+its stat badge. `se_get_facet_coords` returns each facet's corners unwrapped
+(SE's own "connected" walk), in `se_get_facets` row order; the worker appends a
+duplicate vertex for every shifted corner and lists their engine positions in
+`unwrap_source`, which the viewer uses to resolve a pick. Both return 0 on a
+non-periodic surface.
 Gate on `web.symmetry_flag`, **not** `web.torus_flag` — `E_WRAP_ATTR` only gets
 storage when a symmetry group is in effect (`engine/src/lexinit.c:2481`), so
 reading it on a plain surface would read a zero-length slot.
@@ -360,5 +367,5 @@ packaged app.
 - `ARCHITECTURE.md` — diagrams of every major flow, plus what is known-broken,
   what was assessed and deliberately not built. Read before proposing work.
 - `CHANGELOG.md` — how the app evolved, stage by stage; `git log` for detail.
-- `engine/bindings/c/se_api.h` — the entire C surface, 28 functions, documented.
+- `engine/bindings/c/se_api.h` — the entire C surface, 29 functions, documented.
 - Official Surface Evolver manual: <https://kenbrakke.com/evolver/html/evolver.htm>

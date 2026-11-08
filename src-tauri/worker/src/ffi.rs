@@ -74,6 +74,7 @@ pub struct Se {
     /// Per-edge periodic wrap codes into `[i32; max_count]`, in `get_edges` row
     /// order. Returns 0 for a non-periodic surface, which is not an error.
     pub get_edge_wraps: unsafe extern "C" fn(*mut i32, i32) -> i32,
+    pub get_facet_coords: unsafe extern "C" fn(*mut f64, i32) -> i32,
     /// Axis-aligned bounds into two `[f64; sdim]` — sized by `get_sdim`, unlike
     /// the vertex accessors.
     pub get_bounding_box: unsafe extern "C" fn(*mut f64, *mut f64) -> i32,
@@ -148,6 +149,7 @@ impl Se {
                 get_facet_colors: sym(lib, b"se_get_facet_colors\0")?,
                 get_edge_colors: sym(lib, b"se_get_edge_colors\0")?,
                 get_edge_wraps: sym(lib, b"se_get_edge_wraps\0")?,
+                get_facet_coords: sym(lib, b"se_get_facet_coords\0")?,
                 get_bounding_box: sym(lib, b"se_get_bounding_box\0")?,
 
                 get_topo_counts: sym(lib, b"se_get_topo_counts\0")?,

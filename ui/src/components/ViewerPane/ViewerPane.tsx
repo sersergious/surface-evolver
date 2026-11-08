@@ -68,7 +68,11 @@ export default function ViewerPane() {
   async function handlePick(vpos: number) {
     if (!sessionId || !mesh) return
     setPickedPos(mesh.vertices[vpos] ?? null)
-    try { setPicked(await getVertexInfo(sessionId, vpos)) }
+    // An unwrapped periodic duplicate has no engine position of its own (#17).
+    const src = mesh.unwrap_source ?? []
+    const base = mesh.vertices.length - src.length
+    const enginePos = vpos >= base ? src[vpos - base] : vpos
+    try { setPicked(await getVertexInfo(sessionId, enginePos)) }
     catch { setPicked(null) }
   }
 

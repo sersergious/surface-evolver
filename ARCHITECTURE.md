@@ -189,19 +189,22 @@ stateDiagram-v2
 A few of those transitions hide a real decision:
 
 - **`se_load` fails** → the worker is discarded outright, not kept around —
-  engine state after a failed load is undefined. (`rpc.rs` keeps its session
-  record on this path and after a worker death, so today the UI holds a dead
-  session id until another file loads —
-  [#16](https://github.com/sersergious/surface-evolver/issues/16).)
+  engine state after a failed load is undefined. Any RPC failure that leaves
+  no worker alive (this, or a worker death) also drops the session record and
+  prefixes the error `Session ended:`, on which the frontend clears its
+  session and keeps the tab for reopening
+  ([#16](https://github.com/sersergious/surface-evolver/issues/16)).
 - **`createSession` while `Active`** → `kill()` runs *before* the new worker
   spawns, never after, so there's never a moment with two workers alive.
 - **`cancel`** → `kill()`; the in-memory surface is lost, but the last
   auto-snapshot survives on disk for `getRestore`.
 - **worker dies mid-request** → detected as an EOF on the read side, then
   reaped. Any other read error — a pipe error or a non-JSON line — reaps the
-  worker too. That includes engine output that escapes capture onto stdout,
-  e.g. after `itdebug on`
-  ([#18](https://github.com/sersergious/surface-evolver/issues/18)).
+  worker too. Engine output that escapes capture (SE `printf`s straight to
+  fd 1, e.g. after `itdebug on`) can no longer cause that on Unix: the worker
+  replies on a private dup of the pipe and points fd 1 at stderr
+  ([#18](https://github.com/sersergious/surface-evolver/issues/18); Windows
+  still unfixed).
 - **`getRestore`** → only fires if no session exists yet; it replays the
   last persisted `.dmp` snapshot.
 
@@ -245,7 +248,7 @@ stdin/stdout, one JSON object per line, no batching:
 |---|---|---|
 | `load` | Open a `.fe` file (chdir's to its directory first, for relative includes) | `energy area scale sdim` element counts, `bbox_min/max` |
 | `run` | Execute one raw SE command string via `se_run` | `output energy area` |
-| `mesh` | Fetch vertices/edges/facets (+ optional colours) for rendering | `vertices facets edges body_cms`, optional `facet_colors edge_colors`, optional `wrapped_edges_hidden` |
+| `mesh` | Fetch vertices/edges/facets (+ optional colours) for rendering | `vertices facets edges body_cms`, optional `facet_colors edge_colors`, optional `wrapped_edges_hidden` and `unwrap_source` (periodic only) |
 | `topo` | One of 4 mapped topology ops (`refine equi vertex_avg pop`) | `output counts` (non-zero deltas only) `energy energy_delta area` |
 | `vertex_info` | Detail for one vertex by position | `id xyz attr constraints` |
 | `dump` | Write `.dmp` state to a temp path, read it back | `content` |
@@ -275,7 +278,7 @@ flowchart TB
         AI["tests/{dispatch,manager}.rs — 12<br/>real worker + real libse"]
     end
     subgraph FE["Frontend"]
-        FT["Vitest + Testing Library<br/>51 tests / 9 files"]
+        FT["Vitest + Testing Library<br/>56 tests / 10 files"]
     end
     CT --> WF --> AU --> FT
 ```
@@ -295,7 +298,7 @@ flowchart LR
     subgraph CI["ci.yml — push / PR to main"]
         direction TB
         C1["c-tests<br/>macOS + Linux matrix<br/>ctest"]
-        C2["backend-tests<br/>cargo check + cargo test<br/>worker (11) + app (23)"]
+        C2["backend-tests<br/>cargo check + cargo test<br/>worker (13) + app (25)"]
         C3["frontend-tests<br/>tsc --noEmit + bun run test (47)<br/>+ production build"]
     end
     subgraph BUILD["build.yml — workflow_run after a green push to main"]
@@ -353,11 +356,11 @@ measured against (`100grain.fe`, `5pb.fe`) were removed from the bundle in
 0.2.1 along with the STRING-rejection change, which also closed the "2D
 cells don't render" finding those files demonstrated.
 
-- **Periodic rendering is edges-only.** Wrapped edges are hidden, but facets
-  that cross the cell boundary are not: measured on `phelanc.fe`, 109 of 276
-  facets have a side longer than 3× the median edge, and wireframe mode draws
-  the hidden edges again from those facets
-  ([#17](https://github.com/sersergious/surface-evolver/issues/17)).
+- **Periodic facets are drawn unwrapped, edges are hidden.** Facets crossing
+  the cell boundary come back whole from `se_get_facet_coords`; on
+  `phelanc.fe` the longest facet side fell from 2.644 to 0.626, the longest
+  visible edge ([#17](https://github.com/sersergious/surface-evolver/issues/17)).
+  The edge overlay still omits wrapped edges rather than unwrapping them.
 
 - **Body volumes/pressures are computed and sent on every `getMesh` call but
   have no frontend type or UI** — `MeshData` doesn't declare either field.

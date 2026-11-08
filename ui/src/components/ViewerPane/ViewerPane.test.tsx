@@ -23,7 +23,8 @@ vi.mock('./MeshGeometry', () => ({
   __esModule: true,
   default: () => <div data-testid="mesh-geometry" />,
   EdgeLines: () => null,
-  PickPoints: () => null,
+  // Stands in for a click on the vertex at buffer index 3.
+  PickPoints: ({ onPick }: { onPick: (vpos: number) => void }) => <button onClick={() => onPick(3)}>pick vertex 3</button>,
   VertexMarker: () => null,
   BodyMarkers: () => null,
   RaycasterConfig: () => null,
@@ -88,6 +89,21 @@ describe('ViewerPane', () => {
     const user = userEvent.setup()
     await user.click(screen.getByTitle('Inspect: click a vertex; show body centroids'))
     expect(await screen.findByText('Click a vertex to inspect')).toBeInTheDocument()
+  })
+
+  it('picking an unwrapped duplicate of a periodic vertex inspects the engine vertex it copies (#17)', async () => {
+    useStore.setState({ sessionId: 's1' })
+    // Index 3 is the worker's appended copy of engine vertex 1, shifted by a period.
+    vi.mocked(getMesh).mockResolvedValue({ ...mesh, vertices: [...mesh.vertices, [2, 0, 0]], unwrap_source: [1] })
+    vi.mocked(getVertexInfo).mockResolvedValue({ id: 2, xyz: [1, 0, 0], attr: 0, constraints: [] })
+    render(<ViewerPane />)
+    await screen.findByTestId('mesh-geometry')
+    const user = userEvent.setup()
+    await user.click(screen.getByTitle('Inspect: click a vertex; show body centroids'))
+
+    await user.click(await screen.findByText('pick vertex 3'))
+
+    expect(getVertexInfo).toHaveBeenCalledWith('s1', 1)
   })
 
   it('a native View menu render: action switches render mode', async () => {

@@ -93,3 +93,16 @@ change, see `git log`.
   replaced the sidebar icon with the standard solid one.
 - Brought the README, `AGENTS.md`, `ARCHITECTURE.md` and code comments back in
   line with the code.
+
+## Nov 2026 — Fixing the audit's bugs, test first
+
+- Fixed the four high-severity bugs: ⌘S with no edits no longer reloads and
+  discards the evolved surface; a failed load or a worker crash now ends the
+  session cleanly instead of leaving the UI on a dead one; periodic foam
+  facets are drawn unwrapped instead of across the whole cell; and engine
+  debug output can no longer corrupt the worker's JSON pipe.
+- Fixed typing `load` in the CLI crashing the worker, silently truncated
+  output, and stale or misattributed command errors and warnings.
+- Closed test gaps: Stop unblocking a running command, the native menu
+  routes, and Tauri's own `mockIPC` for frontend tests. Integration tests now
+  fail under CI instead of skipping.

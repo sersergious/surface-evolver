@@ -20,7 +20,7 @@ A native desktop app for macOS, Linux, and Windows that wraps Ken Brakke's [Surf
 Everything below is what the **desktop app** adds. The original engine's full command language is preserved verbatim — nothing was taken away.
 
 - **Live WebGL viewer**: Three.js rendering with solid / wireframe / X-ray modes, native SE per-element colors, an edge overlay, orbit controls and auto-fit camera, in a neutral light or dark theme that follows the OS. The original offers a basic X11/OpenGL window that many users never get working.
-- **Periodic (torus) surfaces**: foam and crystal models wrap around a periodic cell. A C accessor exposes SE's per-edge wrap codes so wrapped edges are hidden instead of drawn as long lines across the view — *measured:* 103 of 368 edges in `phelanc.fe`. Non-destructive, unlike the engine's own `detorus`. Facets that cross the cell boundary are not filtered yet, so solid mode still draws them across the view ([#17](../../issues/17)).
+- **Periodic (torus) surfaces**: foam and crystal models wrap around a periodic cell. A C accessor exposes SE's per-edge wrap codes so wrapped edges are hidden instead of drawn as long lines across the view — *measured:* 103 of 368 edges in `phelanc.fe`. Non-destructive, unlike the engine's own `detorus`. Facets that cross the cell boundary are drawn unwrapped, whole and next to their neighbours, the way SE's own "connected" view does ([#17](../../issues/17)).
 - **Syntax-highlighted datafile editor** with Save & Reload, so you edit geometry and reload it in one click without leaving the app.
 - **Click-to-inspect vertices**: click any vertex for its id, coordinates, constraints and attribute flags, plus body center-of-mass markers. In the original this is a `print` statement and a wall of numbers.
 - **Topology operations from the Run menu** with structured feedback: refine, equiangulate, vertex-average and pop, each reporting element deltas, named topology counters (pops, edgeswaps, dissolves) and ΔE — where the engine prints raw text you have to read.
@@ -126,7 +126,7 @@ The other half was refusing to grow. The C facade went from 49 exports to 28 and
 - **The C facade is kept to what the app calls.** Accessors built for removed features were deleted rather than left to rot; they are recoverable from git history.
 - **Structured API only where it earns its place.** The physics and named-quantity panels were removed because `set gravity_constant 980`, `print body[1].volume` and `v` already do the job through the command line — a structured duplicate is a second thing to keep correct.
 - **Power features are CLI-only** (they work, there are just no buttons): Hessian/eigenvalue stability analysis, `edgeswap`, `dissolve`, `jiggle`, `optimize`, `conj_grad`, `saddle`.
-- **Known rough edges**: curved Lagrange patches render as straight edges; periodic facets that cross the cell boundary still draw across the view; a compound interactive command such as `f; g` can still block the worker (reload to recover); macOS builds are ad-hoc signed, not notarized, so first launch needs right-click → Open; the Windows build is untested. Everything known is tracked in the [issues](../../issues).
+- **Known rough edges**: curved Lagrange patches render as straight edges; a compound interactive command such as `f; g` can still block the worker (reload to recover); macOS builds are ad-hoc signed, not notarized, so first launch needs right-click → Open; the Windows build is untested. Everything known is tracked in the [issues](../../issues).
 
 ## Architecture
 

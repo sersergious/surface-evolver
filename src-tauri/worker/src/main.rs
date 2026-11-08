@@ -21,9 +21,36 @@ mod handlers;
 use handlers::{Worker, OUT_BUF_SIZE};
 use serde_json::{json, Value};
 use std::io::{BufRead, Write};
+use std::sync::{Mutex, OnceLock};
+
+/// The JSON reply channel. Not plain stdout: see `take_json_pipe`.
+static PIPE: OnceLock<Mutex<Box<dyn Write + Send>>> = OnceLock::new();
+
+/// SE printf()s some output (itdebug, a few diagnostics) straight to fd 1,
+/// which is the JSON pipe; one stray line used to end the session (#18).
+/// Keep a private dup of the pipe for replies, then point fd 1 at stderr, so
+/// engine output lands in the app's log instead of the protocol.
+#[cfg(unix)]
+fn take_json_pipe() -> Box<dyn Write + Send> {
+    use std::os::fd::AsFd;
+    extern "C" { fn dup2(src: i32, dst: i32) -> i32; }
+    let pipe = std::io::stdout().as_fd().try_clone_to_owned().expect("dup stdout");
+    if unsafe { dup2(2, 1) } < 0 {
+        // Can't move fd 1: replies still work, engine printf still leaks.
+        eprintln!("se-worker: dup2(stderr, stdout) failed; engine output may corrupt IPC");
+    }
+    Box::new(std::fs::File::from(pipe))
+}
+
+// ponytail: Windows unchanged. Its CRT fd 1 and Win32 STD_OUTPUT_HANDLE are
+// separate, and _dup2 closes the pipe handle; needs SetStdHandle + a Windows CI job.
+#[cfg(not(unix))]
+fn take_json_pipe() -> Box<dyn Write + Send> {
+    Box::new(std::io::stdout())
+}
 
 fn send(v: &Value) {
-    let mut out = std::io::stdout().lock();
+    let mut out = PIPE.get_or_init(|| Mutex::new(take_json_pipe())).lock().unwrap_or_else(|e| e.into_inner());
     let _ = writeln!(out, "{v}");
     let _ = out.flush();
 }
@@ -34,6 +61,8 @@ fn fatal(error: String) -> ! {
 }
 
 fn main() {
+    // Before dlopen: nothing may reach fd 1 until it has been moved.
+    PIPE.get_or_init(|| Mutex::new(take_json_pipe()));
     let lib_path = std::env::var("SE_LIB_PATH").unwrap_or_else(|_| "/app/libse.so".to_string());
 
     let se = match ffi::Se::load_library(&lib_path) {

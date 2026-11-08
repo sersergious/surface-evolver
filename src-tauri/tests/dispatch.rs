@@ -18,7 +18,7 @@ use serde_json::{json, Value};
 use std::sync::{Mutex, MutexGuard};
 use surface_evolver::rpc::{self, AppState};
 use tauri::test::{mock_builder, mock_context, noop_assets, MockRuntime};
-use tauri::App;
+use tauri::{App, Manager};
 
 static LOCK: Mutex<()> = Mutex::new(());
 
@@ -188,6 +188,42 @@ fn get_restore_is_a_noop_once_the_user_has_already_loaded_a_file() {
     // The live session must still work.
     let files = t.call("listFiles", Value::Null).expect("listFiles still works");
     assert!(files.as_array().unwrap().len() >= 20);
+}
+
+#[test]
+fn a_failed_load_ends_the_old_session_instead_of_leaving_it_dead() {
+    if skip() { return }
+    // #16: createSession kills the old worker before loading. If the load
+    // then fails, the old session must be reported gone, not left in place
+    // for every later command to fail against.
+    let t = TestApp::new("failed-reload");
+    let old = t.call("createSession", json!({ "fe_file": "cube.fe" })).expect("createSession");
+    let old_sid = old["session_id"].as_str().unwrap().to_string();
+
+    let string_fe = base64_encode(b"STRING\nspace_dimension 2\n\nvertices\n1 0 0\n2 1 0\n\nedges\n1 1 2\n");
+    t.call("uploadFile", json!({ "filename": "string_model.fe", "content": string_fe })).expect("upload");
+    let err = t.call("createSession", json!({ "fe_file": "string_model.fe" })).unwrap_err();
+    assert!(err.starts_with("Session ended:"), "got: {err}");
+
+    let err = t.call("runCommand", json!({ "sessionId": old_sid, "command": "g 1" })).unwrap_err();
+    assert_eq!(err, "No file is loaded");
+}
+
+#[test]
+fn a_worker_crash_ends_the_session() {
+    if skip() { return }
+    // #16, second half: the worker dies between requests (simulated by
+    // killing it under the app). The next request reports the session gone,
+    // and the one after that finds no session rather than a dead worker.
+    let t = TestApp::new("crash");
+    let s = t.call("createSession", json!({ "fe_file": "cube.fe" })).expect("createSession");
+    let sid = s["session_id"].as_str().unwrap().to_string();
+    t.app.state::<AppState>().manager.kill();
+
+    let err = t.call("runCommand", json!({ "sessionId": sid, "command": "g 1" })).unwrap_err();
+    assert!(err.starts_with("Session ended:"), "got: {err}");
+    let err = t.call("getMesh", json!({ "sessionId": sid })).unwrap_err();
+    assert_eq!(err, "No file is loaded");
 }
 
 fn base64_encode(bytes: &[u8]) -> String {
