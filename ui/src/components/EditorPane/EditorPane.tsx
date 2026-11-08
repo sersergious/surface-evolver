@@ -45,7 +45,6 @@ export default function EditorPane() {
     })
     setDirty(false)
     return () => { viewRef.current?.destroy(); viewRef.current = null }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fileContent])
 
   const handleSave = useCallback(async () => {

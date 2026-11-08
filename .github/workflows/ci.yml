@@ -1,8 +1,12 @@
 # .github/workflows/ci.yml
 #
-# Three independent jobs: C engine tests (macOS + Linux), backend type-check +
-# tests (worker sidecar + the Tauri app crate), frontend type-check + tests +
-# build.
+# Independent jobs: C engine tests (macOS + Linux), backend type-check + tests
+# (worker sidecar + the Tauri app crate, against the shipped release worker),
+# frontend lint + type-check + tests + build, and a non-blocking Windows job.
+#
+# Runner images and the bun version are pinned on purpose: `ubuntu-latest`
+# moving to 26.04 (GCC 15) and the macos-14 retirement both broke main
+# unannounced. Bump them deliberately.
 
 name: CI
 
@@ -20,7 +24,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-14]
+        os: [ubuntu-26.04, macos-26]
     runs-on: ${{ matrix.os }}
 
     steps:
@@ -48,7 +52,7 @@ jobs:
   # ── Rust: type-check the Tauri app crate + test the worker sidecar ───────────
   backend-tests:
     name: Rust backend check
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
 
     steps:
       - uses: actions/checkout@v7
@@ -88,10 +92,17 @@ jobs:
           cmake -B build -DCMAKE_BUILD_TYPE=Release -DSE_HEADLESS=ON -DBUILD_TESTS=OFF
           cmake --build build --parallel 4
 
+      # The binary the app ships: panic = "abort", LTO, opt-level "z". Both test
+      # steps below drive it through SE_WORKER_PATH, not the dev-profile build.
+      - name: Build the release worker
+        working-directory: src-tauri/worker
+        run: cargo build --release --locked
+
       - name: Worker tests (ffi signature guard + smoke + all-fixtures)
         working-directory: src-tauri/worker
         env:
           SE_LIB_PATH: ${{ github.workspace }}/build/libse.so
+          SE_WORKER_PATH: ${{ github.workspace }}/src-tauri/worker/target/release/se-worker
         run: cargo test --locked
 
       # cargo test (not just check) picks up rpc.rs's own unit tests plus the
@@ -102,12 +113,13 @@ jobs:
         working-directory: src-tauri
         env:
           SE_LIB_PATH: ${{ github.workspace }}/build/libse.so
+          SE_WORKER_PATH: ${{ github.workspace }}/src-tauri/worker/target/release/se-worker
         run: cargo test --locked
 
-  # ── Frontend type-check, unit tests, production build ────────────────────────
+  # ── Frontend lint, type-check, unit tests, production build ──────────────────
   frontend-tests:
     name: Frontend tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
 
     defaults:
       run:
@@ -118,13 +130,16 @@ jobs:
 
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: latest
+          bun-version: "1.4.4"
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
       - name: Compile Tailwind CSS
         run: bun run css
+
+      - name: Lint (ESLint; warnings fail too)
+        run: bun run lint
 
       - name: TypeScript type-check
         run: bunx tsc --noEmit
@@ -134,3 +149,41 @@ jobs:
 
       - name: Build production bundle
         run: bun run build
+
+  # ── Windows: non-blocking until the Windows bugs (#26, #27, #29) are fixed ───
+  # Reports breakage without holding back `latest`: a failed job here does not
+  # fail the run. Drop continue-on-error once it is green.
+  windows-tests:
+    name: Windows (non-blocking)
+    runs-on: windows-2025
+    continue-on-error: true
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          install: mingw-w64-x86_64-gcc mingw-w64-x86_64-cmake mingw-w64-x86_64-ninja
+
+      - name: Build libse + C tests (MinGW, as the Windows installer does)
+        shell: msys2 {0}
+        run: |
+          cmake -B build -G Ninja -DSE_HEADLESS=ON -DBUILD_TESTS=ON -DCMAKE_BUILD_TYPE=Release
+          cmake --build build
+
+      - name: Run C API tests (ctest)
+        shell: msys2 {0}
+        run: ctest --test-dir build --output-on-failure --timeout 120
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri/worker
+
+      - name: Worker tests
+        working-directory: src-tauri/worker
+        env:
+          SE_LIB_PATH: ${{ github.workspace }}\build\libse.dll
+        run: cargo test --locked

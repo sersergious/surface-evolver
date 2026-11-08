@@ -58,7 +58,7 @@ export default function ViewerPane() {
   // Characteristic mesh size → raycaster threshold + marker radii (scale-aware).
   const meshRadius = useMemo(() => {
     if (!mesh || mesh.vertices.length === 0) return 1
-    let lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity]
+    const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity]
     for (const v of mesh.vertices) for (let k = 0; k < 3; k++) {
       if (v[k] < lo[k]) lo[k] = v[k]; if (v[k] > hi[k]) hi[k] = v[k]
     }

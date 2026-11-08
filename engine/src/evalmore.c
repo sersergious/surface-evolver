@@ -22,7 +22,9 @@
 #define S_IFIFO 0x100
 #elif !defined(MAC_CW)
 #include <sys/stat.h>
-/* #include <sys/wait.h> */
+#if !defined(_WIN32)
+#include <sys/wait.h>   /* wait() below; GCC 14+ rejects implicit declarations */
+#endif
 #ifndef S_IFIFO
 #ifdef __S_IFIFO
 #define S_IFIFO __S_IFIFO

@@ -266,19 +266,19 @@ Closed the last untested layer (September 2026) after an audit found
 ```mermaid
 flowchart TB
     subgraph C["C facade"]
-        CT["tests/c/test_se_api.c<br/>66 checks"]
+        CT["tests/c/test_se_api.c<br/>72 checks"]
     end
     subgraph Worker["se-worker crate"]
         WF["ffi_signatures.rs — 1 test<br/>se_api.h ⇄ ffi.rs agree"]
-        WS["smoke.rs — 7 tests<br/>drive the built binary over stdin"]
+        WS["smoke.rs — 11 tests<br/>drive the built binary over stdin"]
         WX["fixtures.rs — 1 test<br/>all 20 bundled .fe load + mesh"]
     end
     subgraph App["Tauri app crate"]
         AU["rpc.rs unit tests — 10<br/>pure helpers: sanitize, session bookkeeping"]
-        AI["tests/{dispatch,manager}.rs — 12<br/>real worker + real libse"]
+        AI["tests/{dispatch,manager}.rs — 15<br/>real worker + real libse"]
     end
     subgraph FE["Frontend"]
-        FT["Vitest + Testing Library<br/>56 tests / 10 files"]
+        FT["ESLint + Vitest + Testing Library<br/>60 tests / 11 files"]
     end
     CT --> WF --> AU --> FT
 ```
@@ -297,15 +297,16 @@ Two workflows, chained — `build.yml` only ever sees a commit whose CI passed:
 flowchart LR
     subgraph CI["ci.yml — push / PR to main"]
         direction TB
-        C1["c-tests<br/>macOS + Linux matrix<br/>ctest"]
-        C2["backend-tests<br/>cargo check + cargo test<br/>worker (13) + app (25)"]
-        C3["frontend-tests<br/>tsc --noEmit + bun run test (47)<br/>+ production build"]
+        C1["c-tests<br/>macos-26 + ubuntu-26.04<br/>ctest"]
+        C2["backend-tests<br/>cargo check + cargo test<br/>worker (13) + app (25),<br/>against the release worker"]
+        C3["frontend-tests<br/>lint + tsc --noEmit + bun run test (60)<br/>+ production build"]
+        C4["windows-tests (non-blocking)<br/>MinGW libse: ctest + worker tests"]
     end
     subgraph BUILD["build.yml — workflow_run after a green push to main"]
         direction TB
-        B1["macos-14 → .dmg"]
-        B2["ubuntu-latest → .deb"]
-        B3["windows-latest → NSIS .exe<br/>(libse via MinGW/MSYS2)"]
+        B1["macos-26 → .dmg"]
+        B2["ubuntu-26.04 → .deb"]
+        B3["windows-2025 → NSIS .exe<br/>(libse via MinGW/MSYS2)"]
         B1 --> REL["publish: replace the rolling<br/>'latest' release as a whole"]
         B2 --> REL
         B3 --> REL
@@ -429,7 +430,8 @@ test-suite work, which added coverage without touching any of these:
   guard only catches the single-letter form. Reload to recover.
 - macOS builds are ad-hoc signed, not notarized.
 - The Windows installer is built and packaged on every release but has never
-  been run: CI has no Windows job (see the `windows`-labelled issues).
+  been run. CI's Windows job runs the C and worker tests against the MinGW
+  libse, but is non-blocking until the `windows`-labelled issues are fixed.
 - AppImage packaging is disabled in `build.yml`. The original blocker
   (linuxdeploy's `ldd` choking on the old statically-linked bun sidecar) is
   gone now that the sidecar is a normal dynamically-linked Rust binary, but

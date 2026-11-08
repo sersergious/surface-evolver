@@ -7,7 +7,7 @@ import { mockIPC } from '@tauri-apps/api/mocks'
 // api/client.ts: each mockIPC() call replaces the event-listener table, which
 // would drop client.ts's module-level `se-menu` listener. Reset `ipc`, never
 // re-mock.
-export const ipc = vi.fn<[cmd: string, args?: unknown], unknown>()
+export const ipc = vi.fn<(cmd: string, args?: unknown) => unknown>()
 
 mockIPC((cmd, args) => ipc(cmd, args), { shouldMockEvents: true })
 

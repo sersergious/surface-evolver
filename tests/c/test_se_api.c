@@ -153,16 +153,16 @@ static void test_get_facets(void)
 
     int *tris = malloc((size_t)nf * 3 * sizeof(int));
     int written = se_get_facets(tris, nf);
-    /* cube.fe is SOAPFILM → triangles emitted; non-SOAPFILM returns 0. */
-    CHECK(written >= 0);
+    /* cube.fe is SOAPFILM, so every facet is emitted as a triangle. An exact
+     * count, not >= 0: a zero would otherwise skip the index check below. */
+    CHECK(written == nf);
 
-    if (written > 0) {
-        /* Vertex indices must be non-negative. */
-        int ok = 1;
-        for (int i = 0; i < written * 3; i++)
-            if (tris[i] < 0) { ok = 0; break; }
-        CHECK(ok);
-    }
+    /* Indices are positions into the se_get_vertices() buffer. */
+    int nv = se_get_vertex_count();
+    int ok = written > 0;
+    for (int i = 0; i < written * 3; i++)
+        if (tris[i] < 0 || tris[i] >= nv) { ok = 0; break; }
+    CHECK(ok);
 
     free(tris);
 }
@@ -213,37 +213,27 @@ static void test_lagrange_order(void)
 static void test_body_data(void)
 {
     SECTION("se_get_body_volumes");
+    /* cube.fe has exactly one body, held at volume 1 by its constraint even
+     * after the earlier `g 10`. Exact, so a missing body fails instead of
+     * skipping the checks below. */
     int nb = se_get_body_count();
-    CHECK(nb >= 0);
+    CHECK(nb == 1);
 
-    if (nb > 0) {
-        double *vols  = malloc((size_t)nb * sizeof(double));
-        double *press = malloc((size_t)nb * sizeof(double));
-        int written = se_get_body_volumes(vols, press, nb);
-        CHECK(written == nb);
-
-        int vols_finite = 1, press_finite = 1;
-        for (int i = 0; i < written; i++) {
-            if (!isfinite(vols[i]))  vols_finite  = 0;
-            if (!isfinite(press[i])) press_finite = 0;
-        }
-        CHECK(vols_finite);
-        CHECK(press_finite);
-
-        free(vols);
-        free(press);
-    }
+    double vols[1] = {0}, press[1] = {0};
+    CHECK(se_get_body_volumes(vols, press, 1) == 1);
+    CHECK(fabs(vols[0] - 1.0) < 1e-6);
+    CHECK(isfinite(press[0]));
 }
 
 static void test_body_cm_and_inspector(void)
 {
     SECTION("body CM + vertex inspector");
 
-    /* cube.fe spans the unit cube → centroid at (0.5, 0.5, 0.5), volume 1. */
-    if (se_get_body_count() > 0) {
-        double cm[3];
-        int r = se_get_body_cm(0, cm);
-        CHECK(r == 3);
+    /* cube.fe spans the unit cube → centroid at (0.5, 0.5, 0.5); evolving
+     * it symmetrically keeps it there. */
+    {
+        double cm[3] = {0};
+        CHECK(se_get_body_cm(0, cm) == 3);
         CHECK(fabs(cm[0] - 0.5) < 1e-9);
         CHECK(fabs(cm[1] - 0.5) < 1e-9);
         CHECK(fabs(cm[2] - 0.5) < 1e-9);
@@ -339,23 +329,26 @@ static void test_topo_and_params(void)
     drain();
     CHECK(se_get_vertex_count() > v0);
 
-    /* equiangulation (u) bumps the equi counter (index 0) without adding elements */
-    int c1[SE_TOPO_COUNT];
-    se_get_topo_counts(c1, SE_TOPO_COUNT);
-    se_run("u");
+    /* equiangulation (u) swaps edges, never adds or removes elements. (The
+     * old check here, "equi_count never decreases", could not fail.) */
+    int v1 = se_get_vertex_count(), e1 = se_get_edge_count(), f1 = se_get_facet_count();
+    CHECK(se_run("u") == 0);
     drain();
-    int c2[SE_TOPO_COUNT];
-    se_get_topo_counts(c2, SE_TOPO_COUNT);
-    CHECK(c2[0] >= c1[0]);   /* equi_count never decreases */
+    CHECK(se_get_vertex_count() == v1);
+    CHECK(se_get_edge_count() == e1);
+    CHECK(se_get_facet_count() == f1);
 }
 
 static void test_element_colors(void)
 {
     SECTION("element colours");
 
-    /* phelanc.fe assigns facet colours. */
-    if (se_load(FE_DIR "/phelanc.fe") == 0) {
-        drain();
+    /* phelanc.fe assigns facet colours. The load is a CHECK itself: inside
+     * an `if`, a failed load used to make the checks vanish silently. */
+    int loaded = se_load(FE_DIR "/phelanc.fe") == 0;
+    drain();
+    CHECK(loaded);
+    if (loaded) {
         int nf = se_get_facet_count();
         int *fc = malloc((size_t)nf * sizeof(int));
         CHECK(se_get_facet_colors(fc, NULL, nf) == nf);
@@ -369,8 +362,10 @@ static void test_edge_wraps(void)
 
     /* cube.fe is not periodic → 0, and specifically not -1: "not applicable"
      * is not an error. Must be safe even though E_WRAP_ATTR has no storage. */
-    if (se_load(FE_CUBE) == 0) {
-        drain();
+    int loaded = se_load(FE_CUBE) == 0;
+    drain();
+    CHECK(loaded);
+    if (loaded) {
         int ne = se_get_edge_count();
         int *w = malloc((size_t)ne * sizeof(int));
         CHECK(se_get_edge_wraps(w, ne) == 0);
@@ -379,8 +374,10 @@ static void test_edge_wraps(void)
 
     /* phelanc.fe is TORUS_FILLED. foam audit item F1 measured 103 of 368 edges as
      * wrap-around; assert we see wraps, and that they are a strict minority. */
-    if (se_load(FE_DIR "/phelanc.fe") == 0) {
-        drain();
+    loaded = se_load(FE_DIR "/phelanc.fe") == 0;
+    drain();
+    CHECK(loaded);
+    if (loaded) {
         int ne = se_get_edge_count();
         int *w = malloc((size_t)ne * sizeof(int));
         int n = se_get_edge_wraps(w, ne);

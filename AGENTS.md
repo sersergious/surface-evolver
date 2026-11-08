@@ -48,7 +48,7 @@ PATH — do **not** add it as an npm dependency (see *Landmine 10*).
 
 ```bash
 # C API tests (needs built libse)
-ctest --test-dir cmake-build-release --output-on-failure          # 66 checks
+ctest --test-dir cmake-build-release --output-on-failure          # 72 checks
 
 # Worker sidecar: FFI-signature guard, stdin/stdout smoke tests, and a fixture
 # test that loads every bundled .fe file and checks it meshes (automates the
@@ -57,6 +57,8 @@ ctest --test-dir cmake-build-release --output-on-failure          # 66 checks
 # All commands below run from the repo root. Use libse.so on Linux.
 export SE_LIB_PATH=$PWD/cmake-build-release/libse.dylib
 (cd src-tauri/worker && cargo test)                                 # 13 tests
+# SE_WORKER_PATH=<path to se-worker> points both Rust suites at a specific
+# binary; CI uses it to test the shipped release build (panic = "abort", LTO).
 
 # Rust app. `cargo check` is the fast gate; `cargo test` additionally runs
 # rpc.rs's own unit tests plus src-tauri/tests/{dispatch,manager}.rs, which
@@ -65,17 +67,25 @@ export SE_LIB_PATH=$PWD/cmake-build-release/libse.dylib
 # those two integration-test binaries skip themselves rather than fail.
 (cd src-tauri && cargo check && cargo test)                         # 25 tests
 
-# Frontend: type-check, then a real Vitest suite (jsdom + Testing Library) —
-# 56 tests across 10 files covering the RPC client, API wrapper contracts, four
-# components, the store, the menu-action hook, the native menu routes and the session lifecycle. Tauri
-# IPC is faked once per file by Tauri's own mockIPC (ui/src/test/ipc.ts), so
-# tests assert what crosses the IPC boundary. Both run in CI.
-(cd ui && bunx tsc --noEmit && bun run test)                        # 56 tests
+# Frontend: ESLint (typescript-eslint + the two classic react-hooks rules;
+# warnings fail), type-check, then a real Vitest suite (jsdom + Testing
+# Library): 60 tests across 11 files covering the RPC client, API wrapper
+# contracts, the components and file browser, the store, the menu-action hook,
+# the native menu routes and the session lifecycle. Tauri IPC is faked once per
+# file by Tauri's own mockIPC (ui/src/test/ipc.ts), so tests assert what
+# crosses the IPC boundary. All of it runs in CI.
+(cd ui && bun run lint && bunx tsc --noEmit && bun run test)        # 60 tests
 ```
 
 Locally, a skipped integration test prints `SE_LIB_PATH unset — skipping …` and
 still counts as passed, so check the output, not just the totals. Under CI
 (`CI` set) a missing `SE_LIB_PATH` or worker binary fails the test instead.
+
+CI runner images and the bun version are **pinned** (`ubuntu-26.04`,
+`macos-26`, `windows-2025`, bun `1.4.4`, in both workflows). Floating labels
+broke `main` twice without a code change: `ubuntu-latest` moving to GCC 15, and
+the `macos-14` retirement. Bump them on purpose, in both files. The Windows job
+is `continue-on-error` until the `windows`-labelled issues are fixed.
 
 The end-to-end claim worth re-checking after engine or worker changes: **all 20
 bundled `.fe` datafiles load and produce facets.** This is now enforced by

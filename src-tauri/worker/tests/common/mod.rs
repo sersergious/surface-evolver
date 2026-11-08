@@ -19,7 +19,11 @@ pub fn repo() -> PathBuf {
 
 /// Feed the worker a script of commands; collect one JSON reply per line.
 pub fn drive(lines: &[String]) -> Vec<Value> {
-    let bin = PathBuf::from(env!("CARGO_BIN_EXE_se-worker"));
+    // SE_WORKER_PATH lets CI drive the shipped release build (panic = "abort",
+    // LTO, opt-level "z") instead of the dev-profile binary cargo test builds.
+    let bin = std::env::var_os("SE_WORKER_PATH")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from(env!("CARGO_BIN_EXE_se-worker")));
     let lib = std::env::var("SE_LIB_PATH").expect("checked by caller");
 
     let mut child = Command::new(bin)
@@ -43,8 +47,14 @@ pub fn drive(lines: &[String]) -> Vec<Value> {
         .collect()
 }
 
+/// A `load` request. Built with serde_json so a Windows path's backslashes
+/// are escaped; hand-formatted JSON made them invalid escapes.
+pub fn load(path: &std::path::Path) -> String {
+    serde_json::json!({ "cmd": "load", "path": path }).to_string()
+}
+
 pub fn cube() -> String {
-    format!(r#"{{"cmd":"load","path":"{}"}}"#, repo().join("fe/cube.fe").display())
+    load(&repo().join("fe/cube.fe"))
 }
 
 /// Skip when no engine is configured, so a fresh checkout stays green — except

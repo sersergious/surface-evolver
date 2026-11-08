@@ -31,11 +31,11 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: macos-14        # Apple Silicon → macos-arm64
+          - os: macos-26        # Apple Silicon → macos-arm64
             artifact: macos-arm64
-          - os: ubuntu-latest   # → linux-x64
+          - os: ubuntu-26.04    # → linux-x64
             artifact: linux-x64
-          - os: windows-latest  # → windows-x64 (libse via MinGW/MSYS2)
+          - os: windows-2025    # → windows-x64 (libse via MinGW/MSYS2)
             artifact: windows-x64
     runs-on: ${{ matrix.os }}
     permissions:
@@ -48,7 +48,7 @@ jobs:
 
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: latest
+          bun-version: "1.4.4"   # pinned with ci.yml; bump both together
 
       - uses: dtolnay/rust-toolchain@stable
 
@@ -86,7 +86,7 @@ jobs:
           cp cmake-build-release/libse.dll build-native/libse-windows-x64.dll
 
       - name: Install dependencies
-        run: bun install
+        run: bun install --frozen-lockfile
 
       - name: Build app (macOS → .dmg)
         if: runner.os == 'macOS'
@@ -133,7 +133,7 @@ jobs:
   # to the tested commit; the download URLs stay the same.
   publish:
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     permissions:
       contents: write
     steps:

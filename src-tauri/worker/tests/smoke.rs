@@ -11,7 +11,7 @@
 //! there.
 
 mod common;
-use common::{cube, drive, repo, skip};
+use common::{cube, drive, repo, skip, load};
 
 #[test]
 fn every_command_round_trips() {
@@ -93,7 +93,7 @@ fn string_model_is_rejected_at_load() {
         "edges\n1   1 2\n2   2 3\n3   3 1\n",
     )).unwrap();
 
-    let msgs = drive(&[format!(r#"{{"cmd":"load","path":"{}"}}"#, path.display())]);
+    let msgs = drive(&[load(&path)]);
     let _ = std::fs::remove_dir_all(&dir);
 
     assert_eq!(msgs[0]["ok"], false, "STRING datafile must not load");
@@ -144,7 +144,7 @@ fn periodic_wrap_edges_are_hidden() {
     // and report how many, without mutating the surface (no `detorus`).
     let path = repo().join("fe/phelanc.fe");
     let msgs = drive(&[
-        format!(r#"{{"cmd":"load","path":"{}"}}"#, path.display()),
+        load(&path),
         r#"{"cmd":"mesh","colors":true}"#.into(),
     ]);
     let total = msgs[0]["edge_count"].as_u64().unwrap();
@@ -244,7 +244,7 @@ fn periodic_facets_are_drawn_unwrapped() {
     // about as long as an ordinary edge, and no facet is dropped.
     let path = repo().join("fe/phelanc.fe");
     let msgs = drive(&[
-        format!(r#"{{"cmd":"load","path":"{}"}}"#, path.display()),
+        load(&path),
         r#"{"cmd":"mesh","colors":true}"#.into(),
     ]);
     let mesh = &msgs[1];

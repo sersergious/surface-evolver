@@ -5,7 +5,7 @@
 //! bundle's only cross-file dependency.
 
 mod common;
-use common::{drive, repo, skip};
+use common::{drive, repo, skip, load};
 
 #[test]
 fn every_bundled_fe_file_loads_and_meshes() {
@@ -24,7 +24,7 @@ fn every_bundled_fe_file_loads_and_meshes() {
     let mut failures = Vec::new();
     for path in &files {
         let msgs = drive(&[
-            format!(r#"{{"cmd":"load","path":"{}"}}"#, path.display()),
+            load(&path),
             r#"{"cmd":"mesh"}"#.into(),
         ]);
         let name = path.file_name().unwrap().to_string_lossy();
