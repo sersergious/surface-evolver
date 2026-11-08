@@ -179,10 +179,21 @@ jobs:
         shell: msys2 {0}
         run: ctest --test-dir build --output-on-failure --timeout 120
 
-      - name: Backtrace of the C test crash (gdb)
+      # Not gdb: the suite passed under gdb while crashing natively. The test's
+      # own crash handler prints module+offset frames; resolve ours here.
+      - name: Locate the native C test crash
         if: failure() && steps.ctest.outcome == 'failure'
         shell: msys2 {0}
-        run: gdb -batch -ex "set pagination off" -ex run -ex bt -ex "info registers rip" build/tests/test_se_api.exe
+        run: |
+          build/tests/test_se_api.exe > crash.txt 2>&1 || true
+          grep -E "^\[|CRASH|frame" crash.txt | tail -25
+          echo "--- resolved:"
+          grep -oE "frame .+\+0x[0-9a-f]+" crash.txt | sed 's/^frame //' | while IFS= read -r line; do
+            mod=$(cygpath -u "${line%+0x*}"); rva=${line##*+}
+            case "$mod" in *"/build/"*) ;; *) echo "$line (system module)"; continue ;; esac
+            base=$(objdump -p "$mod" | awk '/^ImageBase/ {print $2}')
+            printf '%s: ' "$line"; addr2line -f -i -p -e "$mod" "$(printf '0x%x' $((0x$base + rva)))"
+          done
 
       # The steps below run even if the C tests failed, so one Windows bug
       # does not hide the worker's results. No MinGW runtime is put on PATH:

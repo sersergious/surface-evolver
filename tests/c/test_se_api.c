@@ -18,8 +18,47 @@
 #ifdef _WIN32
 #  include <direct.h>
 #  define getcwd _getcwd
+#  include <windows.h>
 #else
 #  include <unistd.h>
+#endif
+
+#if defined(_WIN64)
+/* Windows-only crash report. The suite crashed natively on Windows but passed
+ * under gdb, so the debugger was changing the behaviour. This prints the
+ * exception and the faulting stack as module+offset lines, which CI resolves
+ * with addr2line against the RelWithDebInfo symbols. */
+static void print_frame(DWORD64 pc)
+{
+    HMODULE mod = NULL;
+    char name[MAX_PATH] = "?";
+    GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                       GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                       (LPCSTR)(ULONG_PTR)pc, &mod);
+    if (mod) GetModuleFileNameA(mod, name, sizeof(name));
+    fprintf(stderr, "  frame %s+0x%llx\n", name,
+            (unsigned long long)(pc - (DWORD64)(ULONG_PTR)mod));
+}
+
+static LONG WINAPI report_crash(EXCEPTION_POINTERS *ep)
+{
+    CONTEXT ctx = *ep->ContextRecord;
+    fprintf(stderr, "\nCRASH code=0x%08lx\n", ep->ExceptionRecord->ExceptionCode);
+    for (int i = 0; i < 16 && ctx.Rip; i++) {
+        DWORD64 base = 0;
+        print_frame(ctx.Rip);
+        PRUNTIME_FUNCTION fn = RtlLookupFunctionEntry(ctx.Rip, &base, NULL);
+        if (!fn) {                       /* leaf function: return address on top */
+            ctx.Rip = *(DWORD64 *)(ULONG_PTR)ctx.Rsp;
+            ctx.Rsp += 8;
+            continue;
+        }
+        void *handler_data; DWORD64 frame;
+        RtlVirtualUnwind(UNW_FLAG_NHANDLER, base, ctx.Rip, fn, &ctx,
+                         &handler_data, &frame, NULL);
+    }
+    return EXCEPTION_CONTINUE_SEARCH;
+}
 #endif
 
 /* ── Minimal harness ────────────────────────────────────────────────────── */
@@ -446,6 +485,9 @@ int main(void)
      * the log; buffered output used to vanish with the process. */
     setvbuf(stdout, NULL, _IONBF, 0);
     setvbuf(stderr, NULL, _IONBF, 0);
+#if defined(_WIN64)
+    SetUnhandledExceptionFilter(report_crash);
+#endif
 
     printf("Surface Evolver C API test suite\n");
     printf("=================================\n");
