@@ -9,7 +9,8 @@ use serde_json::{json, Value};
 use std::io::{BufRead, BufReader, Write};
 use std::path::PathBuf;
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
-use std::sync::{Mutex, TryLockError};
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 pub struct WorkerIo {
@@ -24,6 +25,10 @@ pub struct Manager {
     pub io: Mutex<Option<WorkerIo>>,
     /// Process handle only — kill() takes this without touching `io`.
     pub proc: Mutex<Option<Child>>,
+    /// Requests in flight, counting those still waiting for `io`. interrupt()
+    /// waits for this to reach zero: an unlocked `io` alone also happens in
+    /// the gap between a finished request and the next one queued behind it.
+    pending: AtomicUsize,
 }
 
 /// Poison here means an earlier RPC panicked while holding the guard. Every
@@ -93,11 +98,10 @@ impl Manager {
     /// fetch is lost, and a `g` queued behind the fetch then runs on. So the
     /// signal is re-sent every RESEND until the worker is idle. A stray one at
     /// an idle worker is harmless (measured: the next command runs normally).
-    // ponytail: a new request that grabs `io` right after the interrupted
-    // one releases it reads as "still running" and ends in a kill; the UI
-    // blocks new commands while one runs, so this is not reachable from it.
+    // ponytail: a request started *after* Stop also counts as pending; the UI
+    // blocks new commands while one runs, so that isn't reachable from it.
     pub fn interrupt(&self, grace: Duration) -> bool {
-        let idle = || !matches!(self.io.try_lock(), Err(TryLockError::WouldBlock));
+        let idle = || self.pending.load(Ordering::SeqCst) == 0;
         if idle() {
             return true;
         }
@@ -170,6 +174,11 @@ impl Manager {
 
     /// Send `req` to the active worker for `session_id`, await its result line.
     pub fn request(&self, session_id: &str, req: Value) -> Result<Value, String> {
+        // Counted before waiting for `io`, so a queued request is never idle.
+        self.pending.fetch_add(1, Ordering::SeqCst);
+        struct Done<'a>(&'a AtomicUsize);
+        impl Drop for Done<'_> { fn drop(&mut self) { self.0.fetch_sub(1, Ordering::SeqCst); } }
+        let _done = Done(&self.pending);
         let mut io = lock(&self.io);
         let w = io.as_mut().ok_or_else(|| {
             format!("No active SE worker for session {session_id}")

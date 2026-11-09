@@ -195,13 +195,17 @@ fn interrupt_reaches_a_command_queued_behind_a_slow_mesh_fetch() {
         .expect("load phelanc.fe");
     mgr.request("s1", json!({ "cmd": "run", "command": "r; r; r; r" })).expect("refine");
 
+    // Two callers, as in the app: the viewer's mesh fetch, and the CLI's `g`
+    // queued behind it on the `io` lock.
+    let m = mgr.clone();
+    std::thread::spawn(move || { let _ = m.request("s1", json!({ "cmd": "mesh", "colors": true })); });
+    std::thread::sleep(std::time::Duration::from_millis(50));
     let (tx, rx) = std::sync::mpsc::channel();
     let m = mgr.clone();
     std::thread::spawn(move || {
-        let _ = m.request("s1", json!({ "cmd": "mesh", "colors": true }));  // ~1 s, not interruptible
         let _ = tx.send(m.request("s1", json!({ "cmd": "run", "command": "g 200000" })));
     });
-    std::thread::sleep(std::time::Duration::from_millis(300));   // inside the mesh fetch
+    std::thread::sleep(std::time::Duration::from_millis(250));   // inside the mesh fetch
 
     assert!(mgr.interrupt(std::time::Duration::from_secs(10)), "the queued command was never stopped");
     let res = rx.recv_timeout(std::time::Duration::from_secs(5)).expect("g still running");
