@@ -13,7 +13,8 @@ target_include_directories(test_se_api PRIVATE
     ${CMAKE_SOURCE_DIR}/engine/bindings/c
 )
 
-target_link_libraries(test_se_api PRIVATE se m)
+find_package(Threads REQUIRED)   # test_sigint sends SIGINT from a second thread
+target_link_libraries(test_se_api PRIVATE se m Threads::Threads)
 
 # Pass the absolute path to fe/ so the test can locate .fe datafiles
 # regardless of where ctest is invoked from.

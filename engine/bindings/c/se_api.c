@@ -134,6 +134,28 @@ static void set_errmsg_from(int n, const char *fallback, const char *arg)
         snprintf(se_errmsg_buf, sizeof(se_errmsg_buf), fallback, arg ? arg : "(null)");
 }
 
+/* ── SIGINT (Stop, #35) ───────────────────────────────────────────────── */
+/*
+ * SE's own catcher (utility.c) longjmps out of the signal handler, via
+ * kb_error(RECOVERABLE_QUIET), whenever the engine is not iterating: into
+ * jumpbuf[0], whose se_run frame has usually returned. That is undefined
+ * behaviour, and it hung the worker when Stop's SIGINT landed during a mesh
+ * fetch. This handler keeps only catcher's safe half: during an iteration
+ * (or a Hessian iteration) ask it to break, which makes SE abort the command
+ * with ERROR 2073 and keep the surface; at any other moment, do nothing.
+ * Async-signal-safe: plain stores to ints, no output, no jump.
+ */
+static void se_sigint(int sig)
+{
+    (void)sig;
+    if (iterate_flag == 1 || iterate_flag == 2) {
+        breakflag = BREAKFULL;
+        iterate_flag = 0;            /* exactly what catcher does */
+    } else if (hessian_iterate_flag == 1) {
+        breakflag = BREAKFULL;
+    }
+}
+
 /* ── se_init ──────────────────────────────────────────────────────────── */
 /*
  * Performs the initialisation SE's own main() does, in the same order, minus
@@ -145,8 +167,8 @@ static void set_errmsg_from(int n, const char *fallback, const char *arg)
  * underlying SE initialisers twice corrupts the heap, which is why one process
  * hosts exactly one engine for its whole life.
  *
- * Note the side effects on the process, not just on this library — SIGINT and
- * friends are captured globally, and stdout/stderr are redirected to in-memory
+ * Note the side effects on the process, not just on this library — SIGINT (see
+ * se_sigint) and friends are captured globally, and stdout/stderr are redirected to in-memory
  * streams. A host application cannot undo either; it isolates them by keeping
  * the engine in a subprocess.
  */
@@ -194,7 +216,15 @@ int se_init(void)
     }
 
     /* signal handlers – mirrors what main() installs */
-    signal(SIGINT, catcher);
+    {   /* SIGINT gets the facade's handler, not catcher (see se_sigint).
+         * SA_RESTART so a blocked read() in the host just resumes. */
+        struct sigaction sa;
+        memset(&sa, 0, sizeof(sa));
+        sa.sa_handler = se_sigint;
+        sigemptyset(&sa.sa_mask);
+        sa.sa_flags = SA_RESTART;
+        sigaction(SIGINT, &sa, NULL);
+    }
 #ifdef SIGUSR1
     signal(SIGUSR1, catcher);
 #endif
@@ -295,7 +325,7 @@ int se_load(const char *filename)
  * streams and repoints outfd/erroutfd at the real stdout/stderr, so the error
  * text has to be salvaged before the streams are reopened, or it is lost.
  *
- * Blocking and uninterruptible — see the note in se_api.h.
+ * Blocking; SIGINT aborts an iteration (see se_sigint and se_api.h).
  */
 int se_run(const char *cmd)
 {

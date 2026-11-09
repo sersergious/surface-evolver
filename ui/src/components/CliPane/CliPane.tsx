@@ -25,9 +25,10 @@ export default function CliPane() {
   const [busy, setBusy]   = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
-  // The only cancel there is: se_run blocks, so the backend kills the worker.
-  // The in-memory surface dies with it — the tab stays so the file can be
-  // reopened, and the last auto-snapshot is still on disk.
+  // Stop. The backend interrupts the command (SIGINT) and keeps the surface;
+  // only if that fails does it kill the worker, and then the in-memory surface
+  // is gone (the tab stays so the file can be reopened, and the last
+  // auto-snapshot is still on disk).
   // Set by Stop: the stopped command's own failure (the killed worker's
   // in-flight request) is expected, not a crash worth reporting.
   const stoppedRef = useRef(false)
@@ -40,7 +41,16 @@ export default function CliPane() {
     if (!sessionId) return
     stoppedRef.current = true
     try {
-      await cancelSession()
+      const res = await cancelSession()
+      if (res?.interrupted) {
+        appendLog('[stopped] command interrupted — the evolved surface is kept')
+        // The command stopped part-way: show the surface as it stands. An
+        // empty command succeeds and reports the current energy and area.
+        const now = await runCommand(sessionId, '')
+        setStats(now.energy, now.area)
+        bumpMeshVersion()
+        return
+      }
       clearSession()
       appendLog('[stopped] engine killed — reopen the file to continue')
     } catch (err: unknown) {

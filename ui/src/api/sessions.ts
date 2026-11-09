@@ -17,10 +17,12 @@ export async function getRestore(): Promise<SessionState | null> {
   return rpc<SessionState | null>('getRestore')
 }
 
-/// Kill the worker mid-command. `se_run` is a blocking FFI call, so this is the
-/// only cancel there is; the in-memory surface dies with it.
-export async function cancelSession(): Promise<void> {
-  await rpc<{ cancelled: boolean }>('cancel')
+/** Stop the running command. The backend sends SIGINT first: `interrupted`
+ *  means the engine aborted the command and kept the worker and the evolved
+ *  surface. Otherwise it fell back to killing the worker (the surface is gone,
+ *  the last snapshot survives). */
+export async function cancelSession(): Promise<{ cancelled: boolean; interrupted?: boolean }> {
+  return rpc<{ cancelled: boolean; interrupted?: boolean }>('cancel')
 }
 
 /** Warning for curved-patch models the linear renderer draws wrong, else null. */

@@ -48,7 +48,7 @@ PATH — do **not** add it as an npm dependency (see *Landmine 10*).
 
 ```bash
 # C API tests (needs built libse)
-ctest --test-dir cmake-build-release --output-on-failure          # 81 checks
+ctest --test-dir cmake-build-release --output-on-failure          # 88 checks
 
 # Worker sidecar: FFI-signature guard, stdin/stdout smoke tests, and a fixture
 # test that loads every bundled .fe file and checks it meshes (automates the
@@ -62,19 +62,19 @@ export SE_LIB_PATH=$PWD/cmake-build-release/libse.dylib
 
 # Rust app. `cargo check` is the fast gate; `cargo test` additionally runs
 # rpc.rs's own unit tests plus src-tauri/tests/{dispatch,manager}.rs, which
-# drive a real se-worker/libse through the app layer (26 tests total) — set
+# drive a real se-worker/libse through the app layer (31 tests total) — set
 # SE_LIB_PATH and either build the worker first or set SE_WORKER_PATH, or
 # those two integration-test binaries skip themselves rather than fail.
-(cd src-tauri && cargo check && cargo test)                         # 26 tests
+(cd src-tauri && cargo check && cargo test)                         # 31 tests
 
 # Frontend: ESLint (typescript-eslint + the two classic react-hooks rules;
 # warnings fail), type-check, then a real Vitest suite (jsdom + Testing
-# Library): 65 tests across 11 files covering the RPC client, API wrapper
+# Library): 67 tests across 11 files covering the RPC client, API wrapper
 # contracts, the components and file browser, the store, the menu-action hook,
 # the native menu routes and the session lifecycle. Tauri IPC is faked once per
 # file by Tauri's own mockIPC (ui/src/test/ipc.ts), so tests assert what
 # crosses the IPC boundary. All of it runs in CI.
-(cd ui && bun run lint && bunx tsc --noEmit && bun run test)        # 65 tests
+(cd ui && bun run lint && bunx tsc --noEmit && bun run test)        # 67 tests
 ```
 
 Locally, a skipped integration test prints `SE_LIB_PATH unset — skipping …` and
@@ -267,18 +267,25 @@ That is what makes aggressive trimming safe. Delete the CLI and every past and
 future cut becomes irreversible capability loss. Also note `appendLog` is
 currently the app's **only** error channel.
 
-### 9. No progress events; cancel means kill
+### 9. No progress events; cancel is SIGINT first, kill last
 
 `{"type":"progress",…}` is reserved but **nothing emits it**. `se_run` is a
 blocking FFI call and the worker handles requests serially, so `g 1000` returns
 one result and nothing in between. Chunking on the caller side is the only way
 to get intermediate feedback.
 
-Cancellation kills the worker process. The in-memory surface dies with it; the
-last auto-snapshot survives on disk. SIGINT is a gentler alternative nothing
-uses yet: measured, it aborts a running `g N` with "Command aborted due to user
-interrupt" and leaves the worker and the surface alive (Unix only;
-[#35](https://github.com/sersergious/surface-evolver/issues/35)).
+Stop (`cancel`) sends the worker SIGINT and keeps doing so every 250 ms until
+the running request finishes (`Manager::interrupt`): SE aborts the iteration
+with "ERROR 2073: Command aborted due to user interrupt" and keeps the worker
+and the partly evolved surface. Only if the command doesn't stop within
+`CANCEL_GRACE` (10 s) does it fall back to killing the worker
+([#35](https://github.com/sersergious/surface-evolver/issues/35)).
+
+**Never restore SE's own SIGINT handler.** `catcher` (utility.c) longjmps out
+of the signal handler whenever the engine is *not* iterating (during a mesh
+fetch, or idle), into a jump buffer whose frame is gone. `se_init` installs
+`se_sigint` instead, which only sets the break flag mid-iteration and ignores
+the signal otherwise. That is what makes the repeated SIGINTs safe.
 
 ### 10. Build scripts run under Bun Shell
 

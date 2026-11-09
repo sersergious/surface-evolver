@@ -155,7 +155,7 @@ sequenceDiagram
     Rpc->>Rpc: get_session() — reject a stale sessionId
     Rpc->>Mgr: request(sid, cmd=run, command=g 10)
     Mgr->>Se: write JSON line to stdin
-    Se->>C: se_run(g 10) — blocking FFI, no in-band cancel
+    Se->>C: se_run(g 10) — blocking FFI; SIGINT aborts it
     C-->>Se: 0 (success)
     Se->>Se: se_pop_output() / se_get_energy() / se_get_area()
     Se-->>Mgr: result: ok=true, output, energy
@@ -183,7 +183,8 @@ stateDiagram-v2
     Loading --> NoSession: se_load fails (worker killed)
     Active --> Loading: createSession another file
     Active --> Active: runCommand / getMesh / topo / vertexInfo
-    Active --> NoSession: cancel
+    Active --> Active: cancel (SIGINT aborts the command)
+    Active --> NoSession: cancel falls back to kill
     Active --> NoSession: worker dies mid-request
     NoSession --> Active: getRestore
 ```
@@ -198,8 +199,10 @@ A few of those transitions hide a real decision:
   ([#16](https://github.com/sersergious/surface-evolver/issues/16)).
 - **`createSession` while `Active`** → `kill()` runs *before* the new worker
   spawns, never after, so there's never a moment with two workers alive.
-- **`cancel`** → `kill()`; the in-memory surface is lost, but the last
-  auto-snapshot survives on disk for `getRestore`.
+- **`cancel`** → `interrupt()`: SIGINT, repeated until the running request
+  finishes. SE aborts the iteration and the session and surface survive. Only
+  if that takes longer than 10 s does it `kill()`; then the in-memory surface
+  is lost, but the last auto-snapshot survives on disk for `getRestore`.
 - **worker dies mid-request** → detected as an EOF on the read side, then
   reaped. Any other read error — a pipe error or a non-JSON line — reaps the
   worker too. Engine output that escapes capture (SE `printf`s straight to
@@ -209,10 +212,9 @@ A few of those transitions hide a real decision:
 - **`getRestore`** → only fires if no session exists yet; it replays the
   last persisted `.dmp` snapshot.
 
-`cancel` is the only cancellation the app uses, and it kills the process.
-(SIGINT would abort a running `g N` in-band and keep the surface — measured,
-Unix only, not wired up:
-[#35](https://github.com/sersergious/surface-evolver/issues/35).) That's only possible because
+`cancel` interrupts first and kills only as a fallback
+([#35](https://github.com/sersergious/surface-evolver/issues/35)). Both work
+while a command is still running, and that's only possible because
 `Manager` splits its state across two mutexes instead of one:
 
 ```mermaid
@@ -267,7 +269,7 @@ Closed the last untested layer (September 2026) after an audit found
 ```mermaid
 flowchart TB
     subgraph C["C facade"]
-        CT["tests/c/test_se_api.c<br/>81 checks"]
+        CT["tests/c/test_se_api.c<br/>88 checks"]
     end
     subgraph Worker["se-worker crate"]
         WF["ffi_signatures.rs — 1 test<br/>se_api.h ⇄ ffi.rs agree"]
@@ -276,10 +278,10 @@ flowchart TB
     end
     subgraph App["Tauri app crate"]
         AU["rpc.rs unit tests — 10<br/>pure helpers: sanitize, session bookkeeping"]
-        AI["tests/{dispatch,manager}.rs — 16<br/>real worker + real libse"]
+        AI["tests/{dispatch,manager}.rs — 21<br/>real worker + real libse"]
     end
     subgraph FE["Frontend"]
-        FT["ESLint + Vitest + Testing Library<br/>65 tests / 11 files"]
+        FT["ESLint + Vitest + Testing Library<br/>67 tests / 11 files"]
     end
     CT --> WF --> AU --> FT
 ```
@@ -299,7 +301,7 @@ flowchart LR
     subgraph CI["ci.yml — push / PR to main"]
         direction TB
         C1["c-tests<br/>macos-26 + ubuntu-26.04<br/>ctest"]
-        C2["backend-tests<br/>cargo check + cargo test<br/>worker (14) + app (26),<br/>against the release worker"]
+        C2["backend-tests<br/>cargo check + cargo test<br/>worker (14) + app (31),<br/>against the release worker"]
         C3["frontend-tests<br/>lint + tsc --noEmit + bun run test (60)<br/>+ production build"]
     end
     subgraph BUILD["build.yml — workflow_run after a green push to main"]

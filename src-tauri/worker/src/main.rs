@@ -9,7 +9,8 @@
 //!   stdout -> {"type":"result","ok":true|false, ...}
 //!          -> {"type":"fatal","error":...}  if dlopen / se_init fails
 //!
-//! Cancellation: the manager kills the process (SIGKILL). SIGINT would abort in-band; unused (#35).
+//! Cancellation: the manager sends SIGINT, which aborts an iteration and keeps
+//! the surface (libse's handler, #35); SIGKILL only if that doesn't stop it.
 //!
 //! Ported from the retired bun/TypeScript worker. Output is semantically identical;
 //! serde_json renders an integral f64 as `2.0` where JSON.stringify wrote `2`,

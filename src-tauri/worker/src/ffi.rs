@@ -31,7 +31,7 @@ pub struct Se {
     /// Load a `.fe` datafile from a NUL-terminated path. On failure the engine
     /// state is unusable and the process should be discarded.
     pub load: unsafe extern "C" fn(*const u8) -> i32,
-    /// Run one NUL-terminated SE command. Blocks with no in-band cancel.
+    /// Run one NUL-terminated SE command. Blocks; SIGINT aborts an iteration.
     pub run: unsafe extern "C" fn(*const u8) -> i32,
 
     /// Total energy of the surface.

@@ -53,11 +53,11 @@ describe('CliPane', () => {
     expect(await screen.findByText('[error] interactive command needs a value')).toBeInTheDocument()
   })
 
-  it('clicking Stop while busy cancels the session and clears it', async () => {
+  it('when the interrupt fails, Stop kills the session and clears it', async () => {
     useStore.setState({ sessionId: 's1' })
     let resolveRun!: (v: RunCommandResponse) => void
     vi.mocked(runCommand).mockReturnValue(new Promise(r => { resolveRun = r }))
-    vi.mocked(cancelSession).mockResolvedValue(undefined)
+    vi.mocked(cancelSession).mockResolvedValue({ cancelled: true, interrupted: false })  // the kill fallback
 
     render(<CliPane />)
     const user = userEvent.setup()

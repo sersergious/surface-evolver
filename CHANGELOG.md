@@ -114,6 +114,12 @@ change, see `git log`.
   mounted, so it is never blank-but-dirty), facet colours survive switching
   render modes, wireframe is visible in the dark theme, the vertex count no
   longer includes unwrapped duplicates, and Stop no longer reports a crash.
+- Stop keeps your work: it interrupts the running command and keeps the
+  evolved surface, falling back to ending the engine only if it doesn't
+  respond. Along the way, replaced the engine's own SIGINT handler, which
+  jumped out of the signal handler whenever the engine wasn't iterating.
+- Save & Reload no longer rebuilds the editor, so undo history, the cursor
+  and the scroll position survive a save.
 - Dropped Windows. A Windows CI job showed the native installer crashing on
   every recoverable engine error, and no user runs Windows, so the app now
   ships for macOS and Linux only.

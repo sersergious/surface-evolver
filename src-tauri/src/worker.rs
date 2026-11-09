@@ -9,7 +9,8 @@ use serde_json::{json, Value};
 use std::io::{BufRead, BufReader, Write};
 use std::path::PathBuf;
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
-use std::sync::Mutex;
+use std::sync::{Mutex, TryLockError};
+use std::time::{Duration, Instant};
 
 pub struct WorkerIo {
     stdin: ChildStdin,
@@ -78,6 +79,45 @@ impl Manager {
             let _ = child.kill();
             let _ = child.wait(); // reap; blocked reader gets EOF and errors out
         }
+    }
+
+    /// Ask a running command to stop while keeping the surface (#35). SE's
+    /// SIGINT handler aborts the command ("ERROR 2073: Command aborted due
+    /// to user interrupt"), and the worker and its partly evolved surface
+    /// survive. Returns true once no request holds `io` (also when nothing
+    /// was running: an idle worker gets no signal), false if the command
+    /// did not stop within `grace`, so the caller can fall back to kill().
+    /// Like kill(), takes only `proc` and never waits on `io`.
+    ///
+    /// SE only honours SIGINT while it iterates: one that lands during a mesh
+    /// fetch is lost, and a `g` queued behind the fetch then runs on. So the
+    /// signal is re-sent every RESEND until the worker is idle. A stray one at
+    /// an idle worker is harmless (measured: the next command runs normally).
+    // ponytail: a new request that grabs `io` right after the interrupted
+    // one releases it reads as "still running" and ends in a kill; the UI
+    // blocks new commands while one runs, so this is not reachable from it.
+    pub fn interrupt(&self, grace: Duration) -> bool {
+        let idle = || !matches!(self.io.try_lock(), Err(TryLockError::WouldBlock));
+        if idle() {
+            return true;
+        }
+        let Some(pid) = lock(&self.proc).as_ref().map(|c| c.id()) else { return false };
+        extern "C" { fn kill(pid: i32, sig: i32) -> i32; }
+        const SIGINT: i32 = 2; // the same on macOS and Linux
+        const RESEND: Duration = Duration::from_millis(250);
+        let deadline = Instant::now() + grace;
+        let mut next_signal = Instant::now();
+        while Instant::now() < deadline {
+            if idle() {
+                return true;
+            }
+            if Instant::now() >= next_signal {
+                unsafe { kill(pid as i32, SIGINT) };
+                next_signal = Instant::now() + RESEND;
+            }
+            std::thread::sleep(Duration::from_millis(25));
+        }
+        false
     }
 
     /// Whether a worker process is alive (or at least not yet reaped). Takes

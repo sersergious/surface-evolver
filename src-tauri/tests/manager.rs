@@ -142,3 +142,69 @@ fn kill_unblocks_an_in_flight_request() {
     assert!(err.contains("crashed"), "got: {err}");
     assert!(mgr.request("s1", json!({ "cmd": "mesh" })).is_err(), "no session survives a kill");
 }
+
+#[test]
+fn interrupt_stops_a_running_command_and_keeps_the_session() {
+    if skip() { return }
+    // #35: SIGINT makes SE abort the command (ERROR 2073) and keep both the
+    // worker and the partly evolved surface. Stop used to kill the worker
+    // and throw that surface away.
+    let mgr = std::sync::Arc::new(Manager::default());
+    mgr.load_session("s1", &fe("cube.fe").to_string_lossy(), &worker_bin(), &lib_path())
+        .expect("load cube.fe");
+    mgr.request("s1", json!({ "cmd": "run", "command": "r; r; r; r" })).expect("refine");
+
+    let (tx, rx) = std::sync::mpsc::channel();
+    let m = mgr.clone();
+    std::thread::spawn(move || {
+        let _ = tx.send(m.request("s1", json!({ "cmd": "run", "command": "g 200000" })));
+    });
+    std::thread::sleep(std::time::Duration::from_millis(800));
+
+    assert!(mgr.interrupt(std::time::Duration::from_secs(5)), "the command did not stop on SIGINT");
+    let res = rx.recv_timeout(std::time::Duration::from_secs(5)).expect("request still blocked");
+    let err = res.expect_err("an interrupted command reports the abort");
+    assert!(err.contains("2073"), "got: {err}");
+
+    // Same worker, same session, and the surface kept what it had evolved.
+    let after = mgr.request("s1", json!({ "cmd": "run", "command": "" })).expect("session survives");
+    assert!(after["energy"].as_f64().unwrap() < 6.0, "surface was reset: {after}");
+}
+
+#[test]
+fn interrupt_with_nothing_running_is_a_no_op() {
+    if skip() { return }
+    let mgr = Manager::default();
+    mgr.load_session("s1", &fe("cube.fe").to_string_lossy(), &worker_bin(), &lib_path())
+        .expect("load cube.fe");
+    assert!(mgr.interrupt(std::time::Duration::from_secs(1)));
+    // No stray SIGINT reached the idle engine to abort this.
+    let r = mgr.request("s1", json!({ "cmd": "run", "command": "g 2" })).expect("next command runs");
+    assert_eq!(r["ok"], true);
+}
+
+#[test]
+fn interrupt_reaches_a_command_queued_behind_a_slow_mesh_fetch() {
+    if skip() { return }
+    // Found by the real-app smoke test: SE only honours SIGINT while it
+    // iterates. Stop pressed during a long mesh fetch (refined foam, ~1 s)
+    // lost its one SIGINT, the queued `g` then ran on, and Stop killed the
+    // worker. The interrupt has to keep trying until the worker is idle.
+    let mgr = std::sync::Arc::new(Manager::default());
+    mgr.load_session("s1", &fe("phelanc.fe").to_string_lossy(), &worker_bin(), &lib_path())
+        .expect("load phelanc.fe");
+    mgr.request("s1", json!({ "cmd": "run", "command": "r; r; r; r" })).expect("refine");
+
+    let (tx, rx) = std::sync::mpsc::channel();
+    let m = mgr.clone();
+    std::thread::spawn(move || {
+        let _ = m.request("s1", json!({ "cmd": "mesh", "colors": true }));  // ~1 s, not interruptible
+        let _ = tx.send(m.request("s1", json!({ "cmd": "run", "command": "g 200000" })));
+    });
+    std::thread::sleep(std::time::Duration::from_millis(300));   // inside the mesh fetch
+
+    assert!(mgr.interrupt(std::time::Duration::from_secs(10)), "the queued command was never stopped");
+    let res = rx.recv_timeout(std::time::Duration::from_secs(5)).expect("g still running");
+    assert!(res.expect_err("g reports the abort").contains("2073"));
+    mgr.request("s1", json!({ "cmd": "run", "command": "" })).expect("session survives");
+}

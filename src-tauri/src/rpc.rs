@@ -257,6 +257,12 @@ pub async fn rpc<R: Runtime>(app: AppHandle<R>, method: String, params: Value) -
     .map_err(|e| e.to_string())?
 }
 
+/// How long Stop keeps interrupting before it kills the worker. An iterating
+/// `g` stops within one SIGINT; the time goes on a mesh fetch the command may
+/// be queued behind, which SIGINT can't stop (measured ~0.9 s per 42k
+/// vertices, linear: 10 s covers ~400k).
+const CANCEL_GRACE: std::time::Duration = std::time::Duration::from_secs(10);
+
 /// Prefix of every error that means "the session is gone" — the frontend
 /// clears its session on it (ui/src/api/client.ts). Keep the two in step.
 pub const SESSION_ENDED: &str = "Session ended:";
@@ -329,16 +335,20 @@ fn dispatch<R: Runtime>(app: &AppHandle<R>, method: &str, params: Value) -> Resu
             Ok(session)
         }
 
-        // The only cancel there is: se_run is a blocking FFI call, so a running
-        // command can't be interrupted in band — kill() takes only the `proc`
-        // mutex, so it works while the command still holds `io`, and the blocked
-        // read then errors out. The in-memory surface goes with it, but the last
-        // snapshot survives, so getRestore can bring it back.
-        // ponytail: kill is the ceiling — SIGINT aborts g N in-band and keeps the surface (issue #35).
+        // Stop. SIGINT first (#35): SE aborts the running command and keeps
+        // the worker and its partly evolved surface, so the session survives
+        // and the command's own reply reports the abort. Only if the command
+        // ignores it for CANCEL_GRACE (an engine blocked somewhere SIGINT
+        // can't reach) does Stop fall back to kill(): that loses the
+        // in-memory surface, but the last snapshot survives for getRestore.
+        // Both take only the `proc` mutex, so they work while `io` is held.
         "cancel" => {
+            if state.manager.interrupt(CANCEL_GRACE) && state.manager.has_worker() {
+                return Ok(json!({ "cancelled": true, "interrupted": true }));
+            }
             state.manager.kill();
             *lock(&state.session) = None;
-            Ok(json!({ "cancelled": true }))
+            Ok(json!({ "cancelled": true, "interrupted": false }))
         }
 
         "uploadFile" => {
@@ -427,8 +437,9 @@ fn dispatch<R: Runtime>(app: &AppHandle<R>, method: &str, params: Value) -> Resu
 
         "runCommand" => {
             let (sid, _) = get_session(&state, &params)?;
-            let command = params["command"].as_str().filter(|c| !c.is_empty())
-                .ok_or("command is required")?;
+            // Empty is valid: nothing runs and the reply reports the current
+            // energy/area (the UI's refresh after an interrupted Stop).
+            let command = params["command"].as_str().ok_or("command is required")?;
             let result = state.manager
                 .request(&sid, json!({ "cmd": "run", "command": command }))
                 ?;

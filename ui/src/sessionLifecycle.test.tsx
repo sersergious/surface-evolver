@@ -154,3 +154,62 @@ describe('Stop', () => {
     expect(useStore.getState().outputLog.some(l => l.includes('crashed'))).toBe(false)
   })
 })
+
+describe('Stop with an interrupt (#35)', () => {
+  it('keeps the session and the evolved surface, and refreshes the stats', async () => {
+    useStore.setState({ openFiles: ['cube.fe'], activeFile: 'cube.fe', sessionId: 's1', energy: 6 })
+    let failRun!: (e: unknown) => void
+    const runs: string[] = []
+    ipc.mockImplementation((cmd, args) => {
+      const { method, params } = (args ?? {}) as { method?: string; params?: { command?: string } }
+      if (cmd !== 'rpc') return null
+      if (method === 'runCommand') {
+        runs.push(params?.command ?? '')
+        if (params?.command === 'g 200000') return new Promise((_, reject) => { failRun = reject })
+        return { output: '', energy: 4.88, area: 4.88 }      // the surface as interrupted
+      }
+      if (method === 'cancel') {
+        failRun('ERROR 2073: Command aborted due to user interrupt.')
+        return { cancelled: true, interrupted: true }
+      }
+      return null
+    })
+    render(<CliPane />)
+    const user = userEvent.setup()
+    await user.type(screen.getByPlaceholderText('SE command…'), 'g 200000{Enter}')
+    await user.click(await screen.findByRole('button', { name: 'Stop' }))
+
+    await waitFor(() => expect(useStore.getState().energy).toBe(4.88))
+    expect(useStore.getState().sessionId).toBe('s1')
+    const log = useStore.getState().outputLog
+    expect(log.some(l => l.includes('[stopped]') && l.includes('kept'))).toBe(true)
+    expect(log.some(l => l.startsWith('[error]'))).toBe(false)
+    expect(runs).toContain('')                               // stats refreshed from the engine
+  })
+})
+
+describe('Save & Reload keeps the editing session (#23)', () => {
+  it('undo still works after a successful save, and the text stays put', async () => {
+    useStore.setState({ openFiles: ['cube.fe'], activeFile: 'cube.fe', sessionId: 's1', fileContent: 'vertices' })
+    answerRpc({
+      updateFile: { filename: 'cube.fe', size_bytes: 9 },
+      createSession: { session_id: 's2', fe_file: 'cube.fe', energy: 1, area: 1, lagrange_order: 1 },
+    })
+    render(<EditorPane />)
+    const user = userEvent.setup()
+    const editable = document.querySelector('.cm-content') as HTMLElement
+    editable.focus()
+    await user.type(editable, 'Z')
+    const edited = editorText()
+    expect(edited).toMatch(/Z/)
+
+    await user.click(screen.getByRole('button', { name: /Save & Reload/ }))
+    await waitFor(() => expect(useStore.getState().sessionId).toBe('s2'))
+    expect(editorText()).toBe(edited)
+
+    // The view was not rebuilt, so the edit is still in its undo history.
+    editable.focus()
+    await user.keyboard('{Control>}z{/Control}')
+    expect(editorText()).toBe('vertices')
+  })
+})

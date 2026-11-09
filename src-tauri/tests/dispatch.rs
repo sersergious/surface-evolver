@@ -108,12 +108,12 @@ fn full_session_lifecycle_round_trips_through_the_app_layer() {
     let fe_export = t.call("exportFe", json!({ "sessionId": sid })).expect("exportFe");
     assert!(fe_export["filename"].as_str().unwrap().ends_with(".fe"));
 
+    // Nothing is running, so Stop has nothing to interrupt: a no-op that
+    // keeps the session (it used to kill it; see #35).
     let cancelled = t.call("cancel", Value::Null).expect("cancel");
     assert_eq!(cancelled["cancelled"], true);
-
-    // The session is gone — old id must not still work.
-    let err = t.call("getMesh", json!({ "sessionId": sid })).unwrap_err();
-    assert!(!err.is_empty());
+    assert_eq!(cancelled["interrupted"], true);
+    t.call("getMesh", json!({ "sessionId": sid })).expect("the session survives an idle Stop");
 }
 
 #[test]
@@ -245,6 +245,50 @@ fn read_file_returns_datafile_text_without_a_session() {
     // Directory components are stripped, like every other filename param.
     let err = t.call("readFile", json!({ "filename": "../../etc/does_not_exist.fe" })).unwrap_err();
     assert!(err.contains("File not found"), "got: {err}");
+}
+
+#[test]
+fn cancel_interrupts_a_running_command_and_keeps_the_session() {
+    if skip() { return }
+    // #35 through the app layer: Stop sends SIGINT first, so the session
+    // and its evolved surface survive; kill is only the fallback.
+    let t = TestApp::new("cancel-interrupt");
+    let s = t.call("createSession", json!({ "fe_file": "cube.fe" })).expect("createSession");
+    let sid = s["session_id"].as_str().unwrap().to_string();
+    t.call("runCommand", json!({ "sessionId": sid, "command": "r; r; r; r" })).expect("refine");
+
+    let handle = t.app.handle().clone();
+    let (sid2, (tx, rx)) = (sid.clone(), std::sync::mpsc::channel());
+    std::thread::spawn(move || {
+        let r = tauri::async_runtime::block_on(rpc::rpc(handle, "runCommand".into(),
+            json!({ "sessionId": sid2, "command": "g 200000" })));
+        let _ = tx.send(r);
+    });
+    std::thread::sleep(std::time::Duration::from_millis(800));
+
+    let cancelled = t.call("cancel", Value::Null).expect("cancel");
+    assert_eq!(cancelled["interrupted"], true, "got: {cancelled}");
+    let run = rx.recv_timeout(std::time::Duration::from_secs(5)).expect("run still blocked");
+    let err = run.expect_err("the interrupted command reports the abort");
+    assert!(!err.starts_with("Session ended:"), "an interrupt must not end the session: {err}");
+
+    let mesh = t.call("getMesh", json!({ "sessionId": sid })).expect("same session still works");
+    assert_eq!(mesh["ok"], true);
+}
+
+#[test]
+fn an_empty_command_reports_the_current_stats() {
+    if skip() { return }
+    // After an interrupted Stop the UI refreshes energy/area with an empty
+    // command (nothing to run, so it succeeds and reports the surface as it
+    // stands). Only a missing `command` is an error.
+    let t = TestApp::new("empty-command");
+    let s = t.call("createSession", json!({ "fe_file": "cube.fe" })).expect("createSession");
+    let sid = s["session_id"].as_str().unwrap().to_string();
+    let r = t.call("runCommand", json!({ "sessionId": sid, "command": "" })).expect("empty command");
+    assert_eq!(r["energy"].as_f64(), Some(6.0));
+    let err = t.call("runCommand", json!({ "sessionId": sid })).unwrap_err();
+    assert!(err.contains("command is required"), "got: {err}");
 }
 
 fn base64_encode(bytes: &[u8]) -> String {

@@ -19,32 +19,37 @@ export default function EditorPane() {
   const [saving,    setSaving]    = useState(false)
   const [exporting, setExporting] = useState<'dmp' | 'fe' | null>(null)
 
+  // One CodeMirror view for the pane's lifetime. It used to be rebuilt on every
+  // fileContent change (the effect's cleanup destroyed it first), so a
+  // successful Save & Reload reset the cursor and scroll and dropped undo
+  // history (#23).
+  const extensionsRef = useRef([
+    lineNumbers(), drawSelection(), history(), indentOnInput(), bracketMatching(),
+    keymap.of([...defaultKeymap, ...historyKeymap, indentWithTab]),
+    feLanguage, seTheme,
+    EditorView.updateListener.of(u => { if (u.docChanged) setDirty(true) }),
+  ])
+
   useEffect(() => {
     if (!editorRef.current) return
-
-    const extensions = [
-      lineNumbers(), drawSelection(), history(), indentOnInput(), bracketMatching(),
-      keymap.of([...defaultKeymap, ...historyKeymap, indentWithTab]),
-      feLanguage, seTheme,
-      EditorView.updateListener.of(u => { if (u.docChanged) setDirty(true) }),
-    ]
-
-    if (viewRef.current) {
-      const newDoc = fileContent ?? ''
-      const cur    = viewRef.current.state.doc.toString()
-      if (newDoc !== cur) {
-        viewRef.current.dispatch({ changes: { from: 0, to: cur.length, insert: newDoc } })
-        setDirty(false)
-      }
-      return
-    }
-
     viewRef.current = new EditorView({
-      state: EditorState.create({ doc: fileContent ?? '', extensions }),
+      state: EditorState.create({ doc: useStore.getState().fileContent ?? '', extensions: extensionsRef.current }),
       parent: editorRef.current,
     })
-    setDirty(false)
     return () => { viewRef.current?.destroy(); viewRef.current = null }
+  }, [])
+
+  // Text from outside: a load, a restore, a file switch. Identical text (what a
+  // save writes back) is left alone, keeping history and cursor. Different
+  // text gets a fresh state, so undo can't step back into another file.
+  useEffect(() => {
+    const view = viewRef.current
+    if (!view) return
+    const next = fileContent ?? ''
+    if (next !== view.state.doc.toString()) {
+      view.setState(EditorState.create({ doc: next, extensions: extensionsRef.current }))
+    }
+    setDirty(false)
   }, [fileContent])
 
   const handleSave = useCallback(async () => {

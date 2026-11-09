@@ -41,8 +41,10 @@ int se_load(const char *filename);
 /* ── command execution ────────────────────────────────────────────────── */
 
 /* Execute a single SE language command (e.g. "g", "r", "u 3").
- * Blocking, and uninterruptible from outside: there is no in-band cancel, so a
- * caller that needs to abort a long evolution must kill the process.
+ * Blocking. To stop a long evolution, send the process SIGINT: during an
+ * iteration it aborts the command (ERROR 2073) and keeps the surface; at any
+ * other moment it is ignored (se_init installs that handler). Only a command
+ * stuck somewhere SIGINT can't reach needs the process killed.
  * Output is captured; retrieve it with se_pop_output().
  * A RECOVERABLE engine error is caught here (the capture streams are torn down
  * by the engine's bailout path and reopened before returning), and its text is

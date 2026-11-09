@@ -16,6 +16,8 @@
 #include "se_api.h"
 
 #include <unistd.h>   /* getcwd */
+#include <signal.h>
+#include <pthread.h>
 
 /* ── Minimal harness ────────────────────────────────────────────────────── */
 
@@ -448,6 +450,44 @@ static void test_edge_wraps(void)
     CHECK(se_get_edge_wraps(NULL, 10) == -1);
 }
 
+/* #35: Stop sends SIGINT. SE's own handler longjmps out of the signal
+ * handler (kb_error RECOVERABLE_QUIET) whenever the engine isn't iterating,
+ * into a jump buffer whose frame is gone: undefined behaviour. The facade's
+ * handler must make a SIGINT outside an iteration a no-op, and one during an
+ * iteration a clean abort (ERROR 2073), with the engine usable after both. */
+static void *send_sigint_later(void *arg)
+{
+    (void)arg;
+    usleep(300 * 1000);
+    kill(getpid(), SIGINT);
+    return NULL;
+}
+
+static void test_sigint(void)
+{
+    SECTION("SIGINT (Stop)");
+    CHECK(se_load(FE_CUBE) == 0);
+    drain();
+
+    raise(SIGINT);                       /* idle: nothing to interrupt */
+    CHECK(se_run("print 7777") == 0);
+    char buf[256] = {0};
+    se_pop_output(buf, sizeof(buf));
+    CHECK(strstr(buf, "7777") != NULL);
+
+    CHECK(se_run("r; r; r") == 0);
+    drain();
+    pthread_t t;
+    pthread_create(&t, NULL, send_sigint_later, NULL);
+    int rc = se_run("g 200000");         /* minutes, unless interrupted */
+    pthread_join(t, NULL);
+    CHECK(rc != 0);
+    CHECK(strstr(se_last_error(), "2073") != NULL);
+    drain();
+    CHECK(se_run("print 8888") == 0);    /* still usable */
+    drain();
+}
+
 /* ── main ───────────────────────────────────────────────────────────────── */
 
 int main(void)
@@ -483,6 +523,7 @@ int main(void)
     test_topo_and_params();   /* mutates the mesh (refine) */
     test_element_colors();
     test_edge_wraps();
+    test_sigint();
 
     printf("\n=================================\n");
     printf("Results: %d/%d passed\n", g_run - g_failed, g_run);

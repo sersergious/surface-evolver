@@ -24,7 +24,7 @@ Everything below is what the **desktop app** adds. The original engine's full co
 - **Syntax-highlighted datafile editor** with Save & Reload, so you edit geometry and reload it in one click without leaving the app.
 - **Click-to-inspect vertices**: click any vertex for its id, coordinates, constraints and attribute flags, plus body center-of-mass markers. In the original this is a `print` statement and a wall of numbers.
 - **Topology operations from the Run menu** with structured feedback: refine, equiangulate, vertex-average and pop, each reporting element deltas, named topology counters (pops, edgeswaps, dissolves) and ΔE — where the engine prints raw text you have to read.
-- **A Stop button**: cancelling a long command kills the worker process, so the app and the tab stay open. The in-memory surface goes with it; the last auto-snapshot is on disk and comes back on the next launch, as long as you don't reopen the file first ([#22](../../issues/22)).
+- **A Stop button that keeps your work**: Stop interrupts a long `g N` mid-run and keeps the surface as far as it evolved. Only if the engine doesn't respond does Stop end the worker process; the app and the tab stay open either way ([#35](../../issues/35)).
 - **Crash isolation**: the engine runs in a separate process. An engine segfault or an `exit()` on an unrecoverable error costs you a session, not the application.
 - **Session auto-restore**: the surface is snapshotted in the background after every mutating command, so your *evolved* state — not the original datafile — comes back when you relaunch the app.
 - **Bundled datafile library**: 20 curated examples, all of which load and mesh (checked in CI), loadable in one click, plus upload of your own `.fe` files.
@@ -88,10 +88,10 @@ Run from the repository root, after `bun run dev` or `bun run build` has built t
 
 ```bash
 export SE_LIB_PATH=$PWD/cmake-build-release/libse.dylib    # .so on Linux
-ctest --test-dir cmake-build-release --output-on-failure   # C API suite, 81 checks
+ctest --test-dir cmake-build-release --output-on-failure   # C API suite, 88 checks
 (cd src-tauri/worker && cargo test)                        # FFI guard + smoke + fixtures, 14 tests
-(cd src-tauri && cargo test)                               # rpc.rs unit + integration tests, 26 tests
-(cd ui && bun run lint && bunx tsc --noEmit && bun run test)  # lint, types, 65 tests
+(cd src-tauri && cargo test)                               # rpc.rs unit + integration tests, 31 tests
+(cd ui && bun run lint && bunx tsc --noEmit && bun run test)  # lint, types, 67 tests
 ```
 
 Without `SE_LIB_PATH`, the worker and app integration tests print "skipping" and still count as passed locally. In CI (`CI` set) they fail instead, so a misconfigured run can't pass silently.
@@ -101,7 +101,7 @@ Without `SE_LIB_PATH`, the worker and app integration tests print "skipping" and
 **Challenge — Driving a 1990s C engine that was never designed to be embedded.**
 Surface Evolver assumes it *is* the process: its globals cannot be initialised twice, unrecoverable errors call `exit()`, it installs process-wide signal handlers, and a failed file open can drop into an interactive stdin prompt. Every one of those is fatal inside a GUI application.
 
-**Solution** — Rather than fight the constraint, I made it the architecture: one engine instance per process, in a throwaway sidecar the backend spawns and kills. Loading a new file kills the old worker. That turned a liability into three features for free — crash isolation, cancel-by-kill, and a guaranteed-clean engine state on every load. I also kept the engine source pristine and put all coupling in a single C facade, which paid off directly: re-forking the engine from upstream later broke only three files.
+**Solution** — Rather than fight the constraint, I made it the architecture: one engine instance per process, in a throwaway sidecar the backend spawns and kills. Loading a new file kills the old worker. That turned a liability into three features for free — crash isolation, a kill switch behind Stop, and a guaranteed-clean engine state on every load. I also kept the engine source pristine and put all coupling in a single C facade, which paid off directly: re-forking the engine from upstream later broke only three files.
 
 **Challenge — FFI, where a mistake is undefined behavior rather than an error.**
 Calling C from a managed runtime means hand-writing signatures the compiler cannot check, and passing raw buffers into code that trusts you about their size. For instance, a variable stride where the implementation always wrote three doubles — sizing a buffer from it would have silently overflowed the heap on 2-D models.
@@ -116,7 +116,7 @@ The UI is TypeScript in a webview, the backend is Rust, the engine is C in a *di
 **Challenge — Owning the whole stack**
 Full-stack here spans four languages and a rendering pipeline, and the interesting bugs live *between* the layers — a race between session restore and a user-initiated load, a persistence call blocking the command path, a build script using a shell builtin that does not exist on Windows.
 
-**Solution** — Put a test on every seam, then reduce the number of seams. The C facade carries its own suite (81 checks), the FFI boundary has the signature guard described above, and the worker protocol is exercised by tests that drive the real binary over stdin the way the backend does. When I replaced the sidecar wholesale, I kept the old implementation building alongside the new one and diffed their parsed responses command by command instead of trusting the rewrite.
+**Solution** — Put a test on every seam, then reduce the number of seams. The C facade carries its own suite (88 checks), the FFI boundary has the signature guard described above, and the worker protocol is exercised by tests that drive the real binary over stdin the way the backend does. When I replaced the sidecar wholesale, I kept the old implementation building alongside the new one and diffed their parsed responses command by command instead of trusting the rewrite.
 
 The other half was refusing to grow. The C facade went from 49 exports to 28 (29 today, with the periodic-facet accessor) and the worker from 10 commands to 6, because anything already reachable through the engine's own command language did not need a second structured path to keep correct. Narrowing the models the app *claims* to support — rejecting the two it could never draw honestly — took the bundled library from 17 of 27 datafiles rendering to 20 of 20 loading and meshing. Less surface, fewer places for the layers to disagree.
 
