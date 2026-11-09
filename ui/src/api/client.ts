@@ -14,7 +14,11 @@ export function rpc<T>(method: string, params?: unknown): Promise<T> {
     const err = toError(e)
     // No worker survived (failed reload, crash): the backend has already
     // dropped the session, so drop ours too, keeping the tab to reopen (#16).
-    if (err.message.startsWith(SESSION_ENDED)) useStore.getState().clearSession()
+    // The prefix is a signal between rpc.rs and here, not text for the user.
+    if (err.message.startsWith(SESSION_ENDED)) {
+      useStore.getState().clearSession()
+      throw new Error(err.message.slice(SESSION_ENDED.length).trimStart())
+    }
     throw err
   })
 }

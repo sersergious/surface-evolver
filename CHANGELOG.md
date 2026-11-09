@@ -109,6 +109,11 @@ change, see `git log`.
 - Fixed CI after GitHub moved its runners (GCC 15, the macos-14 retirement);
   pinned runner images and bun, added ESLint, and upgraded the test and build
   tooling.
+- Smoke-tested the real app and fixed what it found: a bad Save & Reload no
+  longer locks you out of the file (the editor reads it from disk and stays
+  mounted, so it is never blank-but-dirty), facet colours survive switching
+  render modes, wireframe is visible in the dark theme, the vertex count no
+  longer includes unwrapped duplicates, and Stop no longer reports a crash.
 - Dropped Windows. A Windows CI job showed the native installer crashing on
   every recoverable engine error, and no user runs Windows, so the app now
   ships for macOS and Linux only.

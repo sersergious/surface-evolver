@@ -91,6 +91,14 @@ describe('ViewerPane', () => {
     expect(await screen.findByText('Click a vertex to inspect')).toBeInTheDocument()
   })
 
+  it('the vertex count is the engine\'s, not the unwrapped duplicates (#17)', async () => {
+    useStore.setState({ sessionId: 's1' })
+    // 3 engine vertices plus 1 appended copy for an unwrapped periodic facet.
+    vi.mocked(getMesh).mockResolvedValue({ ...mesh, vertices: [...mesh.vertices, [2, 0, 0]], unwrap_source: [1] })
+    render(<ViewerPane />)
+    expect(await screen.findByText(/3 v · 3 e · 1 f/)).toBeInTheDocument()
+  })
+
   it('picking an unwrapped duplicate of a periodic vertex inspects the engine vertex it copies (#17)', async () => {
     useStore.setState({ sessionId: 's1' })
     // Index 3 is the worker's appended copy of engine vertex 1, shifted by a period.

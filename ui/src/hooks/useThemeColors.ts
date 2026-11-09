@@ -4,7 +4,8 @@ import * as THREE from 'three'
 export interface ThemeColors {
   surface:  THREE.Color   // default surface fill (theme --mesh)
   specular: THREE.Color   // phong highlight
-  line:     THREE.Color   // edges / wireframe (theme --mesh-edge)
+  line:     THREE.Color   // edge overlay, drawn on facets (theme --mesh-edge)
+  wire:     THREE.Color   // wireframe, drawn on the background (base-content)
 }
 
 // Normalise any computed CSS colour (rgb, oklch, color() …) to a THREE.Color
@@ -37,6 +38,10 @@ function read(): ThemeColors {
     surface,
     specular: surface.clone().lerp(new THREE.Color('#ffffff'), 0.6),
     line:     varColor('--mesh-edge', '#0a0a0a'),
+    // Wireframe has no facets behind it, so a near-black edge colour vanished
+    // on the dark theme's near-black background. The theme foreground (--bc,
+    // daisyUI's base-content) contrasts with the background in both themes.
+    wire:     varColor('--bc', '#737373'),
   }
 }
 

@@ -379,6 +379,18 @@ fn dispatch<R: Runtime>(app: &AppHandle<R>, method: &str, params: Value) -> Resu
             Ok(json!({ "filename": sanitize(fe), "content": content }))
         }
 
+        // The datafile's text, resolved like createSession (a user copy wins
+        // over the bundled file). Needs no session: a file that fails to load
+        // must still reach the editor, or a broken Save & Reload can never be
+        // fixed in the app.
+        "readFile" => {
+            let fe_file = params["filename"].as_str().ok_or("filename is required")?;
+            let path = resolve_fe_path(app, fe_file);
+            let content = fs::read_to_string(&path)
+                .map_err(|_| format!("File not found: {}", sanitize(fe_file)))?;
+            Ok(json!({ "filename": sanitize(fe_file), "content": content }))
+        }
+
         "updateFile" => {
             let filename = params["filename"].as_str().ok_or("filename and content are required")?;
             let content = params["content"].as_str().ok_or("filename and content are required")?;

@@ -38,7 +38,7 @@ answer to *"how do we not own 190K lines of 1990s C"*.
 ```mermaid
 flowchart TB
     UI["React + Vite — ui/src/<br/>4 panes, Zustand store"]
-    RPC["rpc.rs — API layer<br/>one Tauri command, 13 methods"]
+    RPC["rpc.rs — API layer<br/>one Tauri command, 14 methods"]
     MGR["worker.rs::Manager — Tauri services<br/>process lifecycle, io/proc mutexes"]
     WRK["se-worker sidecar — src-tauri/worker/<br/>separate Cargo crate, 6 commands"]
     FACADE["se_api.c facade — engine/bindings/c/<br/>29 exports, ours"]
@@ -75,7 +75,7 @@ re-dispatched as a DOM `CustomEvent` and routed by `useMenuAction`.
 ### API layer — `src-tauri/src/rpc.rs`
 
 The entire contract the frontend depends on: one `#[tauri::command] rpc()`
-dispatching on a `method` string over 13 methods (session lifecycle, file
+dispatching on a `method` string over 14 methods (session lifecycle, file
 management, export, simulation). Holds `AppState` — a `Manager` plus
 `Mutex<Option<Value>>` for the single live session (deliberately not a map:
 `Manager` only ever runs one worker, so a map would only accumulate ids
@@ -276,10 +276,10 @@ flowchart TB
     end
     subgraph App["Tauri app crate"]
         AU["rpc.rs unit tests — 10<br/>pure helpers: sanitize, session bookkeeping"]
-        AI["tests/{dispatch,manager}.rs — 15<br/>real worker + real libse"]
+        AI["tests/{dispatch,manager}.rs — 16<br/>real worker + real libse"]
     end
     subgraph FE["Frontend"]
-        FT["ESLint + Vitest + Testing Library<br/>60 tests / 11 files"]
+        FT["ESLint + Vitest + Testing Library<br/>65 tests / 11 files"]
     end
     CT --> WF --> AU --> FT
 ```
@@ -299,7 +299,7 @@ flowchart LR
     subgraph CI["ci.yml — push / PR to main"]
         direction TB
         C1["c-tests<br/>macos-26 + ubuntu-26.04<br/>ctest"]
-        C2["backend-tests<br/>cargo check + cargo test<br/>worker (14) + app (25),<br/>against the release worker"]
+        C2["backend-tests<br/>cargo check + cargo test<br/>worker (14) + app (26),<br/>against the release worker"]
         C3["frontend-tests<br/>lint + tsc --noEmit + bun run test (60)<br/>+ production build"]
     end
     subgraph BUILD["build.yml — workflow_run after a green push to main"]
@@ -416,7 +416,7 @@ test-suite work, which added coverage without touching any of these:
   `FileBrowserModal`, `FilePane`, `CliPane`, `EditorPane`, `ViewerPane`,
   `useMesh`) destructure the entire Zustand store with zero selectors — any
   single `appendLog` line re-renders all of them.
-- **`dispatch()` is one 13-arm match, ~180 lines**, with `get_session` /
+- **`dispatch()` is one 14-arm match, ~180 lines**, with `get_session` /
   `update_session` / `persist` called from 6 / 2 / 3 sites in it respectively.
   Fine at this size; will need restructuring if the method count grows
   further.

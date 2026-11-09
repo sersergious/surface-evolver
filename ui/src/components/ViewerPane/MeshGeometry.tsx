@@ -171,7 +171,7 @@ export default function MeshGeometry({ mesh, mode, elementColors, themeColors }:
   if (mode === 'wireframe') {
     return (
       <mesh geometry={geometry}>
-        <meshBasicMaterial color={themeColors.line} wireframe side={THREE.DoubleSide} />
+        <meshBasicMaterial color={themeColors.wire} wireframe side={THREE.DoubleSide} />
       </mesh>
     )
   }
@@ -180,6 +180,7 @@ export default function MeshGeometry({ mesh, mode, elementColors, themeColors }:
     return (
       <mesh geometry={geometry}>
         <meshPhongMaterial
+          key="xray"
           color={themeColors.surface}
           specular={themeColors.specular}
           shininess={40}
@@ -194,9 +195,14 @@ export default function MeshGeometry({ mesh, mode, elementColors, themeColors }:
   }
 
   // solid — per-element SE colours when present, else the theme surface.
+  // Keyed per mode and colour state: X-ray and solid sit at the same place in
+  // the tree, so React reused one material, and three.js only applies a
+  // vertexColors change on a shader recompile, which never happened. The
+  // facets stayed grey after a trip through X-ray. A new key, a new material.
   return (
     <mesh geometry={geometry}>
       <meshPhongMaterial
+        key={useElementColors ? 'solid-element' : 'solid-theme'}
         color={useElementColors ? '#ffffff' : themeColors.surface}
         specular={useElementColors ? '#555555' : themeColors.specular}
         shininess={useElementColors ? 25 : 40}

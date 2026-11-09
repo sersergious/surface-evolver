@@ -50,24 +50,26 @@ export default function EditorPane() {
   const handleSave = useCallback(async () => {
     // Clean buffer: nothing to save, and reloading would discard the evolved
     // surface (#15). The button is disabled too; this also covers ⌘S.
-    if (!activeFile || !sessionId || saving || !dirty) return
+    // No session needed: a file that failed to load is fixed exactly this way.
+    if (!activeFile || saving || !dirty) return
     const content = viewRef.current?.state.doc.toString() ?? ''
     setSaving(true)
     try {
       await updateFile(activeFile, content)
+      // On disk now, whatever the reload does next.
+      setFileContent(content)
+      setDirty(false)
       appendLog(`Saved ${activeFile} — reloading…`)
       const session = await createSession(activeFile)
       setSession(session.session_id, activeFile)
       setStats(session.energy, session.area)
-      setFileContent(content)
-      setDirty(false)
       appendLog(`Reloaded ${activeFile} — session ${session.session_id.slice(0, 8)}`)
       const warn = lagrangeWarning(activeFile, session)
       if (warn) appendLog(warn)
     } catch (err: unknown) {
       appendLog(`[error] Save failed: ${err instanceof Error ? err.message : String(err)}`)
     } finally { setSaving(false) }
-  }, [activeFile, sessionId, saving, dirty, appendLog, setSession, setStats, setFileContent])
+  }, [activeFile, saving, dirty, appendLog, setSession, setStats, setFileContent])
 
   const handleDownload = useCallback(async (type: 'fe' | 'dmp') => {
     if (!sessionId || exporting) return
@@ -103,7 +105,7 @@ export default function EditorPane() {
         <button
           className="btn btn-xs btn-ghost normal-case"
           onClick={handleSave}
-          disabled={noSession || !dirty || saving}
+          disabled={!activeFile || !dirty || saving}
           title={`Save & Reload (${navigator.platform.includes('Mac') ? '⌘' : 'Ctrl+'}S)`}
         >
           {saving ? <span className="loading loading-xs loading-spinner" /> : null}
@@ -130,13 +132,15 @@ export default function EditorPane() {
         </button>
       </div>
 
-      {noSession ? (
+      {/* The editor stays mounted: unmounting it on every session change left
+          CodeMirror attached to a detached node, so the pane came back blank
+          while still marked dirty. Hidden, not removed, when no file is open. */}
+      {!activeFile && (
         <div className="flex-1 flex items-center justify-center text-sm text-base-content/30 select-none">
           Load a .fe file to edit
         </div>
-      ) : (
-        <div ref={editorRef} className="flex-1 min-h-0 overflow-hidden" />
       )}
+      <div ref={editorRef} className={activeFile ? 'flex-1 min-h-0 overflow-hidden' : 'hidden'} />
     </div>
   )
 }

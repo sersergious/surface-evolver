@@ -62,19 +62,19 @@ export SE_LIB_PATH=$PWD/cmake-build-release/libse.dylib
 
 # Rust app. `cargo check` is the fast gate; `cargo test` additionally runs
 # rpc.rs's own unit tests plus src-tauri/tests/{dispatch,manager}.rs, which
-# drive a real se-worker/libse through the app layer (25 tests total) — set
+# drive a real se-worker/libse through the app layer (26 tests total) — set
 # SE_LIB_PATH and either build the worker first or set SE_WORKER_PATH, or
 # those two integration-test binaries skip themselves rather than fail.
-(cd src-tauri && cargo check && cargo test)                         # 25 tests
+(cd src-tauri && cargo check && cargo test)                         # 26 tests
 
 # Frontend: ESLint (typescript-eslint + the two classic react-hooks rules;
 # warnings fail), type-check, then a real Vitest suite (jsdom + Testing
-# Library): 60 tests across 11 files covering the RPC client, API wrapper
+# Library): 65 tests across 11 files covering the RPC client, API wrapper
 # contracts, the components and file browser, the store, the menu-action hook,
 # the native menu routes and the session lifecycle. Tauri IPC is faked once per
 # file by Tauri's own mockIPC (ui/src/test/ipc.ts), so tests assert what
 # crosses the IPC boundary. All of it runs in CI.
-(cd ui && bun run lint && bunx tsc --noEmit && bun run test)        # 60 tests
+(cd ui && bun run lint && bunx tsc --noEmit && bun run test)        # 65 tests
 ```
 
 Locally, a skipped integration test prints `SE_LIB_PATH unset — skipping …` and
@@ -116,7 +116,7 @@ engine-level bug without going through the UI.
 
 ```
 React + Vite (ui/)
-       ↕ invoke("rpc", { method, params })   ← ONE Tauri command, 13 methods
+       ↕ invoke("rpc", { method, params })   ← ONE Tauri command, 14 methods
 src-tauri/src/rpc.rs           ← dispatch: sessions, files, persistence
 src-tauri/src/worker.rs        ← worker lifecycle + two mutexes
        ↕ line-delimited JSON on stdin/stdout (spawns a sidecar process)
@@ -139,8 +139,10 @@ a private dup of the pipe and points fd 1 at stderr, so engine `printf`s (e.g.
 `Session ended:` by `rpc.rs` (see Landmine 1).
 
 **RPC methods** (`rpc.rs`): `getRestore` `listFiles` `createSession` `cancel`
-`uploadFile` `exportDmp` `exportFe` `updateFile` `saveExport` `runCommand`
-`getMesh` `vertexInfo` `topo`.
+`uploadFile` `readFile` `exportDmp` `exportFe` `updateFile` `saveExport`
+`runCommand` `getMesh` `vertexInfo` `topo`. `readFile` needs no session: the
+editor gets a file's text from disk, so a file that fails to load can still
+be fixed and saved.
 
 **Frontend.** No router. `App.tsx` renders four panes — FilePane (open files +
 browser modal), EditorPane (CodeMirror `.fe` editor), ViewerPane (Three.js

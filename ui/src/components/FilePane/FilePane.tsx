@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { createSession, getRestore, lagrangeWarning } from '../../api/sessions'
-import { exportFe } from '../../api/export'
+import { readFile } from '../../api/files'
 import { useStore } from '../../store/useStore'
 import { useMenuAction } from '../../hooks/useMenuAction'
 import FileBrowserModal from './FileBrowserModal'
@@ -8,7 +8,7 @@ import FileBrowserModal from './FileBrowserModal'
 export default function FilePane() {
   const {
     sessionId, activeFile, openFiles,
-    setSession, setStats, setFileContent, appendLog, removeOpenFile,
+    setSession, setStats, setFileContent, setActiveFile, appendLog, removeOpenFile,
   } = useStore()
 
   const [loadingFile, setLoadingFile] = useState<string | null>(null)
@@ -29,7 +29,7 @@ export default function FilePane() {
       setSession(s.session_id, s.fe_file)
       setStats(s.energy, s.area)
       appendLog(`Restored previous session: ${s.fe_file}`)
-      exportFe(s.session_id).then(fe => setFileContent(fe.content)).catch(() => {})
+      readFile(s.fe_file).then(f => setFileContent(f.content)).catch(() => {})
     }).catch(() => {})
     return () => { cancelled = true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -67,17 +67,20 @@ export default function FilePane() {
       appendLog(`Loaded ${file} — session ${session.session_id.slice(0, 8)}`)
       const warn = lagrangeWarning(file, session)
       if (warn) appendLog(warn)
-      try {
-        const fe = await exportFe(session.session_id)
-        setFileContent(fe.content)
-      } catch { /* editor stays empty */ }
     } catch (err: unknown) {
       const msg = (err instanceof Error ? err.message : String(err)).replace(/^Error:\s*/i, '')
       setFileErrors(prev => ({ ...prev, [file]: msg }))
       appendLog(`[error] ${file}: ${msg}`)
+      // Still this file in the editor: a file that fails to load is exactly
+      // the one that needs editing, and Save must not write to another file.
+      setActiveFile(file)
     } finally {
       setLoadingFile(null)
     }
+    // From disk, not from the session, so a failed load still shows the text.
+    try {
+      setFileContent((await readFile(file)).content)
+    } catch { /* editor keeps what it had */ }
   }
 
   function closeFile(e: React.MouseEvent, file: string) {

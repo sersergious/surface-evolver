@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { emit } from '@tauri-apps/api/event'
 import { ipc } from '../test/ipc'
 import { rpc, toError } from './client'
+import { useStore } from '../store/useStore'
 
 // Driven through Tauri's own mockIPC (test/ipc.ts), so these assert what
 // actually crosses the IPC boundary, rejections included.
@@ -16,6 +17,14 @@ describe('rpc', () => {
   it('defaults params to null when omitted', async () => {
     await rpc('getRestore')
     expect(ipc).toHaveBeenCalledWith('rpc', { method: 'getRestore', params: null })
+  })
+
+  it('a session-ending error clears the session and drops the internal prefix from the message', async () => {
+    useStore.setState({ sessionId: 's1' })
+    ipc.mockImplementation(() => { throw 'Session ended: ERROR 1157: Facet 6: edge 99 is not defined.' })
+    const err = await rpc('createSession').catch((e: unknown) => e)
+    expect((err as Error).message).toBe('ERROR 1157: Facet 6: edge 99 is not defined.')
+    expect(useStore.getState().sessionId).toBeNull()
   })
 
   it('turns a Tauri rejection (a plain string) into an Error', async () => {

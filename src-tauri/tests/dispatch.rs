@@ -226,6 +226,27 @@ fn a_worker_crash_ends_the_session() {
     assert_eq!(err, "No file is loaded");
 }
 
+#[test]
+fn read_file_returns_datafile_text_without_a_session() {
+    if skip() { return }
+    // A datafile that fails to load must still be readable, or the editor has
+    // nothing to show and a broken Save & Reload can't be fixed in the app.
+    let t = TestApp::new("read-file");
+    let bundled = t.call("readFile", json!({ "filename": "cube.fe" })).expect("readFile bundled");
+    assert_eq!(bundled["filename"], "cube.fe");
+    assert!(bundled["content"].as_str().unwrap().contains("vertices"));
+
+    // A user copy (what Save & Reload writes) wins over the bundled file,
+    // exactly as createSession resolves it.
+    t.call("updateFile", json!({ "filename": "cube.fe", "content": "broken text" })).expect("updateFile");
+    let user = t.call("readFile", json!({ "filename": "cube.fe" })).expect("readFile user copy");
+    assert_eq!(user["content"], "broken text");
+
+    // Directory components are stripped, like every other filename param.
+    let err = t.call("readFile", json!({ "filename": "../../etc/does_not_exist.fe" })).unwrap_err();
+    assert!(err.contains("File not found"), "got: {err}");
+}
+
 fn base64_encode(bytes: &[u8]) -> String {
     const TBL: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     let mut out = String::new();

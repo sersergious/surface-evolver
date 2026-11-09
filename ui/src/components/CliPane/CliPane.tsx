@@ -28,8 +28,17 @@ export default function CliPane() {
   // The only cancel there is: se_run blocks, so the backend kills the worker.
   // The in-memory surface dies with it — the tab stays so the file can be
   // reopened, and the last auto-snapshot is still on disk.
+  // Set by Stop: the stopped command's own failure (the killed worker's
+  // in-flight request) is expected, not a crash worth reporting.
+  const stoppedRef = useRef(false)
+  function logCommandError(err: unknown) {
+    if (stoppedRef.current) return
+    appendLog(`[error] ${err instanceof Error ? err.message : String(err)}`)
+  }
+
   async function handleStop() {
     if (!sessionId) return
+    stoppedRef.current = true
     try {
       await cancelSession()
       clearSession()
@@ -43,6 +52,7 @@ export default function CliPane() {
   async function runG(n: number) {
     if (!sessionId || busy) return
     appendLog(`> g ${n}`)
+    stoppedRef.current = false
     setBusy(true)
     try {
       const res = await runCommand(sessionId, `g ${n}`)
@@ -50,7 +60,7 @@ export default function CliPane() {
       setStats(res.energy, res.area)
       bumpMeshVersion()
     } catch (err: unknown) {
-      appendLog(`[error] ${err instanceof Error ? err.message : String(err)}`)
+      logCommandError(err)
     } finally {
       setBusy(false)
     }
@@ -69,6 +79,7 @@ export default function CliPane() {
   async function handleTopo(op: TopoOp, label: string) {
     if (!sessionId || busy) return
     appendLog(`> ${label}`)
+    stoppedRef.current = false
     setBusy(true)
     try {
       const res = await runTopo(sessionId, op)
@@ -76,7 +87,7 @@ export default function CliPane() {
       setStats(res.energy, res.area)
       bumpMeshVersion()
     } catch (err: unknown) {
-      appendLog(`[error] ${err instanceof Error ? err.message : String(err)}`)
+      logCommandError(err)
     } finally {
       setBusy(false)
     }
@@ -87,6 +98,7 @@ export default function CliPane() {
     const cmd = input.trim()
     setInput('')
     appendLog(`> ${cmd}`)
+    stoppedRef.current = false
     setBusy(true)
     try {
       const res = await runCommand(sessionId, cmd)
@@ -96,7 +108,7 @@ export default function CliPane() {
         bumpMeshVersion()
       }
     } catch (err: unknown) {
-      appendLog(`[error] ${err instanceof Error ? err.message : String(err)}`)
+      logCommandError(err)
     } finally {
       setBusy(false)
       inputRef.current?.focus()

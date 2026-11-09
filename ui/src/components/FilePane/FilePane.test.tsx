@@ -9,7 +9,6 @@ vi.mock('../../api/sessions', () => ({
   getRestore: vi.fn().mockResolvedValue(null),
   lagrangeWarning: vi.fn().mockReturnValue(null),
 }))
-vi.mock('../../api/export', () => ({ exportFe: vi.fn().mockResolvedValue({ filename: 'f', content: '' }) }))
 
 import { createSession, getRestore } from '../../api/sessions'
 

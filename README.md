@@ -36,7 +36,7 @@ Everything below is what the **desktop app** adds. The original engine's full co
 - **Core engine**: C — Ken Brakke's Surface Evolver (115 `.c`/`.h` files, flat upstream layout), built headless as a shared library
 - **C API**: `engine/bindings/c/se_api.{h,c}` — a 29-function anti-corruption facade that captures the engine's output streams
 - **Worker sidecar**: Rust — 345 KB binary, `libloading` (`dlopen`) + `serde_json`
-- **Backend**: Rust — Tauri v2, single `rpc(method, params)` command over 13 methods
+- **Backend**: Rust — Tauri v2, single `rpc(method, params)` command over 14 methods
 - **Frontend**: React + Vite, Zustand, Three.js / @react-three/fiber, Tailwind + daisyUI
 - **Build**: CMake (engine), Cargo (app + sidecar), Bun (frontend), Tauri bundler; GitHub Actions matrix for macOS / Linux on pinned runner images
 - **Testing**: CTest (C facade), `cargo test` (worker protocol and app layer, against the shipped release worker), Vitest + Testing Library with Tauri's own `mockIPC`, ESLint
@@ -90,8 +90,8 @@ Run from the repository root, after `bun run dev` or `bun run build` has built t
 export SE_LIB_PATH=$PWD/cmake-build-release/libse.dylib    # .so on Linux
 ctest --test-dir cmake-build-release --output-on-failure   # C API suite, 81 checks
 (cd src-tauri/worker && cargo test)                        # FFI guard + smoke + fixtures, 14 tests
-(cd src-tauri && cargo test)                               # rpc.rs unit + integration tests, 25 tests
-(cd ui && bun run lint && bunx tsc --noEmit && bun run test)  # lint, types, 60 tests
+(cd src-tauri && cargo test)                               # rpc.rs unit + integration tests, 26 tests
+(cd ui && bun run lint && bunx tsc --noEmit && bun run test)  # lint, types, 65 tests
 ```
 
 Without `SE_LIB_PATH`, the worker and app integration tests print "skipping" and still count as passed locally. In CI (`CI` set) they fail instead, so a misconfigured run can't pass silently.

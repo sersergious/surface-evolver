@@ -145,7 +145,7 @@ export default function ViewerPane() {
       {/* Mesh stats (bottom-left — bottom-right is the Inspect panel's spot) */}
       {mesh && (
         <div className="absolute bottom-3 left-3 z-20 badge bg-base-300/80 border-base-300 text-base-content font-mono text-[10px] pointer-events-none">
-          {mesh.vertices.length.toLocaleString()} v · {mesh.edges.length.toLocaleString()} e · {mesh.facets.length.toLocaleString()} f
+          {(mesh.vertices.length - (mesh.unwrap_source?.length ?? 0)).toLocaleString()} v · {mesh.edges.length.toLocaleString()} e · {mesh.facets.length.toLocaleString()} f
           {mesh.wrapped_edges_hidden ? (
             <span
               className="ml-1 text-warning"

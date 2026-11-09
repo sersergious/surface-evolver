@@ -14,6 +14,7 @@ interface AppState {
 interface AppActions {
   setSession:      (id: string, file: string) => void
   clearSession:    () => void
+  setActiveFile:   (file: string) => void
   removeOpenFile:  (file: string) => void
   setFileContent:  (content: string | null) => void
   setStats:        (energy: number | null, area: number | null) => void
@@ -38,6 +39,12 @@ export const useStore = create<AppState & AppActions>((set) => ({
   // Worker killed (cancel) — drop the session but keep the tab, so clicking it
   // reloads. activeFile stays set so File ▸ Reload Surface still works.
   clearSession:    ()         => set({ sessionId: null, energy: null, area: null }),
+  // A file open in the editor with no live session behind it (it failed to
+  // load): its text can still be fixed and saved.
+  setActiveFile:   (file)     => set((s) => ({
+    activeFile: file,
+    openFiles: s.openFiles.includes(file) ? s.openFiles : [...s.openFiles, file],
+  })),
   // Close a tab. If it's the live one, also tear down the active session.
   removeOpenFile:  (file)     => set((s) => {
     const openFiles = s.openFiles.filter(f => f !== file)
