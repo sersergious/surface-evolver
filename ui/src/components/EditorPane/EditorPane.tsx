@@ -7,7 +7,7 @@ import { indentOnInput, bracketMatching }                 from '@codemirror/lang
 import { feLanguage }                                     from './feLanguage'
 import { seTheme }                                        from './seTheme'
 import { exportDmp, exportFe, updateFile, saveExport } from '../../api/export'
-import { createSession, lagrangeWarning }                  from '../../api/sessions'
+import { createSession, lagrangeWarning, loadOutput }      from '../../api/sessions'
 import { useStore }                                    from '../../store/useStore'
 
 export default function EditorPane() {
@@ -69,6 +69,8 @@ export default function EditorPane() {
       setSession(session.session_id, activeFile)
       setStats(session.energy, session.area)
       appendLog(`Reloaded ${activeFile} — session ${session.session_id.slice(0, 8)}`)
+      const out = loadOutput(session)
+      if (out) appendLog(out)
       const warn = lagrangeWarning(activeFile, session)
       if (warn) appendLog(warn)
     } catch (err: unknown) {

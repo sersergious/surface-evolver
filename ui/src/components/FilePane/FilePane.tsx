@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { cancelSession, createSession, getRestore, lagrangeWarning } from '../../api/sessions'
+import { cancelSession, createSession, getRestore, lagrangeWarning, loadOutput } from '../../api/sessions'
 import { readFile } from '../../api/files'
 import { useStore } from '../../store/useStore'
 import { useMenuAction } from '../../hooks/useMenuAction'
@@ -45,6 +45,8 @@ export default function FilePane() {
       setSession(session.session_id, activeFile)
       setStats(session.energy, session.area)
       appendLog(`Reloaded ${activeFile}`)
+      const out = loadOutput(session)
+      if (out) appendLog(out)
     } catch (err: unknown) {
       appendLog(`[error] ${activeFile}: ${(err instanceof Error ? err.message : String(err)).replace(/^Error:\s*/i, '')}`)
     } finally {
@@ -65,6 +67,8 @@ export default function FilePane() {
       setSession(session.session_id, file)   // also adds to openFiles
       setStats(session.energy, session.area)
       appendLog(`Loaded ${file} — session ${session.session_id.slice(0, 8)}`)
+      const out = loadOutput(session)
+      if (out) appendLog(out)
       const warn = lagrangeWarning(file, session)
       if (warn) appendLog(warn)
     } catch (err: unknown) {

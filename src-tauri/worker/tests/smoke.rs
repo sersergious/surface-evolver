@@ -329,3 +329,40 @@ fn an_engine_prompt_cannot_read_the_ipc_pipe() {
     assert_eq!(replies, 40, "a `j; g` never replied: its prompt blocked on the IPC pipe");
     assert!(next.unwrap()["output"].as_str().unwrap_or_default().contains("4242"));
 }
+
+#[test]
+fn load_runs_the_read_section_and_reports_its_output() {
+    if skip() { return }
+    // se_load now runs the datafile's `read` section, as standalone SE does.
+    // Whatever it prints (or a failure in it) comes back with the load, not
+    // glued onto the next command's reply.
+    let dir = std::env::temp_dir().join(format!("se-readsec-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("readsec.fe");
+    std::fs::write(&path, concat!(
+        "vertices\n1 0 0 0\n2 1 0 0\n3 0 1 0\n",
+        "edges\n1 1 2\n2 2 3\n3 3 1\n",
+        "faces\n1 1 2 3\n",
+        "read\n",
+        "print 9119\n",
+    )).unwrap();
+    let msgs = drive(&[load(&path), r#"{"cmd":"run","command":"print 1"}"#.into()]);
+    let _ = std::fs::remove_dir_all(&dir);
+    assert_eq!(msgs[0]["ok"], true);
+    assert!(msgs[0]["output"].as_str().unwrap_or_default().contains("9119"), "{}", msgs[0]);
+    assert!(!msgs[1]["output"].as_str().unwrap().contains("9119"), "load output leaked into the next reply");
+}
+
+#[test]
+fn a_prompt_on_phelanc_no_longer_crashes_the_worker() {
+    if skip() { return }
+    // Before the read section ran at load, its leftover lines fed prompt(),
+    // and on phelanc.fe the first `j; g` killed the worker.
+    let msgs = drive(&[
+        load(&repo().join("fe/phelanc.fe")),
+        r#"{"cmd":"run","command":"j; g"}"#.into(),
+        r#"{"cmd":"run","command":"print 4242"}"#.into(),
+    ]);
+    assert_eq!(msgs.len(), 3, "the worker died: {msgs:?}");
+    assert!(msgs[2]["output"].as_str().unwrap_or_default().contains("4242"));
+}

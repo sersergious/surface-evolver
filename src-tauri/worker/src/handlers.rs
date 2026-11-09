@@ -123,6 +123,10 @@ impl Worker {
             return json!({ "ok": false, "se_error": msg });
         }
         self.loaded_file = Some(path);
+        // What the datafile's `read` section printed, plus any warning or the
+        // error that abandoned it. Popped here so it belongs to this reply,
+        // not the next command's.
+        let output = self.command_output();
 
         let sdim = unsafe { (self.se.get_sdim)() };
         // Bounding box is the one sdim-wide buffer in the API. Guard against a
@@ -140,6 +144,7 @@ impl Worker {
         unsafe {
             json!({
                 "ok": true,
+                "output": output,
                 "energy": (self.se.get_energy)(),
                 "area": (self.se.get_area)(),
                 "scale": (self.se.get_scale)(),

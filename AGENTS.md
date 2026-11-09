@@ -48,7 +48,7 @@ PATH — do **not** add it as an npm dependency (see *Landmine 10*).
 
 ```bash
 # C API tests (needs built libse)
-ctest --test-dir cmake-build-release --output-on-failure          # 88 checks
+ctest --test-dir cmake-build-release --output-on-failure          # 98 checks
 
 # Worker sidecar: FFI-signature guard, stdin/stdout smoke tests, and a fixture
 # test that loads every bundled .fe file and checks it meshes (automates the
@@ -56,25 +56,25 @@ ctest --test-dir cmake-build-release --output-on-failure          # 88 checks
 # guard skips.
 # All commands below run from the repo root. Use libse.so on Linux.
 export SE_LIB_PATH=$PWD/cmake-build-release/libse.dylib
-(cd src-tauri/worker && cargo test)                                 # 15 tests
+(cd src-tauri/worker && cargo test)                                 # 17 tests
 # SE_WORKER_PATH=<path to se-worker> points both Rust suites at a specific
 # binary; CI uses it to test the shipped release build (panic = "abort", LTO).
 
 # Rust app. `cargo check` is the fast gate; `cargo test` additionally runs
 # rpc.rs's own unit tests plus src-tauri/tests/{dispatch,manager}.rs, which
-# drive a real se-worker/libse through the app layer (32 tests total) — set
+# drive a real se-worker/libse through the app layer (33 tests total) — set
 # SE_LIB_PATH and either build the worker first or set SE_WORKER_PATH, or
 # those two integration-test binaries skip themselves rather than fail.
-(cd src-tauri && cargo check && cargo test)                         # 32 tests
+(cd src-tauri && cargo check && cargo test)                         # 33 tests
 
 # Frontend: ESLint (typescript-eslint + the two classic react-hooks rules;
 # warnings fail), type-check, then a real Vitest suite (jsdom + Testing
-# Library): 70 tests across 11 files covering the RPC client, API wrapper
+# Library): 71 tests across 11 files covering the RPC client, API wrapper
 # contracts, the components and file browser, the store, the menu-action hook,
 # the native menu routes and the session lifecycle. Tauri IPC is faked once per
 # file by Tauri's own mockIPC (ui/src/test/ipc.ts), so tests assert what
 # crosses the IPC boundary. All of it runs in CI.
-(cd ui && bun run lint && bunx tsc --noEmit && bun run test)        # 70 tests
+(cd ui && bun run lint && bunx tsc --noEmit && bun run test)        # 71 tests
 ```
 
 Locally, a skipped integration test prints `SE_LIB_PATH unset — skipping …` and
@@ -188,6 +188,11 @@ Only `engine/bindings/c/` is ours. An IDE reformat of `web.h` once produced a
 deliberately **no `.clang-format`**: one tuned to 1990s SE style would start
 reformatting the other 114 files. If your editor formats on save, exclude
 `engine/src/`.
+
+Real bug fixes are allowed, kept minimal and marked `local patch` in place:
+`evalmore.c` (the `<sys/wait.h>` include GCC 15 requires) and `query.c`
+(`catfulltext` read one byte before its buffer on an empty line, which a
+datafile's `read` section and `se_run("")` both reach).
 
 ### 3. `src-tauri/worker/` is NOT a Cargo workspace member
 

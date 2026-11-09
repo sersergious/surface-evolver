@@ -242,3 +242,17 @@ describe('closing a tab while its command runs (#24)', () => {
     expect(useStore.getState().outputLog.some(l => l.startsWith('[error]'))).toBe(false)
   })
 })
+
+describe('loading a datafile', () => {
+  it('logs what its read section printed', async () => {
+    useStore.setState({ openFiles: ['mylarcube.fe'], activeFile: null, sessionId: null })
+    answerRpc({
+      createSession: { session_id: 's1', fe_file: 'mylarcube.fe', energy: 1, area: 1, lagrange_order: 1,
+                       output: 'Edges refined: 12\n' },
+      readFile: { filename: 'mylarcube.fe', content: 'vertices' },
+    })
+    render(<FilePane />)
+    await userEvent.setup().click(screen.getByText('mylarcube.fe'))
+    await waitFor(() => expect(useStore.getState().outputLog).toContain('Edges refined: 12'))
+  })
+})

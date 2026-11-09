@@ -332,7 +332,11 @@ fn dispatch<R: Runtime>(app: &AppHandle<R>, method: &str, params: Value) -> Resu
             let session = session_from_stats(&sid, fe_file, &stats);
             *lock(&state.session) = Some(session.clone());
             persist(app, &state);
-            Ok(session)
+            // What the datafile's `read` section printed (or the error that
+            // abandoned it): for the UI's log, not the stored session record.
+            let mut reply = session;
+            reply["output"] = stats["output"].clone();
+            Ok(reply)
         }
 
         // Stop. SIGINT first (#35): SE aborts the running command and keeps

@@ -6,6 +6,9 @@ export interface SessionState {
   energy:       number | null
   area:         number | null
   lagrange_order: number | null
+  // createSession only: what the datafile's `read` section printed, or the
+  // error that abandoned it (se_load runs that section, as SE itself does).
+  output?:      string
 }
 
 export async function createSession(feFile: string): Promise<SessionState> {
@@ -23,6 +26,12 @@ export async function getRestore(): Promise<SessionState | null> {
  *  the last snapshot survives). */
 export async function cancelSession(): Promise<{ cancelled: boolean; interrupted?: boolean }> {
   return rpc<{ cancelled: boolean; interrupted?: boolean }>('cancel')
+}
+
+/** The read section's output for the log, or null when it printed nothing. */
+export function loadOutput(s: SessionState): string | null {
+  const out = s.output?.trimEnd()
+  return out ? out : null
 }
 
 /** Warning for curved-patch models the linear renderer draws wrong, else null. */

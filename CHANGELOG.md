@@ -125,6 +125,11 @@ change, see `git log`.
   next request, closing a tab mid-command stops the command, the "Loading"
   badge clears when a session ends mid-fetch, and on Linux the Run menu's
   shortcuts no longer fire while you type.
+- Datafiles load the way Surface Evolver loads them: their `read` section now
+  runs, so the setup it does (e.g. phelanc.fe's body volume targets) and the
+  procedures it defines (`gogo` and friends) are there, and what it prints
+  shows in the log. Fixed an engine overflow on empty command lines found
+  along the way.
 - Dropped Windows. A Windows CI job showed the native installer crashing on
   every recoverable engine error, and no user runs Windows, so the app now
   ships for macOS and Linux only.

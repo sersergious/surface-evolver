@@ -450,6 +450,55 @@ static void test_edge_wraps(void)
     CHECK(se_get_edge_wraps(NULL, 10) == -1);
 }
 
+/* A datafile's `read` section: standalone SE runs it after loading (main()
+ * -> exec_commands), and se_load never did, so its setup and procedures were
+ * missing (phelanc.fe's `set body target 1`, every file's `gogo`). */
+static double print_number(const char *expr)
+{
+    char cmd[256], buf[256] = {0};
+    snprintf(cmd, sizeof(cmd), "print %s", expr);
+    if (se_run(cmd) != 0) return -12345.0;
+    se_pop_output(buf, sizeof(buf));
+    return atof(buf);
+}
+
+static void test_read_section(void)
+{
+    SECTION("se_load runs the datafile's read section");
+    CHECK(se_load(FE_DIR "/phelanc.fe") == 0);
+    drain();
+    CHECK(print_number("is_defined(\"gogo\")") == 1.0);   /* a procedure it defines */
+    CHECK(print_number("body[1].target") == 1.0);           /* `set body target 1` ran */
+
+    /* A failing command in the read section doesn't fail the load: SE's main()
+     * reports it, skips the rest, and keeps the loaded surface. */
+    char path[1024];
+    if (!getcwd(path, sizeof(path) - 32)) strcpy(path, ".");
+    strcat(path, "/se_test_readsec.fe");
+    FILE *f = fopen(path, "w");
+    fputs("vertices\n1 0 0 0\n2 1 0 0\n3 0 1 0\n"
+          "edges\n1 1 2\n2 2 3\n3 3 1\n"
+          "faces\n1 1 2 3\n"
+          "read\n"
+          "set vertex[1] constraint 99\n"      /* RECOVERABLE error 1212 */
+          "after_the_error := 1\n", f);         /* abandoned, as in SE */
+    fclose(f);
+    CHECK(se_load(path) == 0);
+    CHECK(se_get_vertex_count() == 3);
+    char err[2048] = {0};
+    se_pop_errout(err, sizeof(err));
+    CHECK(strstr(err, "1212") != NULL);         /* reported to the caller */
+    CHECK(print_number("is_defined(\"after_the_error\")") == 0.0);
+    drain();
+    CHECK(se_run("print 31337") == 0);   /* engine and capture still fine */
+    drain();
+    remove(path);
+
+    CHECK(se_load(FE_CUBE) == 0);        /* back to the cube for test_sigint */
+    drain();
+    CHECK(print_number("is_defined(\"gogo\")") == 1.0);
+}
+
 /* #35: Stop sends SIGINT. SE's own handler longjmps out of the signal
  * handler (kb_error RECOVERABLE_QUIET) whenever the engine isn't iterating,
  * into a jump buffer whose frame is gone: undefined behaviour. The facade's
@@ -523,6 +572,7 @@ int main(void)
     test_topo_and_params();   /* mutates the mesh (refine) */
     test_element_colors();
     test_edge_wraps();
+    test_read_section();
     test_sigint();
 
     printf("\n=================================\n");

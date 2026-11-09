@@ -35,7 +35,11 @@ int se_init(void);
  * se_get_facets() cannot express their cells.  Engine state after a failed
  * load is undefined — discard the process or reload a valid file. Output
  * capture keeps working either way, and se_last_error() carries the engine's
- * own error text where there is one. */
+ * own error text where there is one.
+ * After the surface loads, the datafile's `read` section runs, as in
+ * standalone SE: its setup and procedures are part of the model. Its output
+ * is captured; a failing command there abandons the rest of the section
+ * (its message is left on errout) but doesn't fail the load. */
 int se_load(const char *filename);
 
 /* ── command execution ────────────────────────────────────────────────── */

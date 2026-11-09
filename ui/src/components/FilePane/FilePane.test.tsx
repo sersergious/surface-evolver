@@ -9,6 +9,7 @@ vi.mock('../../api/sessions', () => ({
   createSession: vi.fn(),
   getRestore: vi.fn().mockResolvedValue(null),
   lagrangeWarning: vi.fn().mockReturnValue(null),
+  loadOutput: vi.fn().mockReturnValue(null),
 }))
 
 import { cancelSession, createSession, getRestore } from '../../api/sessions'

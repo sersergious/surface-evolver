@@ -249,7 +249,7 @@ stdin/stdout, one JSON object per line, no batching:
 
 | `cmd` | Purpose | Notable response fields |
 |---|---|---|
-| `load` | Open a `.fe` file (chdir's to its directory first, for relative includes) | `energy area scale sdim` element counts, `bbox_min/max` |
+| `load` | Open a `.fe` file (chdir's to its directory first, for relative includes) and run its `read` section, as standalone SE does | `energy area scale sdim` element counts, `bbox_min/max`, `output` (what the `read` section printed, or the error that abandoned it) |
 | `run` | Execute one raw SE command string via `se_run`. Blank or comment-only input succeeds; `load` is refused (use File ▸ Open) | `output energy area`. `output` also carries the command's own warnings, and ends with `[output truncated at 256 KB]` when the capture buffer filled |
 | `mesh` | Fetch vertices/edges/facets (+ optional colours) for rendering | `vertices facets edges body_cms`, optional `facet_colors edge_colors`, optional `wrapped_edges_hidden` and `unwrap_source` (periodic only) |
 | `topo` | One of 4 mapped topology ops (`refine equi vertex_avg pop`) | `output counts` (non-zero deltas only) `energy energy_delta area`; `output` includes warnings, as for `run` |
@@ -269,19 +269,19 @@ Closed the last untested layer (September 2026) after an audit found
 ```mermaid
 flowchart TB
     subgraph C["C facade"]
-        CT["tests/c/test_se_api.c<br/>88 checks"]
+        CT["tests/c/test_se_api.c<br/>98 checks"]
     end
     subgraph Worker["se-worker crate"]
         WF["ffi_signatures.rs — 1 test<br/>se_api.h ⇄ ffi.rs agree"]
-        WS["smoke.rs — 13 tests<br/>drive the built binary over stdin"]
+        WS["smoke.rs — 15 tests<br/>drive the built binary over stdin"]
         WX["fixtures.rs — 1 test<br/>all 20 bundled .fe load + mesh"]
     end
     subgraph App["Tauri app crate"]
         AU["rpc.rs + menu.rs unit tests — 11<br/>pure helpers: sanitize, session bookkeeping"]
-        AI["tests/{dispatch,manager}.rs — 21<br/>real worker + real libse"]
+        AI["tests/{dispatch,manager}.rs — 22<br/>real worker + real libse"]
     end
     subgraph FE["Frontend"]
-        FT["ESLint + Vitest + Testing Library<br/>70 tests / 11 files"]
+        FT["ESLint + Vitest + Testing Library<br/>71 tests / 11 files"]
     end
     CT --> WF --> AU --> FT
 ```
@@ -301,7 +301,7 @@ flowchart LR
     subgraph CI["ci.yml — push / PR to main"]
         direction TB
         C1["c-tests<br/>macos-26 + ubuntu-26.04<br/>ctest"]
-        C2["backend-tests<br/>cargo check + cargo test<br/>worker (15) + app (32),<br/>against the release worker"]
+        C2["backend-tests<br/>cargo check + cargo test<br/>worker (17) + app (33),<br/>against the release worker"]
         C3["frontend-tests<br/>lint + tsc --noEmit + bun run test (60)<br/>+ production build"]
     end
     subgraph BUILD["build.yml — workflow_run after a green push to main"]
@@ -425,13 +425,6 @@ test-suite work, which added coverage without touching any of these:
 
 ### Known bugs / rough edges
 
-- `se_load` never runs a datafile's `read` section (SE's standalone `main()`
-  does), so procedures it defines (`gogo` and the like) don't exist in the
-  app. Its lines stay in SE's command file, where `prompt()` reads them as
-  answers before falling back to stdin, and on `phelanc.fe` a prompt
-  (e.g. `j; g`) crashes the worker. Stdin itself can no longer block a
-  prompt: the worker points fd 0 at `/dev/null`
-  ([#41](https://github.com/sersergious/surface-evolver/issues/41)).
 - macOS builds are ad-hoc signed, not notarized.
 - macOS and Linux only. Windows support was dropped: the native `longjmp`
   from the engine back into the C facade crashed there on every recoverable

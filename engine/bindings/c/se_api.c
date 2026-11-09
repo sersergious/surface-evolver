@@ -310,6 +310,28 @@ int se_load(const char *filename)
         return -1;
     }
 
+    /* The datafile's `read` section: SE's own main() runs it after loading
+     * (exec_commands until the command file is exhausted), and its setup and
+     * procedures are part of the model (phelanc.fe's `set body target 1`,
+     * every file's `gogo`). se_init pushes no stdin, so the datafile is the
+     * only command source and exec_commands stops when it pops. Lines are
+     * not echoed; the commands' own output is captured as usual.
+     * Like main(), a failing command abandons the rest of the section (the
+     * bailout pops the command file) but keeps the loaded surface: its
+     * message goes back on errout for the caller instead of failing the load. */
+    {
+        volatile int old_quiet = quiet_load_flag;
+        if (setjmp(jumpbuf[0]) == 0) {
+            quiet_load_flag = 1;
+            exec_commands(NULL, "");
+        } else {
+            char msg[2048];
+            size_t n = cap_recover_after_bailout(msg, sizeof(msg) - 1);
+            fwrite(msg, 1, n, cap_err_fd);
+        }
+        quiet_load_flag = old_quiet;
+    }
+
     se_errmsg_buf[0] = '\0';
     return 0;
 }

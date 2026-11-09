@@ -13,6 +13,7 @@ vi.mock('../../api/export', () => ({
 vi.mock('../../api/sessions', () => ({
   createSession: vi.fn(),
   lagrangeWarning: vi.fn().mockReturnValue(null),
+  loadOutput: vi.fn().mockReturnValue(null),
 }))
 
 import { exportDmp, exportFe, updateFile, saveExport } from '../../api/export'

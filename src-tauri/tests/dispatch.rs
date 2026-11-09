@@ -291,6 +291,18 @@ fn an_empty_command_reports_the_current_stats() {
     assert!(err.contains("command is required"), "got: {err}");
 }
 
+#[test]
+fn create_session_reports_what_the_read_section_printed() {
+    if skip() { return }
+    // se_load runs the datafile's `read` section; its output comes back with
+    // createSession (not in the stored session record) so the UI can log it.
+    let t = TestApp::new("load-output");
+    let fe = base64_encode(b"vertices\n1 0 0 0\n2 1 0 0\n3 0 1 0\nedges\n1 1 2\n2 2 3\n3 3 1\nfaces\n1 1 2 3\nread\nprint 5150\n");
+    t.call("uploadFile", json!({ "filename": "prints.fe", "content": fe })).expect("upload");
+    let s = t.call("createSession", json!({ "fe_file": "prints.fe" })).expect("createSession");
+    assert!(s["output"].as_str().unwrap_or_default().contains("5150"), "got: {s}");
+}
+
 fn base64_encode(bytes: &[u8]) -> String {
     const TBL: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     let mut out = String::new();

@@ -127,7 +127,8 @@ void catfulltext(char *stuff)
      }
   strncpy(fulltext+fulltextsize,stuff,MAXCMDSIZE-fulltextsize);
   fulltextsize = strlen(fulltext);
-  if ( fulltext[fulltextsize-1] != '\n' ) fulltext[fulltextsize++] = '\n';
+  /* local patch: an empty line left fulltextsize 0 and read fulltext[-1] */
+  if ( fulltextsize == 0 || fulltext[fulltextsize-1] != '\n' ) fulltext[fulltextsize++] = '\n';
   fulltext[fulltextsize] = '\0';
 
 } // end catfulltext()
