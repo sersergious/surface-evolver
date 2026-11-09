@@ -320,8 +320,7 @@ point of the Rust sidecar port.
 surface-evolver/
 ├── engine/
 │   ├── src/                    # Surface Evolver upstream — VENDORED, never reformat
-│   ├── bindings/c/             # se_api.h / se_api.c — the C facade (ours)
-│   └── tools/callgraph.py      # standalone analysis tool; wired into no build
+│   └── bindings/c/             # se_api.h / se_api.c — the C facade (ours)
 ├── src-tauri/                  # ALL Rust lives here
 │   ├── src/{main,lib,rpc,worker,menu}.rs   # lib.rs: library target so tests/ can link in
 │   ├── tests/{dispatch,manager}.rs         # app-layer integration tests, real worker+libse
