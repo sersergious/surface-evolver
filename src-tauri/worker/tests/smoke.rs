@@ -287,3 +287,45 @@ fn dump_works_when_the_temp_path_has_backslashes() {
     assert_eq!(msgs[1]["ok"], true, "{}", msgs[1]);
     assert!(msgs[1]["content"].as_str().unwrap().contains("vertices"));
 }
+
+#[test]
+fn an_engine_prompt_cannot_read_the_ipc_pipe() {
+    if skip() { return }
+    // #41: `j` (jiggle) prompts for a temperature on stdin. The worker's
+    // guard only catches a bare `j`, so `j; g` reached the prompt, which
+    // blocked on the IPC pipe waiting for an answer, then swallowed the next
+    // request as one. Requests go one at a time here, as the app sends
+    // them: writing them all up front would let the reader buffer the lot.
+    use std::io::{BufRead, BufReader, Write};
+    let mut child = std::process::Command::new(common::worker_bin())
+        .env("SE_LIB_PATH", std::env::var("SE_LIB_PATH").unwrap())
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .unwrap();
+    let mut stdin = child.stdin.take().unwrap();
+    let (tx, rx) = std::sync::mpsc::channel::<String>();
+    let stdout = child.stdout.take().unwrap();
+    std::thread::spawn(move || {
+        for line in BufReader::new(stdout).lines().map_while(Result::ok) { let _ = tx.send(line); }
+    });
+    let mut ask = |req: &str| -> Option<serde_json::Value> {
+        writeln!(stdin, "{req}").unwrap();
+        rx.recv_timeout(std::time::Duration::from_secs(5)).ok().map(|l| serde_json::from_str(&l).unwrap())
+    };
+
+    // A prompt first reads leftover lines of the loaded datafile (SE keeps it
+    // as its command file), and only falls back to stdin once those run out,
+    // so the hang shows after a few prompts, not the first.
+    assert!(ask(&cube()).is_some());
+    let mut replies = 0;
+    for _ in 0..40 {
+        if ask(r#"{"cmd":"run","command":"j; g"}"#).is_none() { break }
+        replies += 1;
+    }
+    let next = if replies == 40 { ask(r#"{"cmd":"run","command":"print 4242"}"#) } else { None };
+    let _ = child.kill();
+    assert_eq!(replies, 40, "a `j; g` never replied: its prompt blocked on the IPC pipe");
+    assert!(next.unwrap()["output"].as_str().unwrap_or_default().contains("4242"));
+}

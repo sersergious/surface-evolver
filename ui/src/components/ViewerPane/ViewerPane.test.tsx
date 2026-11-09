@@ -4,7 +4,7 @@
 // vertex panel), not Three.js rendering. See the plan: "not chasing pixel
 // output".
 import { describe, expect, it, vi, beforeEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { act, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { ReactNode } from 'react'
 import ViewerPane from './ViewerPane'
@@ -89,6 +89,16 @@ describe('ViewerPane', () => {
     const user = userEvent.setup()
     await user.click(screen.getByTitle('Inspect: click a vertex; show body centroids'))
     expect(await screen.findByText('Click a vertex to inspect')).toBeInTheDocument()
+  })
+
+  it('the Loading badge clears when the session ends mid-fetch (#34)', async () => {
+    useStore.setState({ sessionId: 's1' })
+    vi.mocked(getMesh).mockReturnValue(new Promise(() => {}))   // never settles
+    render(<ViewerPane />)
+    expect(await screen.findByText('Loading')).toBeInTheDocument()
+
+    act(() => useStore.getState().clearSession())               // Stop, crash, closed tab
+    expect(screen.queryByText('Loading')).not.toBeInTheDocument()
   })
 
   it('the vertex count is the engine\'s, not the unwrapped duplicates (#17)', async () => {

@@ -5,12 +5,13 @@ import FilePane from './FilePane'
 import { useStore } from '../../store/useStore'
 
 vi.mock('../../api/sessions', () => ({
+  cancelSession: vi.fn().mockResolvedValue({ cancelled: true, interrupted: true }),
   createSession: vi.fn(),
   getRestore: vi.fn().mockResolvedValue(null),
   lagrangeWarning: vi.fn().mockReturnValue(null),
 }))
 
-import { createSession, getRestore } from '../../api/sessions'
+import { cancelSession, createSession, getRestore } from '../../api/sessions'
 
 const initial = useStore.getState()
 
@@ -18,6 +19,7 @@ describe('FilePane', () => {
   beforeEach(() => {
     useStore.setState(initial, true)
     vi.mocked(createSession).mockReset()
+    vi.mocked(cancelSession).mockClear()
     vi.mocked(getRestore).mockReset().mockResolvedValue(null)
   })
 
@@ -66,12 +68,23 @@ describe('FilePane', () => {
     expect(useStore.getState().outputLog.some(l => l.includes('File not found: broken.fe'))).toBe(true)
   })
 
-  it('closing a tab removes it without calling the backend', async () => {
+  it('closing the live tab stops its command and removes the tab (#24)', async () => {
     useStore.setState({ openFiles: ['cube.fe'], activeFile: 'cube.fe', sessionId: 's1' })
     render(<FilePane />)
     const user = userEvent.setup()
     await user.click(screen.getByTitle('Close file'))
     expect(useStore.getState().openFiles).toEqual([])
+    expect(cancelSession).toHaveBeenCalled()
     expect(createSession).not.toHaveBeenCalled()
+  })
+
+  it('closing a background tab touches no session', async () => {
+    useStore.setState({ openFiles: ['cube.fe', 'sphere.fe'], activeFile: 'cube.fe', sessionId: 's1' })
+    render(<FilePane />)
+    const user = userEvent.setup()
+    await user.click(screen.getAllByTitle('Close file')[1])
+    expect(useStore.getState().openFiles).toEqual(['cube.fe'])
+    expect(cancelSession).not.toHaveBeenCalled()
+    expect(useStore.getState().sessionId).toBe('s1')
   })
 })

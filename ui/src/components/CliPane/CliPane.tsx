@@ -34,7 +34,11 @@ export default function CliPane() {
   const stoppedRef = useRef(false)
   function logCommandError(err: unknown) {
     if (stoppedRef.current) return
-    appendLog(`[error] ${err instanceof Error ? err.message : String(err)}`)
+    const msg = err instanceof Error ? err.message : String(err)
+    // ERROR 2073 ("Command aborted due to user interrupt") only ever answers
+    // our own SIGINT: Stop, or closing the tab. It is not a failure.
+    if (/\bERROR 2073\b/.test(msg)) return
+    appendLog(`[error] ${msg}`)
   }
 
   async function handleStop() {

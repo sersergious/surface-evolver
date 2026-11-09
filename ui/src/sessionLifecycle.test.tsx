@@ -213,3 +213,32 @@ describe('Save & Reload keeps the editing session (#23)', () => {
     expect(editorText()).toBe('vertices')
   })
 })
+
+describe('closing a tab while its command runs (#24)', () => {
+  it('stops the command, and the CLI comes back instead of staying busy', async () => {
+    useStore.setState({ openFiles: ['cube.fe'], activeFile: 'cube.fe', sessionId: 's1' })
+    let failRun!: (e: unknown) => void
+    const methods: string[] = []
+    ipc.mockImplementation((cmd, args) => {
+      const { method } = (args ?? {}) as { method?: string }
+      if (cmd !== 'rpc') return null
+      methods.push(method ?? '')
+      if (method === 'runCommand') return new Promise((_, reject) => { failRun = reject })
+      if (method === 'cancel') {
+        failRun('ERROR 2073: Command aborted due to user interrupt.')
+        return { cancelled: true, interrupted: true }
+      }
+      return null
+    })
+    render(<><FilePane /><CliPane /></>)
+    const user = userEvent.setup()
+    await user.type(screen.getByPlaceholderText('SE command…'), 'g 200000{Enter}')
+    await screen.findByRole('button', { name: 'Stop' })
+
+    await user.click(screen.getByTitle('Close file'))
+
+    await waitFor(() => expect(methods).toContain('cancel'))
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Stop' })).not.toBeInTheDocument())
+    expect(useStore.getState().outputLog.some(l => l.startsWith('[error]'))).toBe(false)
+  })
+})

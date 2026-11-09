@@ -10,7 +10,9 @@ export function useMesh() {
   const [isFetching, setIsFetching] = useState(false)
 
   useEffect(() => {
-    if (!sessionId) { setData(null); return }
+    // No session (Stop, crash, closed tab): clear the loading state too. A
+    // fetch abandoned by the cleanup below never gets to, so the badge stuck (#34).
+    if (!sessionId) { setData(null); setIsFetching(false); return }
     let cancelled = false
     setIsFetching(true)
     getMesh(sessionId)

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { createSession, getRestore, lagrangeWarning } from '../../api/sessions'
+import { cancelSession, createSession, getRestore, lagrangeWarning } from '../../api/sessions'
 import { readFile } from '../../api/files'
 import { useStore } from '../../store/useStore'
 import { useMenuAction } from '../../hooks/useMenuAction'
@@ -85,6 +85,10 @@ export default function FilePane() {
 
   function closeFile(e: React.MouseEvent, file: string) {
     e.stopPropagation()
+    // Closing the live tab drops its session id, which also disables Stop: a
+    // running command would have run on with no way to stop it (#24). Stop it
+    // first. With nothing running, cancel is a no-op.
+    if (file === activeFile && sessionId) cancelSession().catch(() => {})
     clearError(file)
     removeOpenFile(file)
   }

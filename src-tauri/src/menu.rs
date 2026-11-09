@@ -80,13 +80,14 @@ pub fn build(app: &App) -> tauri::Result<Menu<Wry>> {
         .item(&item("panel:inspect", "Inspect / Pick", None)?)
         .build()?;
 
+    let mac = cfg!(target_os = "macos");
     let run = SubmenuBuilder::new(handle, "Run")
-        .item(&item("iterate:10", "Iterate ×10", Some("CmdOrCtrl+G"))?)
-        .item(&item("iterate:100", "Iterate ×100", Some("CmdOrCtrl+Shift+G"))?)
+        .item(&item("iterate:10", "Iterate ×10", surface_op_accel("CmdOrCtrl+G", mac))?)
+        .item(&item("iterate:100", "Iterate ×100", surface_op_accel("CmdOrCtrl+Shift+G", mac))?)
         .separator()
-        .item(&item("run:refine", "Refine", Some("CmdOrCtrl+R"))?)
-        .item(&item("run:equi", "Equiangulate", Some("CmdOrCtrl+U"))?)
-        .item(&item("run:vertex_avg", "Vertex Average", Some("CmdOrCtrl+E"))?)
+        .item(&item("run:refine", "Refine", surface_op_accel("CmdOrCtrl+R", mac))?)
+        .item(&item("run:equi", "Equiangulate", surface_op_accel("CmdOrCtrl+U", mac))?)
+        .item(&item("run:vertex_avg", "Vertex Average", surface_op_accel("CmdOrCtrl+E", mac))?)
         .item(&item("run:pop", "Pop", None)?)
         .build()?;
 
@@ -108,5 +109,27 @@ pub fn on_event(app: &tauri::AppHandle, id: &str) {
     // Predefined items handle themselves; anything with a ":" is ours.
     if id.contains(':') {
         let _ = app.emit("se-menu", id);
+    }
+}
+
+/// The accelerator for a Run-menu item that changes the surface, or none off
+/// macOS (#28). There CmdOrCtrl is Ctrl, and Ctrl+R/U/E/G are keys people
+/// press while typing (readline keys in the CLI, CodeMirror's Mod-u), so a
+/// native accelerator would run an irreversible refine or equiangulate
+/// mid-sentence. On macOS they are Cmd, which typing never sends. The items
+/// stay in the menu either way.
+fn surface_op_accel(accel: &'static str, macos: bool) -> Option<&'static str> {
+    macos.then_some(accel)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::surface_op_accel;
+
+    #[test]
+    fn surface_ops_have_no_accelerator_on_linux() {
+        // #28: on Linux CmdOrCtrl is Ctrl, and Ctrl+R/U/E/G are typing keys.
+        assert_eq!(surface_op_accel("CmdOrCtrl+R", true), Some("CmdOrCtrl+R"));
+        assert_eq!(surface_op_accel("CmdOrCtrl+R", false), None);
     }
 }

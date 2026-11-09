@@ -120,6 +120,11 @@ change, see `git log`.
   jumped out of the signal handler whenever the engine wasn't iterating.
 - Save & Reload no longer rebuilds the editor, so undo history, the cursor
   and the scroll position survive a save.
+- Fixed the remaining stuck states: an engine prompt reached through a
+  compound command (`j; g`) can no longer block the worker or swallow the
+  next request, closing a tab mid-command stops the command, the "Loading"
+  badge clears when a session ends mid-fetch, and on Linux the Run menu's
+  shortcuts no longer fire while you type.
 - Dropped Windows. A Windows CI job showed the native installer crashing on
   every recoverable engine error, and no user runs Windows, so the app now
   ships for macOS and Linux only.

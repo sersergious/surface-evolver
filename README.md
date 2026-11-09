@@ -89,9 +89,9 @@ Run from the repository root, after `bun run dev` or `bun run build` has built t
 ```bash
 export SE_LIB_PATH=$PWD/cmake-build-release/libse.dylib    # .so on Linux
 ctest --test-dir cmake-build-release --output-on-failure   # C API suite, 88 checks
-(cd src-tauri/worker && cargo test)                        # FFI guard + smoke + fixtures, 14 tests
-(cd src-tauri && cargo test)                               # rpc.rs unit + integration tests, 31 tests
-(cd ui && bun run lint && bunx tsc --noEmit && bun run test)  # lint, types, 67 tests
+(cd src-tauri/worker && cargo test)                        # FFI guard + smoke + fixtures, 15 tests
+(cd src-tauri && cargo test)                               # rpc.rs unit + integration tests, 32 tests
+(cd ui && bun run lint && bunx tsc --noEmit && bun run test)  # lint, types, 70 tests
 ```
 
 Without `SE_LIB_PATH`, the worker and app integration tests print "skipping" and still count as passed locally. In CI (`CI` set) they fail instead, so a misconfigured run can't pass silently.
@@ -128,7 +128,7 @@ The other half was refusing to grow. The C facade went from 49 exports to 28 (29
 - **The C facade is kept to what the app calls.** Accessors built for removed features were deleted rather than left to rot; they are recoverable from git history.
 - **Structured API only where it earns its place.** The physics and named-quantity panels were removed because `set gravity_constant 980`, `print body[1].volume` and `v` already do the job through the command line — a structured duplicate is a second thing to keep correct.
 - **Power features are CLI-only** (they work, there are just no buttons): Hessian/eigenvalue stability analysis, `edgeswap`, `dissolve`, `jiggle`, `optimize`, `conj_grad`, `saddle`.
-- **Known rough edges**: curved Lagrange patches render as straight edges; a compound interactive command such as `f; g` can still block the worker (reload to recover); macOS builds are ad-hoc signed, not notarized, so first launch needs right-click → Open. Windows is not supported. Everything known is tracked in the [issues](../../issues).
+- **Known rough edges**: curved Lagrange patches render as straight edges; procedures a datafile defines in its `read` section aren't loaded; macOS builds are ad-hoc signed, not notarized, so first launch needs right-click → Open. Windows is not supported. Everything known is tracked in the [issues](../../issues).
 
 ## Architecture
 

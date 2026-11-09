@@ -17,6 +17,15 @@ pub fn repo() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
 }
 
+/// The worker binary under test. SE_WORKER_PATH lets CI drive the shipped
+/// release build (panic = "abort", LTO, opt-level "z") instead of the
+/// dev-profile binary cargo test builds.
+pub fn worker_bin() -> PathBuf {
+    std::env::var_os("SE_WORKER_PATH")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from(env!("CARGO_BIN_EXE_se-worker")))
+}
+
 /// Feed the worker a script of commands; collect one JSON reply per line.
 pub fn drive(lines: &[String]) -> Vec<Value> {
     drive_env(lines, &[])
@@ -24,11 +33,7 @@ pub fn drive(lines: &[String]) -> Vec<Value> {
 
 /// `drive`, with extra environment variables for the worker process.
 pub fn drive_env(lines: &[String], env: &[(&str, &std::path::Path)]) -> Vec<Value> {
-    // SE_WORKER_PATH lets CI drive the shipped release build (panic = "abort",
-    // LTO, opt-level "z") instead of the dev-profile binary cargo test builds.
-    let bin = std::env::var_os("SE_WORKER_PATH")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from(env!("CARGO_BIN_EXE_se-worker")));
+    let bin = worker_bin();
     let lib = std::env::var("SE_LIB_PATH").expect("checked by caller");
 
     let mut child = Command::new(bin)

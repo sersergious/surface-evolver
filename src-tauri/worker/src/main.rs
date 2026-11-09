@@ -42,6 +42,23 @@ fn take_json_pipe() -> Box<dyn Write + Send> {
     Box::new(std::fs::File::from(pipe))
 }
 
+/// SE's prompt() reads its answer from stdin once the datafile's leftover
+/// lines run out, and stdin is the IPC pipe: a prompt reached any way the
+/// INTERACTIVE_CMDS guard can't see (`j; g`, a procedure) blocked on it, then
+/// swallowed the next request as its answer (#41). Requests come in on a
+/// private dup of the pipe; fd 0 becomes /dev/null, so every engine prompt
+/// gets EOF at once, which prompt() already returns to its callers.
+fn take_ipc_input() -> std::fs::File {
+    use std::os::fd::{AsFd, AsRawFd};
+    extern "C" { fn dup2(src: i32, dst: i32) -> i32; }
+    let ipc = std::io::stdin().as_fd().try_clone_to_owned().expect("dup stdin");
+    match std::fs::File::open("/dev/null") {
+        Ok(null) => { unsafe { dup2(null.as_raw_fd(), 0) }; }
+        Err(e) => eprintln!("se-worker: can't open /dev/null ({e}); engine prompts may block"),
+    }
+    std::fs::File::from(ipc)
+}
+
 fn send(v: &Value) {
     let mut out = PIPE.get_or_init(|| Mutex::new(take_json_pipe())).lock().unwrap_or_else(|e| e.into_inner());
     let _ = writeln!(out, "{v}");
@@ -54,8 +71,10 @@ fn fatal(error: String) -> ! {
 }
 
 fn main() {
-    // Before dlopen: nothing may reach fd 1 until it has been moved.
+    // Before dlopen: nothing may reach fd 1 until it has been moved, and
+    // nothing may read fd 0 until the IPC input has been taken off it.
     PIPE.get_or_init(|| Mutex::new(take_json_pipe()));
+    let ipc_input = std::io::BufReader::new(take_ipc_input());
     let lib_path = std::env::var("SE_LIB_PATH").unwrap_or_else(|_| "/app/libse.so".to_string());
 
     let se = match ffi::Se::load_library(&lib_path) {
@@ -75,8 +94,7 @@ fn main() {
 
     // Handlers are synchronous, so requests serialise naturally: a long se_run
     // blocks the loop, exactly as in the TS worker.
-    let stdin = std::io::stdin();
-    for line in stdin.lock().lines() {
+    for line in ipc_input.lines() {
         let line = match line {
             Ok(l) => l,
             Err(_) => break, // stdin closed mid-read

@@ -56,25 +56,25 @@ ctest --test-dir cmake-build-release --output-on-failure          # 88 checks
 # guard skips.
 # All commands below run from the repo root. Use libse.so on Linux.
 export SE_LIB_PATH=$PWD/cmake-build-release/libse.dylib
-(cd src-tauri/worker && cargo test)                                 # 14 tests
+(cd src-tauri/worker && cargo test)                                 # 15 tests
 # SE_WORKER_PATH=<path to se-worker> points both Rust suites at a specific
 # binary; CI uses it to test the shipped release build (panic = "abort", LTO).
 
 # Rust app. `cargo check` is the fast gate; `cargo test` additionally runs
 # rpc.rs's own unit tests plus src-tauri/tests/{dispatch,manager}.rs, which
-# drive a real se-worker/libse through the app layer (31 tests total) — set
+# drive a real se-worker/libse through the app layer (32 tests total) — set
 # SE_LIB_PATH and either build the worker first or set SE_WORKER_PATH, or
 # those two integration-test binaries skip themselves rather than fail.
-(cd src-tauri && cargo check && cargo test)                         # 31 tests
+(cd src-tauri && cargo check && cargo test)                         # 32 tests
 
 # Frontend: ESLint (typescript-eslint + the two classic react-hooks rules;
 # warnings fail), type-check, then a real Vitest suite (jsdom + Testing
-# Library): 67 tests across 11 files covering the RPC client, API wrapper
+# Library): 70 tests across 11 files covering the RPC client, API wrapper
 # contracts, the components and file browser, the store, the menu-action hook,
 # the native menu routes and the session lifecycle. Tauri IPC is faked once per
 # file by Tauri's own mockIPC (ui/src/test/ipc.ts), so tests assert what
 # crosses the IPC boundary. All of it runs in CI.
-(cd ui && bun run lint && bunx tsc --noEmit && bun run test)        # 67 tests
+(cd ui && bun run lint && bunx tsc --noEmit && bun run test)        # 70 tests
 ```
 
 Locally, a skipped integration test prints `SE_LIB_PATH unset — skipping …` and
@@ -135,7 +135,10 @@ engine/src/                    ← Surface Evolver upstream, 115 files, flat ←
 dlopen/`se_init` fails at startup. There is no `iterate` command — the Run menu
 sends `g N` through `run`. Only JSON ever reaches stdout: the worker replies on
 a private dup of the pipe and points fd 1 at stderr, so engine `printf`s (e.g.
-`itdebug on`) land in the app log. Errors that end the session are prefixed
+`itdebug on`) land in the app log. Likewise requests are read from a private
+dup of fd 0, and fd 0 points at `/dev/null`: an engine `prompt()` reached any
+way (`j; g`, a procedure) gets EOF instead of blocking on, or swallowing, the
+next request (#41). Errors that end the session are prefixed
 `Session ended:` by `rpc.rs` (see Landmine 1).
 
 **RPC methods** (`rpc.rs`): `getRestore` `listFiles` `createSession` `cancel`
