@@ -256,3 +256,25 @@ describe('loading a datafile', () => {
     await waitFor(() => expect(useStore.getState().outputLog).toContain('Edges refined: 12'))
   })
 })
+
+describe('mesh refetch after a command (#21)', () => {
+  it('refetches only when the reply says the drawn geometry changed', async () => {
+    useStore.setState({ openFiles: ['cube.fe'], activeFile: 'cube.fe', sessionId: 's1', meshVersion: 0 })
+    let changed = false
+    ipc.mockImplementation((cmd, args) => {
+      const { method } = (args ?? {}) as { method?: string }
+      if (cmd === 'rpc' && method === 'runCommand') return { output: '6', energy: 6, area: 6, geometry_changed: changed }
+      return null
+    })
+    render(<CliPane />)
+    const user = userEvent.setup()
+
+    await user.type(screen.getByPlaceholderText('SE command…'), 'print total_energy{Enter}')
+    await waitFor(() => expect(useStore.getState().outputLog).toContain('6'))
+    expect(useStore.getState().meshVersion).toBe(0)        // nothing new to draw
+
+    changed = true
+    await user.type(screen.getByPlaceholderText('SE command…'), 'g 1{Enter}')
+    await waitFor(() => expect(useStore.getState().meshVersion).toBe(1))
+  })
+})

@@ -366,3 +366,26 @@ fn a_prompt_on_phelanc_no_longer_crashes_the_worker() {
     assert_eq!(msgs.len(), 3, "the worker died: {msgs:?}");
     assert!(msgs[2]["output"].as_str().unwrap_or_default().contains("4242"));
 }
+
+#[test]
+fn replies_say_whether_the_drawn_geometry_changed() {
+    if skip() { return }
+    // #21: every command used to refetch the whole mesh (~5 MB refined) and
+    // reset the camera. A reply now says whether what the viewer draws
+    // (positions, facets, edges, colours) differs from the mesh last sent.
+    // Colours count: `set facet color` leaves energy alone but changes the picture.
+    let msgs = drive(&[
+        cube(),
+        r#"{"cmd":"mesh","colors":true}"#.into(),
+        r#"{"cmd":"run","command":"print total_energy"}"#.into(),
+        r#"{"cmd":"run","command":"g 1"}"#.into(),
+        r#"{"cmd":"mesh","colors":true}"#.into(),
+        r#"{"cmd":"run","command":"set facet[1] color red"}"#.into(),
+        r#"{"cmd":"mesh","colors":true}"#.into(),
+        r#"{"cmd":"topo","op":"refine"}"#.into(),
+    ]);
+    assert_eq!(msgs[2]["geometry_changed"], false, "print: {}", msgs[2]);
+    assert_eq!(msgs[3]["geometry_changed"], true, "g 1: {}", msgs[3]);
+    assert_eq!(msgs[5]["geometry_changed"], true, "colour: {}", msgs[5]);
+    assert_eq!(msgs[7]["geometry_changed"], true, "refine: {}", msgs[7]);
+}

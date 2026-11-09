@@ -20,6 +20,8 @@ export interface RunCommandResponse {
   output: string
   energy: number | null
   area: number | null
+  // Whether what the viewer draws differs from the mesh last fetched (#21).
+  geometry_changed?: boolean
 }
 
 export async function runCommand(id: string, command: string): Promise<RunCommandResponse> {
@@ -34,6 +36,8 @@ export interface TopoResponse {
   energy: number
   energy_delta: number
   area: number
+  // Whether what the viewer draws differs from the mesh last fetched (#21).
+  geometry_changed?: boolean
 }
 
 // No count parameter: only `equi` would use one (worker maps it to `u N`), and

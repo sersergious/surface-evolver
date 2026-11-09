@@ -16,16 +16,21 @@ import VertexInspector from './VertexInspector'
 const MODES: RenderMode[] = ['solid', 'wireframe', 'xray']
 const MODE_LABEL: Record<RenderMode, string> = { solid: 'Solid', wireframe: 'Wire', xray: 'X-Ray' }
 
-// Frames the camera on a new mesh. Runs *inside* the Canvas and reads the
-// controls from R3F state (not a ref) so it re-fires once OrbitControls has
-// mounted — otherwise the first load runs before controls exist, the orbit
-// target stays at the origin, and you end up pivoting around a corner vertex.
-function FitCamera({ mesh }: { mesh: MeshData | null }) {
+// Frames the camera on the first mesh of each session (a new file, a reload,
+// a restore), not on every refetch: a `g 1` between orbits used to throw away
+// the user's view (#21). Runs *inside* the Canvas and reads the controls from
+// R3F state (not a ref) so it re-fires once OrbitControls has mounted —
+// otherwise the first load runs before controls exist, the orbit target stays
+// at the origin, and you end up pivoting around a corner vertex.
+function FitCamera({ mesh, fitKey }: { mesh: MeshData | null; fitKey: string | null }) {
   const camera = useThree(s => s.camera)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const controls = useThree(s => s.controls) as any
+  const fittedFor = useRef<string | null>(null)
   useEffect(() => {
     if (!controls || !mesh || mesh.vertices.length === 0) return
+    if (fittedFor.current === fitKey) return
+    fittedFor.current = fitKey
     const geo = new THREE.BufferGeometry()
     geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(mesh.vertices.flat()), 3))
     geo.computeBoundingBox(); geo.computeBoundingSphere()
@@ -38,7 +43,7 @@ function FitCamera({ mesh }: { mesh: MeshData | null }) {
     controls.update()
     controls.saveState()
     geo.dispose()
-  }, [mesh, camera, controls])
+  }, [mesh, camera, controls, fitKey])
   return null
 }
 
@@ -175,7 +180,7 @@ export default function ViewerPane() {
           </>
         )}
         <OrbitControls ref={controlsRef} makeDefault />
-        <FitCamera mesh={mesh} />
+        <FitCamera mesh={mesh} fitKey={sessionId} />
       </Canvas>
     </div>
   )

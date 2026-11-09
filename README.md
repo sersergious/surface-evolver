@@ -89,9 +89,9 @@ Run from the repository root, after `bun run dev` or `bun run build` has built t
 ```bash
 export SE_LIB_PATH=$PWD/cmake-build-release/libse.dylib    # .so on Linux
 ctest --test-dir cmake-build-release --output-on-failure   # C API suite, 98 checks
-(cd src-tauri/worker && cargo test)                        # FFI guard + smoke + fixtures, 17 tests
+(cd src-tauri/worker && cargo test)                        # FFI guard + smoke + fixtures, 18 tests
 (cd src-tauri && cargo test)                               # rpc.rs unit + integration tests, 33 tests
-(cd ui && bun run lint && bunx tsc --noEmit && bun run test)  # lint, types, 71 tests
+(cd ui && bun run lint && bunx tsc --noEmit && bun run test)  # lint, types, 73 tests
 ```
 
 Without `SE_LIB_PATH`, the worker and app integration tests print "skipping" and still count as passed locally. In CI (`CI` set) they fail instead, so a misconfigured run can't pass silently.

@@ -90,6 +90,7 @@ fn main() {
         out_buf: vec![0u8; OUT_BUF_SIZE],
         err_buf: vec![0u8; OUT_BUF_SIZE],
         loaded_file: None,
+        last_mesh_hash: None,
     };
 
     // Handlers are synchronous, so requests serialise naturally: a long se_run

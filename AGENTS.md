@@ -56,7 +56,7 @@ ctest --test-dir cmake-build-release --output-on-failure          # 98 checks
 # guard skips.
 # All commands below run from the repo root. Use libse.so on Linux.
 export SE_LIB_PATH=$PWD/cmake-build-release/libse.dylib
-(cd src-tauri/worker && cargo test)                                 # 17 tests
+(cd src-tauri/worker && cargo test)                                 # 18 tests
 # SE_WORKER_PATH=<path to se-worker> points both Rust suites at a specific
 # binary; CI uses it to test the shipped release build (panic = "abort", LTO).
 
@@ -69,12 +69,12 @@ export SE_LIB_PATH=$PWD/cmake-build-release/libse.dylib
 
 # Frontend: ESLint (typescript-eslint + the two classic react-hooks rules;
 # warnings fail), type-check, then a real Vitest suite (jsdom + Testing
-# Library): 71 tests across 11 files covering the RPC client, API wrapper
+# Library): 73 tests across 11 files covering the RPC client, API wrapper
 # contracts, the components and file browser, the store, the menu-action hook,
 # the native menu routes and the session lifecycle. Tauri IPC is faked once per
 # file by Tauri's own mockIPC (ui/src/test/ipc.ts), so tests assert what
 # crosses the IPC boundary. All of it runs in CI.
-(cd ui && bun run lint && bunx tsc --noEmit && bun run test)        # 71 tests
+(cd ui && bun run lint && bunx tsc --noEmit && bun run test)        # 73 tests
 ```
 
 Locally, a skipped integration test prints `SE_LIB_PATH unset — skipping …` and

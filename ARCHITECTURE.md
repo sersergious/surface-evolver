@@ -250,9 +250,9 @@ stdin/stdout, one JSON object per line, no batching:
 | `cmd` | Purpose | Notable response fields |
 |---|---|---|
 | `load` | Open a `.fe` file (chdir's to its directory first, for relative includes) and run its `read` section, as standalone SE does | `energy area scale sdim` element counts, `bbox_min/max`, `output` (what the `read` section printed, or the error that abandoned it) |
-| `run` | Execute one raw SE command string via `se_run`. Blank or comment-only input succeeds; `load` is refused (use File ▸ Open) | `output energy area`. `output` also carries the command's own warnings, and ends with `[output truncated at 256 KB]` when the capture buffer filled |
+| `run` | Execute one raw SE command string via `se_run`. Blank or comment-only input succeeds; `load` is refused (use File ▸ Open) | `output energy area geometry_changed`. `output` also carries the command's own warnings, and ends with `[output truncated at 256 KB]` when the capture buffer filled. `geometry_changed` compares a fingerprint of what the viewer draws (positions, facets, edges, colours) with the mesh last sent, so the UI refetches only when it differs |
 | `mesh` | Fetch vertices/edges/facets (+ optional colours) for rendering | `vertices facets edges body_cms`, optional `facet_colors edge_colors`, optional `wrapped_edges_hidden` and `unwrap_source` (periodic only) |
-| `topo` | One of 4 mapped topology ops (`refine equi vertex_avg pop`) | `output counts` (non-zero deltas only) `energy energy_delta area`; `output` includes warnings, as for `run` |
+| `topo` | One of 4 mapped topology ops (`refine equi vertex_avg pop`) | `output counts` (non-zero deltas only) `energy energy_delta area geometry_changed`; `output` includes warnings, as for `run` |
 | `vertex_info` | Detail for one vertex by position | `id xyz attr constraints` |
 | `dump` | Write `.dmp` state to a temp path, read it back | `content` |
 
@@ -273,7 +273,7 @@ flowchart TB
     end
     subgraph Worker["se-worker crate"]
         WF["ffi_signatures.rs — 1 test<br/>se_api.h ⇄ ffi.rs agree"]
-        WS["smoke.rs — 15 tests<br/>drive the built binary over stdin"]
+        WS["smoke.rs — 16 tests<br/>drive the built binary over stdin"]
         WX["fixtures.rs — 1 test<br/>all 20 bundled .fe load + mesh"]
     end
     subgraph App["Tauri app crate"]
@@ -281,7 +281,7 @@ flowchart TB
         AI["tests/{dispatch,manager}.rs — 22<br/>real worker + real libse"]
     end
     subgraph FE["Frontend"]
-        FT["ESLint + Vitest + Testing Library<br/>71 tests / 11 files"]
+        FT["ESLint + Vitest + Testing Library<br/>73 tests / 11 files"]
     end
     CT --> WF --> AU --> FT
 ```
@@ -301,7 +301,7 @@ flowchart LR
     subgraph CI["ci.yml — push / PR to main"]
         direction TB
         C1["c-tests<br/>macos-26 + ubuntu-26.04<br/>ctest"]
-        C2["backend-tests<br/>cargo check + cargo test<br/>worker (17) + app (33),<br/>against the release worker"]
+        C2["backend-tests<br/>cargo check + cargo test<br/>worker (18) + app (33),<br/>against the release worker"]
         C3["frontend-tests<br/>lint + tsc --noEmit + bun run test (60)<br/>+ production build"]
     end
     subgraph BUILD["build.yml — workflow_run after a green push to main"]

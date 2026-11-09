@@ -4,17 +4,21 @@
 // vertex panel), not Three.js rendering. See the plan: "not chasing pixel
 // output".
 import { describe, expect, it, vi, beforeEach } from 'vitest'
-import { act, render, screen } from '@testing-library/react'
+import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { ReactNode } from 'react'
 import ViewerPane from './ViewerPane'
 import { useStore } from '../../store/useStore'
 import type { MeshData } from '../../api/simulation'
 
+// Stable camera/controls, so FitCamera can run and be observed.
+const three = vi.hoisted(() => ({
+  camera:   { position: { set: vi.fn() } },
+  controls: { target: { copy: vi.fn() }, update: vi.fn(), saveState: vi.fn(), reset: vi.fn() },
+}))
 vi.mock('@react-three/fiber', () => ({
   Canvas: ({ children }: { children: ReactNode }) => <div data-testid="canvas">{children}</div>,
-  useThree: (selector: (s: Record<string, unknown>) => unknown) =>
-    selector({ camera: { position: { set: vi.fn() } }, controls: null }),
+  useThree: (selector: (s: Record<string, unknown>) => unknown) => selector(three),
 }))
 vi.mock('@react-three/drei', () => ({
   OrbitControls: () => null,
@@ -89,6 +93,23 @@ describe('ViewerPane', () => {
     const user = userEvent.setup()
     await user.click(screen.getByTitle('Inspect: click a vertex; show body centroids'))
     expect(await screen.findByText('Click a vertex to inspect')).toBeInTheDocument()
+  })
+
+  it('frames the camera once per session, not on every refetch (#21)', async () => {
+    three.camera.position.set.mockClear()
+    useStore.setState({ sessionId: 's1', meshVersion: 0 })
+    vi.mocked(getMesh).mockImplementation(async () => ({ ...mesh }))   // a new object each fetch
+    render(<ViewerPane />)
+    await screen.findByTestId('mesh-geometry')
+    await waitFor(() => expect(three.camera.position.set).toHaveBeenCalledTimes(1))
+
+    act(() => useStore.getState().bumpMeshVersion())          // a command changed the surface
+    await waitFor(() => expect(getMesh).toHaveBeenCalledTimes(2))
+    await new Promise(r => setTimeout(r, 0))
+    expect(three.camera.position.set).toHaveBeenCalledTimes(1) // orbit and zoom kept
+
+    act(() => useStore.setState({ sessionId: 's2' }))          // another file or a reload
+    await waitFor(() => expect(three.camera.position.set).toHaveBeenCalledTimes(2))
   })
 
   it('the Loading badge clears when the session ends mid-fetch (#34)', async () => {

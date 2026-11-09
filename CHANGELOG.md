@@ -130,6 +130,10 @@ change, see `git log`.
   procedures it defines (`gogo` and friends) are there, and what it prints
   shows in the log. Fixed an engine overflow on empty command lines found
   along the way.
+- Commands no longer reset the view or re-download the mesh: the camera is
+  framed once per file, and the mesh is refetched only when what the viewer
+  draws actually changed (a 7 ms fingerprint against ~1 s of mesh transfer
+  on a refined foam).
 - Dropped Windows. A Windows CI job showed the native installer crashing on
   every recoverable engine error, and no user runs Windows, so the app now
   ships for macOS and Linux only.

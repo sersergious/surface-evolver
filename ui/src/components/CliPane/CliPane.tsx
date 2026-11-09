@@ -52,7 +52,7 @@ export default function CliPane() {
         // empty command succeeds and reports the current energy and area.
         const now = await runCommand(sessionId, '')
         setStats(now.energy, now.area)
-        bumpMeshVersion()
+        if (now.geometry_changed !== false) bumpMeshVersion()
         return
       }
       clearSession()
@@ -72,7 +72,7 @@ export default function CliPane() {
       const res = await runCommand(sessionId, `g ${n}`)
       if (res.output) appendLog(res.output)
       setStats(res.energy, res.area)
-      bumpMeshVersion()
+      if (res.geometry_changed !== false) bumpMeshVersion()
     } catch (err: unknown) {
       logCommandError(err)
     } finally {
@@ -99,7 +99,7 @@ export default function CliPane() {
       const res = await runTopo(sessionId, op)
       appendLog(`  ${summarize(res.counts)} · ΔE ${res.energy_delta >= 0 ? '+' : ''}${res.energy_delta.toExponential(2)}`)
       setStats(res.energy, res.area)
-      bumpMeshVersion()
+      if (res.geometry_changed !== false) bumpMeshVersion()
     } catch (err: unknown) {
       logCommandError(err)
     } finally {
@@ -119,7 +119,9 @@ export default function CliPane() {
       if (res.output) appendLog(res.output)
       if (res.energy !== null || res.area !== null) {
         setStats(res.energy, res.area)
-        bumpMeshVersion()
+        // Refetch only when the drawn geometry changed (#21): `print`, `v` and
+        // friends no longer re-download the mesh or reset the view.
+        if (res.geometry_changed !== false) bumpMeshVersion()
       }
     } catch (err: unknown) {
       logCommandError(err)

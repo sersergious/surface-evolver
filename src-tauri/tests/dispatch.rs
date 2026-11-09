@@ -91,6 +91,8 @@ fn full_session_lifecycle_round_trips_through_the_app_layer() {
 
     let run = t.call("runCommand", json!({ "sessionId": sid, "command": "r; g 5" })).expect("runCommand");
     assert!(run["energy"].is_f64());
+    // The UI refetches the mesh only on this flag (#21); rpc must pass it through.
+    assert_eq!(run["geometry_changed"], true);
 
     let mesh = t.call("getMesh", json!({ "sessionId": sid, "colors": true })).expect("getMesh");
     assert!(!mesh["vertices"].as_array().unwrap().is_empty());

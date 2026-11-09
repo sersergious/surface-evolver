@@ -32,6 +32,9 @@ pub struct Worker {
     pub out_buf: Vec<u8>,
     pub err_buf: Vec<u8>,
     pub loaded_file: Option<String>,
+    /// geometry_hash() of the mesh last sent, so a reply can say whether the
+    /// viewer needs a new one (#21).
+    pub last_mesh_hash: Option<u64>,
 }
 
 /// NUL-terminated bytes for a C string argument.
@@ -101,6 +104,44 @@ impl Worker {
         let l = self.last_error();
         if !l.is_empty() { return l }
         fallback.to_string()
+    }
+
+    /// A cheap fingerprint of exactly what the viewer draws: vertex positions,
+    /// facets, edges and their colours (#21). FNV-1a over the raw buffers:
+    /// milliseconds even on a refined surface, against seconds for the mesh
+    /// JSON. Energy alone wouldn't do: `set facet color` changes the picture
+    /// and leaves it unchanged.
+    fn geometry_hash(&self) -> u64 {
+        fn fold(h: &mut u64, bytes: &[u8]) {
+            for b in bytes { *h ^= *b as u64; *h = h.wrapping_mul(0x0100_0000_01b3); }
+        }
+        let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+        unsafe {
+            let nv = (self.se.get_vertex_count)().max(0);
+            let mut v = vec![0f64; nv as usize * 3];
+            if nv > 0 { (self.se.get_vertices)(v.as_mut_ptr(), nv); }
+            for x in &v { fold(&mut h, &x.to_bits().to_le_bytes()); }
+
+            let nf = (self.se.get_facet_count)().max(0);
+            let mut f = vec![0i32; nf as usize * 4];   // 3 indices, then a colour
+            if nf > 0 {
+                (self.se.get_facets)(f.as_mut_ptr(), nf);
+                (self.se.get_facet_colors)(f[nf as usize * 3..].as_mut_ptr(), std::ptr::null_mut(), nf);
+            }
+            let ne = (self.se.get_edge_count)().max(0);
+            let mut e = vec![0i32; ne as usize * 3];   // 2 indices, then a colour
+            if ne > 0 {
+                (self.se.get_edges)(e.as_mut_ptr(), ne);
+                (self.se.get_edge_colors)(e[ne as usize * 2..].as_mut_ptr(), ne);
+            }
+            for x in f.iter().chain(e.iter()) { fold(&mut h, &x.to_le_bytes()); }
+        }
+        h
+    }
+
+    /// Whether what the viewer draws differs from the mesh last sent.
+    fn geometry_changed(&self) -> bool {
+        self.last_mesh_hash != Some(self.geometry_hash())
     }
 
     // ── load ────────────────────────────────────────────────────────────────
@@ -181,12 +222,14 @@ impl Worker {
             return json!({ "ok": false, "se_error": msg });
         }
         let output = self.command_output();
+        let geometry_changed = self.geometry_changed();
         unsafe {
             json!({
                 "ok": true,
                 "output": output,
                 "energy": (self.se.get_energy)(),
                 "area": (self.se.get_area)(),
+                "geometry_changed": geometry_changed,
             })
         }
     }
@@ -195,6 +238,7 @@ impl Worker {
 
     pub fn mesh(&mut self, req: &Value) -> Value {
         let want_colors = req["colors"].as_bool().unwrap_or(false);
+        self.last_mesh_hash = Some(self.geometry_hash());
 
         // se_get_vertices writes a FIXED stride of 3 regardless of sdim (see
         // se_api.h) — do not size this by sdim.
@@ -416,6 +460,7 @@ impl Worker {
                 "energy": energy,
                 "energy_delta": energy - energy_start,
                 "area": (self.se.get_area)(),
+                "geometry_changed": self.geometry_changed(),
             })
         }
     }
