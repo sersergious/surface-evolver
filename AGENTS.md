@@ -337,20 +337,21 @@ surface-evolver/
 ├── fe/                         # 20 bundled .fe datafiles + OCTA.WLF
 ├── tests/c/test_se_api.c       # CTest suite for the C facade
 ├── scripts/                    # build-native, tauri-before, make-icons (Bun)
-├── landing/                    # git SUBMODULE: the project site (separate repo)
+├── landing/                    # gitignored clone of the project site (separate repo)
 ├── ARCHITECTURE.md             # diagrams + detailed design, known limitations
 └── CHANGELOG.md                # the app's history, stage by stage
 ```
 
-`landing/` is a git submodule of
+`landing/` is an ordinary clone of
 [surface-evolver-landing](https://github.com/sersergious/surface-evolver-landing),
-the Next.js site Vercel deploys from that repo's `main`. It is only here for
-local convenience; nothing in the app's build, tests or CI reads it, and CI
-does not check it out. Work on the site happens *inside* `landing/`: commit
-and push there first, then (optionally) bump the pointer here with
-`git add landing && git commit`. To pull the site's latest `main`:
-`git submodule update --remote landing`. Clone with `--recurse-submodules`,
-or run `git submodule update --init` afterwards.
+the Next.js site Vercel deploys from that repo's `main`, and `.gitignore`
+excludes it, so this repo neither tracks nor displays it. It is only here for
+local convenience; nothing in the app's build, tests or CI reads it. Work on
+the site happens *inside* `landing/`, committed and pushed to its own repo.
+On a fresh checkout, get it with:
+`git clone https://github.com/sersergious/surface-evolver-landing.git landing`.
+It is deliberately not a submodule: GitHub always renders a submodule as a
+link to the other repo.
 
 `fe/OCTA.WLF` is the bundle's only cross-file dependency — `crystal.fe` loads it
 via `Wulff "OCTA.WLF"`. Keep the reference's case matching the file on disk;

@@ -44,3 +44,7 @@ fe/*.tmp
 # here (settings.local.json, launch.json, skills/) is machine-local.
 .claude/*
 !.claude/CLAUDE.md
+
+# The project site: its own repo (sersergious/surface-evolver-landing), cloned
+# here for convenience. Not a submodule, so GitHub does not show it.
+/landing/

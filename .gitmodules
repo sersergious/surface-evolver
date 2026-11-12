@@ -1,4 +1,0 @@
-[submodule "landing"]
-	path = landing
-	url = https://github.com/sersergious/surface-evolver-landing.git
-	branch = main
